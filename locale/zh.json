@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "title": "Gemini 網頁端",
+    "description": "將 Brave / Chrome 登入的 Google 帳號網頁免費用量（AI Studio 4 Hydrogen/Argon、Google Flow 0 點數生圖）接入 DSH。"
+  },
+  "badge": {
+    "connecting": "檢測中...",
+    "connected": "Brave 網頁端",
+    "disconnected": "瀏覽器未連線",
+    "tooltip": "點擊查看網頁端額度大盤與連線狀態"
+  },
+  "settings": {
+    "title": "Gemini 網頁端調度中心",
+    "subtitle": "直接利用本機外部瀏覽器已登入之 Google 帳號，享受 1M 最長輸出與免費用量池",
+    "privacyNotice": "隱私承諾：純 127.0.0.1 本機迴路通訊，絕不讀取本機個人文件夾，無密碼儲存，100% 透明安全。",
+    "status": {
+      "title": "瀏覽器連線狀態",
+      "connected": "已成功連線至本機瀏覽器",
+      "disconnected": "未偵測到偵錯連線",
+      "detectBtn": "一鍵連線檢測",
+      "detecting": "正在探測瀏覽器...",
+      "portLabel": "偵錯連接埠",
+      "browserLabel": "偵測到之瀏覽器"
+    },
+    "quota": {
+      "title": "網頁端即時額度大盤",
+      "plan": "方案等級",
+      "geminiUsage": "Gemini 5 小時滾動用量",
+      "geminiWeekly": "每週限額用量",
+      "flowCredits": "Google Flow 獨立點數",
+      "resetTime": "重置時間"
+    },
+    "compat": {
+      "title": "瀏覽器相容性說明",
+      "chromium": "✅ Brave / Chrome / Edge / Vivaldi：原生完美支援（自動偵測 DevToolsActivePort）。",
+      "agentlimb": "✅ AgentLimb 擴展：跨開機免改參數持久連線，支援多 Profile 分流。",
+      "firefox": "ℹ️ Firefox 家族：建議安裝 AgentLimb 擴展或搭配 Brave / Chrome 使用。",
+      "safari": "⚠️ Safari：WebKit 不支援原生 CDP，請使用 Brave / Chrome 或配置 AgentLimb。"
+    }
+  }
+}

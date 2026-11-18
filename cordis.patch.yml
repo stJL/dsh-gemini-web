@@ -1,0 +1,8 @@
+# dsh-gemini-web bundle patch
+- insert:
+    - id: gemini-web
+      name: 'dsh-gemini-web'
+      config:
+        enabled: !!js "process.env.DSH_GEMINI_WEB_ENABLED ?? 'true'"
+        port: !!js "process.env.DSH_GEMINI_WEB_PORT ?? '9222'"
+        preferredBrowser: 'auto'
