@@ -11,13 +11,88 @@ window.__ModuleLoader__.load({
     Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' })
 
     const React = require('react')
-    const { createElement: h, useState, useEffect } = React
+    const { createElement: h, useState, useEffect, useRef } = React
 
     const NS = 'gemini-web'
     const PKG = 'dsh-gemini-web'
 
-    // 1. 原創 Gemini 漸層風格樣式與白天/黑夜適配
+    // 1. 原創 Gemini 漸層風格樣式與白天/黑夜適配 (針對 DSH 564px 設定欄寬度全面優化)
     const STYLES = `
+      .gw-root {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        margin: 0;
+        padding: 0 2px 24px 2px;
+        container-type: inline-size;
+      }
+      .gw-root *, .gw-root *::before, .gw-root *::after {
+        box-sizing: border-box;
+      }
+      .gw-header-split {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .gw-grid-2 {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 10px;
+        margin-top: 8px;
+      }
+      .gw-grid-4 {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .gw-btn-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .gw-code {
+        background: rgba(0, 0, 0, 0.35);
+        padding: 3px 6px;
+        border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11px;
+        word-break: break-all;
+        overflow-wrap: anywhere;
+        max-width: 100%;
+        display: inline-block;
+        user-select: all;
+      }
+      .gw-setting-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(255, 255, 255, 0.05));
+        flex-wrap: wrap;
+      }
+      .gw-setting-row:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+      .gw-setting-info {
+        flex: 1 1 240px;
+        min-width: 0;
+      }
+      .gw-setting-ctrl {
+        flex: 0 1 auto;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        min-width: 160px;
+        max-width: 100%;
+      }
+
       .gw-dot {
         width: 7px;
         height: 7px;
@@ -38,6 +113,8 @@ window.__ModuleLoader__.load({
         box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
       }
       .gw-card {
+        box-sizing: border-box;
+        width: 100%;
         padding: 14px 16px;
         border-radius: 8px;
         background: var(--dsw-alias-bg-layer-2, rgba(255, 255, 255, 0.04));
@@ -45,6 +122,8 @@ window.__ModuleLoader__.load({
         margin-bottom: 12px;
         font-size: 13px;
         transition: border-color 0.2s ease, background 0.2s ease;
+        overflow: hidden;
+        word-break: break-word;
       }
       .gw-card:hover {
         border-color: var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.16));
@@ -172,6 +251,13 @@ window.__ModuleLoader__.load({
           color: #1e293b !important;
           border-color: #cbd5e1 !important;
         }
+        .gw-setting-row {
+          border-bottom-color: #e2e8f0 !important;
+        }
+        .gw-code {
+          background: #f1f5f9 !important;
+          color: #0f172a !important;
+        }
       }
       [data-theme="light"] .gw-card, .theme-light .gw-card, body.light-theme .gw-card {
         background: #ffffff !important;
@@ -200,6 +286,13 @@ window.__ModuleLoader__.load({
         background: #f1f5f9 !important;
         color: #1e293b !important;
         border-color: #cbd5e1 !important;
+      }
+      [data-theme="light"] .gw-setting-row, .theme-light .gw-setting-row, body.light-theme .gw-setting-row {
+        border-bottom-color: #e2e8f0 !important;
+      }
+      [data-theme="light"] .gw-code, .theme-light .gw-code, body.light-theme .gw-code {
+        background: #f1f5f9 !important;
+        color: #0f172a !important;
       }
     `
 
@@ -800,15 +893,47 @@ window.__ModuleLoader__.load({
         loadData()
       }, [])
 
+      const rootRef = useRef(null)
+      const [containerWidth, setContainerWidth] = useState(560)
+
+      useEffect(() => {
+        if (!rootRef.current) return
+        const updateWidth = () => {
+          if (rootRef.current) {
+            const w = rootRef.current.getBoundingClientRect().width
+            if (w > 0) setContainerWidth(w)
+          }
+        }
+        updateWidth()
+        if (typeof ResizeObserver !== 'undefined') {
+          const ro = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+              if (entry.contentRect.width > 0) {
+                setContainerWidth(entry.contentRect.width)
+              }
+            }
+          })
+          ro.observe(rootRef.current)
+          return () => ro.disconnect()
+        }
+      }, [])
+
       const alConnected = Boolean(status?.agentlimb?.ready || status?.dual?.agentlimb?.ready)
       const cdpConnected = Boolean(status?.cdp?.connected || status?.dual?.cdp?.connected)
       const isAnyConnected = alConnected || cdpConnected
       const activeChannel = status?.activeChannel || (alConnected ? 'agentlimb' : (cdpConnected ? 'cdp' : 'none'))
       const isUnauthed = usage?.status === 'unauthenticated' || (!usage?.geminiPlan && isAnyConnected && usage?.plan === null)
 
-      return h('div', { style: { maxHeight: isModal ? '72vh' : 'none', overflowY: 'auto' } }, [
+      return h('div', {
+        ref: rootRef,
+        className: 'gw-root',
+        style: {
+          maxHeight: isModal ? '72vh' : 'none',
+          overflowY: 'auto'
+        }
+      }, [
         // 標題欄
-        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 } }, [
+        h('div', { className: 'gw-header-split', style: { marginBottom: 14 } }, [
           h('div', { style: { fontWeight: 600, fontSize: 16 } }, t('title')),
           isModal && h('button', {
             onClick: onClose,
@@ -834,7 +959,7 @@ window.__ModuleLoader__.load({
 
         // 卡片 1: 雙通道智慧連線面板 (Dual-Channel Smart Bridge)
         h('div', { className: 'gw-card', style: { borderColor: alConnected ? 'rgba(16, 185, 129, 0.4)' : 'rgba(99, 102, 241, 0.3)' } }, [
-          h('div', { className: 'gw-title', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
+          h('div', { className: 'gw-title gw-header-split' }, [
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, [
               h('span', { className: `gw-dot ${alConnected ? 'gw-dot-ok' : (cdpConnected ? 'gw-dot-warn' : 'gw-dot-err')}` }),
               h('span', null, t('bridge_title')),
@@ -879,7 +1004,7 @@ window.__ModuleLoader__.load({
           ]),
 
           // 通道 A 與 通道 B 狀態明細網格
-          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8 } }, [
+          h('div', { className: 'gw-grid-2' }, [
             // 通道 A: AgentLimb
             h('div', {
               style: {
@@ -922,7 +1047,7 @@ window.__ModuleLoader__.load({
           ]),
 
           // 操作按鈕列
-          h('div', { style: { marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' } }, [
+          h('div', { className: 'gw-btn-row', style: { marginTop: 12 } }, [
             h('button', { className: 'gw-btn', onClick: loadData, disabled: loading }, loading ? t('probing') : t('probe_all_btn')),
             alConnected && h('button', {
               className: 'gw-btn',
@@ -985,7 +1110,7 @@ window.__ModuleLoader__.load({
           style: { background: 'rgba(255, 255, 255, 0.02)', borderColor: 'rgba(99, 102, 241, 0.3)' }
         }, [
           h('div', { className: 'gw-title', style: { color: '#818cf8', fontSize: 13 } }, t('guide_title')),
-          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8 } }, [
+          h('div', { className: 'gw-grid-2' }, [
             // 方案 A
             h('div', { style: { padding: '10px 12px', borderRadius: 6, background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)' } }, [
               h('div', { style: { fontWeight: 600, color: '#34d399', fontSize: 12, marginBottom: 6 } }, t('guide_a_title')),
@@ -1007,7 +1132,7 @@ window.__ModuleLoader__.load({
               h('div', { style: { fontWeight: 600, color: '#fbbf24', fontSize: 12, marginBottom: 6 } }, t('guide_b_title')),
               h('div', { style: { fontSize: 11, opacity: 0.85, lineHeight: 1.6 } }, [
                 h('div', null, t('guide_b_1')),
-                h('code', { style: { background: 'rgba(0,0,0,0.3)', padding: '2px 4px', borderRadius: 3, display: 'inline-block', margin: '2px 0' } }, 'chrome://inspect/#remote-debugging'),
+                h('code', { className: 'gw-code', style: { margin: '4px 0' } }, 'chrome://inspect/#remote-debugging'),
                 h('div', null, t('guide_b_2')),
                 h('div', null, t('guide_b_3'))
               ])
@@ -1017,7 +1142,7 @@ window.__ModuleLoader__.load({
 
         // 卡片 2: 即時額度大盤 (3 大站點額度完全獨立)
         h('div', { className: 'gw-card' }, [
-          h('div', { className: 'gw-title', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
+          h('div', { className: 'gw-title gw-header-split' }, [
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, [
               h('span', null, t('quota_title')),
               loading && h('span', { style: { fontSize: 11, color: '#f59e0b', fontWeight: 400 } }, t('quota_polling_tip'))
@@ -1086,7 +1211,7 @@ window.__ModuleLoader__.load({
         // 卡片 2.5: 渠道自動路由與防扣款指南 (Routing & Safety Guide)
         h('div', { className: 'gw-card', style: { borderColor: 'rgba(16, 185, 129, 0.3)' } }, [
           h('div', { className: 'gw-title', style: { color: '#34d399' } }, t('routing_guide_title')),
-          h('div', { className: 'gw-desc', style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 11 } }, [
+          h('div', { className: 'gw-grid-4', style: { fontSize: 11 } }, [
             h('div', { style: { padding: '6px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.03)' } }, [
               h('div', { style: { fontWeight: 600, color: '#818cf8', marginBottom: 2 } }, t('routing_text_title')),
               h('div', { opacity: 0.8 }, t('routing_text_desc'))
@@ -1112,43 +1237,47 @@ window.__ModuleLoader__.load({
           h('div', { className: 'gw-desc', style: { display: 'flex', flexDirection: 'column', gap: 12 } }, [
 
             // 設定 0: 介面語言選擇 (Language Selection: 簡體中文排第一位，無國旗)
-            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
-              h('div', null, [
+            h('div', { className: 'gw-setting-row' }, [
+              h('div', { className: 'gw-setting-info' }, [
                 h('div', { style: { fontWeight: 500 } }, t('lang_label')),
                 h('div', { style: { fontSize: 11, opacity: 0.6 } }, t('lang_desc'))
               ]),
-              h('select', {
-                className: 'gw-select',
-                style: { width: 190 },
-                value: langChoice,
-                onChange: (e) => {
-                  const val = e.target.value
-                  setLangChoice(val)
-                  try { localStorage.setItem('dsh_gemini_web_lang', val) } catch {}
-                }
-              }, [
-                h('option', { value: 'auto' }, `${t('lang_auto')} [${activeLang}]`),
-                h('option', { value: 'zh-CN' }, t('lang_zhcn')),
-                h('option', { value: 'zh-TW' }, t('lang_zhtw')),
-                h('option', { value: 'en-US' }, t('lang_en')),
+              h('div', { className: 'gw-setting-ctrl' }, [
+                h('select', {
+                  className: 'gw-select',
+                  style: { minWidth: 160 },
+                  value: langChoice,
+                  onChange: (e) => {
+                    const val = e.target.value
+                    setLangChoice(val)
+                    try { localStorage.setItem('dsh_gemini_web_lang', val) } catch {}
+                  }
+                }, [
+                  h('option', { value: 'auto' }, `${t('lang_auto')} [${activeLang}]`),
+                  h('option', { value: 'zh-CN' }, t('lang_zhcn')),
+                  h('option', { value: 'zh-TW' }, t('lang_zhtw')),
+                  h('option', { value: 'en-US' }, t('lang_en')),
+                ])
               ])
             ]),
 
             // 設定 1: 通道模式 (Connection Mode)
-            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
-              h('div', null, [
+            h('div', { className: 'gw-setting-row' }, [
+              h('div', { className: 'gw-setting-info' }, [
                 h('div', { style: { fontWeight: 500 } }, t('conn_strategy_title')),
                 h('div', { style: { fontSize: 11, opacity: 0.6 } }, t('conn_strategy_desc'))
               ]),
-              h('select', {
-                className: 'gw-select',
-                style: { width: 190 },
-                value: config.connectionMode || 'auto',
-                onChange: (e) => setConfig({ ...config, connectionMode: e.target.value })
-              }, [
-                h('option', { value: 'auto' }, t('conn_auto')),
-                h('option', { value: 'agentlimb' }, t('conn_al')),
-                h('option', { value: 'cdp' }, t('conn_cdp')),
+              h('div', { className: 'gw-setting-ctrl' }, [
+                h('select', {
+                  className: 'gw-select',
+                  style: { minWidth: 160 },
+                  value: config.connectionMode || 'auto',
+                  onChange: (e) => setConfig({ ...config, connectionMode: e.target.value })
+                }, [
+                  h('option', { value: 'auto' }, t('conn_auto')),
+                  h('option', { value: 'agentlimb' }, t('conn_al')),
+                  h('option', { value: 'cdp' }, t('conn_cdp')),
+                ])
               ])
             ]),
 
@@ -1177,9 +1306,9 @@ window.__ModuleLoader__.load({
                 paidGroup = availableModels.filter(m => isPaidModel(m))
               }
 
-              return h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
-                h('div', null, [
-                  h('div', { style: { fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 } }, [
+              return h('div', { className: 'gw-setting-row' }, [
+                h('div', { className: 'gw-setting-info' }, [
+                  h('div', { style: { fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' } }, [
                     h('span', null, t('default_model_title')),
                     h('button', {
                       className: 'gw-btn',
@@ -1193,9 +1322,10 @@ window.__ModuleLoader__.load({
                       ? t('models_classified', { count: availableModels.length })
                       : t('models_default_note'))
                 ]),
-                h('select', {
-                  className: 'gw-select',
-                  style: { width: 230 },
+                h('div', { className: 'gw-setting-ctrl' }, [
+                  h('select', {
+                    className: 'gw-select',
+                    style: { width: '100%', minWidth: 170, maxWidth: 220 },
                   value: config.defaultModel || 'gemini-3.5-flash-lite',
                   onChange: (e) => setConfig({ ...config, defaultModel: e.target.value })
                 }, availableModels.length > 0 ? [
@@ -1232,74 +1362,89 @@ window.__ModuleLoader__.load({
                   ])
                 ])
               ])
-            })(),
+            ])
+          })(),
 
             // 設定 3: 塞車階梯降級策略 (Fallback Mode)
-            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
-              h('div', null, [
+            h('div', { className: 'gw-setting-row' }, [
+              h('div', { className: 'gw-setting-info' }, [
                 h('div', { style: { fontWeight: 500 } }, t('fallback_title')),
                 h('div', { style: { fontSize: 11, opacity: 0.6 } },
                   (config.fallbackMode === 'strict' || config.autoFallback === false)
                     ? t('fallback_strict_desc')
                     : t('fallback_ladder_desc'))
               ]),
-              h('select', {
-                className: 'gw-select',
-                style: { width: 190 },
-                value: config.fallbackMode || (config.autoFallback !== false ? 'ladder' : 'strict'),
-                onChange: (e) => setConfig({
-                  ...config,
-                  fallbackMode: e.target.value,
-                  autoFallback: e.target.value === 'ladder'
-                })
-              }, [
-                h('option', { value: 'ladder' }, t('fallback_ladder_opt')),
-                h('option', { value: 'strict' }, t('fallback_strict_opt')),
+              h('div', { className: 'gw-setting-ctrl' }, [
+                h('select', {
+                  className: 'gw-select',
+                  style: { minWidth: 160 },
+                  value: config.fallbackMode || (config.autoFallback !== false ? 'ladder' : 'strict'),
+                  onChange: (e) => setConfig({
+                    ...config,
+                    fallbackMode: e.target.value,
+                    autoFallback: e.target.value === 'ladder'
+                  })
+                }, [
+                  h('option', { value: 'ladder' }, t('fallback_ladder_opt')),
+                  h('option', { value: 'strict' }, t('fallback_strict_opt')),
+                ])
               ])
             ]),
 
             // 設定 4: 思考等級 (Thinking Level)
-            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
-              h('span', null, t('thinking_level_title')),
-              h('select', {
-                className: 'gw-select',
-                style: { width: 160 },
-                value: config.thinkingLevel || 'high',
-                onChange: (e) => setConfig({ ...config, thinkingLevel: e.target.value })
-              }, [
-                h('option', { value: 'high' }, t('thinking_high')),
-                h('option', { value: 'extra-high' }, t('thinking_extra_high')),
-                h('option', { value: 'medium' }, t('thinking_medium')),
-                h('option', { value: 'low' }, t('thinking_low')),
+            h('div', { className: 'gw-setting-row' }, [
+              h('div', { className: 'gw-setting-info' }, [
+                h('div', { style: { fontWeight: 500 } }, t('thinking_level_title'))
+              ]),
+              h('div', { className: 'gw-setting-ctrl' }, [
+                h('select', {
+                  className: 'gw-select',
+                  style: { minWidth: 160 },
+                  value: config.thinkingLevel || 'high',
+                  onChange: (e) => setConfig({ ...config, thinkingLevel: e.target.value })
+                }, [
+                  h('option', { value: 'high' }, t('thinking_high')),
+                  h('option', { value: 'extra-high' }, t('thinking_extra_high')),
+                  h('option', { value: 'medium' }, t('thinking_medium')),
+                  h('option', { value: 'low' }, t('thinking_low')),
+                ])
               ])
             ]),
 
             // 設定 5: 任務超時時間 (Timeout)
-            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
-              h('span', null, t('timeout_title')),
-              h('input', {
-                type: 'number',
-                className: 'gw-input',
-                style: { width: 90 },
-                value: config.timeoutSec || 180,
-                onChange: (e) => setConfig({ ...config, timeoutSec: parseInt(e.target.value, 10) || 180 })
-              })
+            h('div', { className: 'gw-setting-row' }, [
+              h('div', { className: 'gw-setting-info' }, [
+                h('div', { style: { fontWeight: 500 } }, t('timeout_title'))
+              ]),
+              h('div', { className: 'gw-setting-ctrl' }, [
+                h('input', {
+                  type: 'number',
+                  className: 'gw-input',
+                  style: { width: 90 },
+                  value: config.timeoutSec || 180,
+                  onChange: (e) => setConfig({ ...config, timeoutSec: parseInt(e.target.value, 10) || 180 })
+                })
+              ])
             ]),
 
             // 設定 6: CDP 端口 (CDP Port)
-            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
-              h('span', null, t('cdp_port_title')),
-              h('input', {
-                type: 'number',
-                className: 'gw-input',
-                style: { width: 90 },
-                value: config.port || 9222,
-                onChange: (e) => setConfig({ ...config, port: parseInt(e.target.value, 10) || 9222 })
-              })
+            h('div', { className: 'gw-setting-row' }, [
+              h('div', { className: 'gw-setting-info' }, [
+                h('div', { style: { fontWeight: 500 } }, t('cdp_port_title'))
+              ]),
+              h('div', { className: 'gw-setting-ctrl' }, [
+                h('input', {
+                  type: 'number',
+                  className: 'gw-input',
+                  style: { width: 90 },
+                  value: config.port || 9222,
+                  onChange: (e) => setConfig({ ...config, port: parseInt(e.target.value, 10) || 9222 })
+                })
+              ])
             ]),
 
             // 儲存按鈕
-            h('div', { style: { marginTop: 8, display: 'flex', alignItems: 'center', gap: 10 } }, [
+            h('div', { className: 'gw-btn-row', style: { marginTop: 14 } }, [
               h('button', {
                 className: 'gw-btn',
                 style: { background: '#6366f1' },
@@ -1314,7 +1459,7 @@ window.__ModuleLoader__.load({
         // 卡片 4: 快捷工作台
         h('div', { className: 'gw-card' }, [
           h('div', { className: 'gw-title' }, t('links_title')),
-          h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 } }, [
+          h('div', { className: 'gw-btn-row', style: { marginTop: 8 } }, [
             h('button', { className: 'gw-btn gw-btn-secondary', onClick: () => openUrl('https://aistudio.google.com/prompts/new_chat') }, t('link_aistudio')),
             h('button', { className: 'gw-btn gw-btn-secondary', onClick: () => openUrl('https://flow.google.com') }, t('link_flow')),
             h('button', { className: 'gw-btn gw-btn-secondary', onClick: () => openUrl('https://gemini.google.com/usage') }, t('link_gemini')),
