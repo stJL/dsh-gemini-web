@@ -23,8 +23,25 @@ export interface BrowserStatus {
   error?: string
 }
 
+export function getEffectiveHome(): string {
+  try {
+    const userInfo = os.userInfo?.()
+    if (userInfo?.homedir && fs.existsSync(userInfo.homedir)) {
+      return userInfo.homedir
+    }
+  } catch {}
+  const rawHome = os.homedir()
+  if (rawHome.includes('.dsh/agy-accounts') || rawHome.includes('.dsh/profiles')) {
+    const match = rawHome.match(/^(\/home\/[^/]+)/)
+    if (match && fs.existsSync(match[1])) {
+      return match[1]
+    }
+  }
+  return rawHome
+}
+
 export function findPythonVenv(): string | null {
-  const home = os.homedir()
+  const home = getEffectiveHome()
   const isWin = process.platform === 'win32'
   const venvPaths = [
     path.join(home, '.dsh', 'skills', 'gemini-web-agent', '.venv', isWin ? 'Scripts/python.exe' : 'bin/python'),
@@ -37,7 +54,7 @@ export function findPythonVenv(): string | null {
 }
 
 export function findCliScript(): string | null {
-  const home = os.homedir()
+  const home = getEffectiveHome()
   const scriptPaths = [
     path.join(home, '.dsh', 'skills', 'gemini-web-agent', 'scripts', 'gemini_web.py'),
     path.join(home, '.gemini', 'config', 'skills', 'gemini-web-agent', 'scripts', 'gemini_web.py'),
@@ -49,7 +66,7 @@ export function findCliScript(): string | null {
 }
 
 export function findAgentLimbScript(): string | null {
-  const home = os.homedir()
+  const home = getEffectiveHome()
   const scriptPaths = [
     path.join(home, '.dsh', 'skills', 'gemini-web-agent', 'scripts', 'gemini_agentlimb.py'),
     path.join(home, '.gemini', 'config', 'skills', 'gemini-web-agent', 'scripts', 'gemini_agentlimb.py'),
@@ -65,7 +82,7 @@ export function findAgentLimbScript(): string | null {
  * 自動過濾 IDE 內建進程 (如 Antigravity / Cursor / Code / DeepSeek / Electron)。
  */
 export function scanChromiumCdpInstances(): BrowserInstance[] {
-  const home = os.homedir()
+  const home = getEffectiveHome()
   const isWin = process.platform === 'win32'
   const isMac = process.platform === 'darwin'
   const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local')
@@ -256,7 +273,7 @@ export function detectBrowserCdp(portOverride?: number): BrowserStatus {
 
 export function trySpawnAgentLimbBridge(): boolean {
   try {
-    const home = os.homedir()
+    const home = getEffectiveHome()
     const nodeCandidates = [
       process.execPath,
       path.join(home, '.dsh', 'dsh-runtimes', 'dsh-primary-runtime', 'dependencies', 'node', 'bin', 'node'),

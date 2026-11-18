@@ -10,8 +10,24 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { spawn } from "node:child_process";
+function getEffectiveHome() {
+  try {
+    const userInfo = os.userInfo?.();
+    if (userInfo?.homedir && fs.existsSync(userInfo.homedir)) {
+      return userInfo.homedir;
+    }
+  } catch {}
+  const rawHome = os.homedir();
+  if (rawHome.includes(".dsh/agy-accounts") || rawHome.includes(".dsh/profiles")) {
+    const match = rawHome.match(/^(\/home\/[^/]+)/);
+    if (match && fs.existsSync(match[1])) {
+      return match[1];
+    }
+  }
+  return rawHome;
+}
 function findPythonVenv() {
-  const home = os.homedir();
+  const home = getEffectiveHome();
   const isWin = process.platform === "win32";
   const venvPaths = [
     path.join(home, ".dsh", "skills", "gemini-web-agent", ".venv", isWin ? "Scripts/python.exe" : "bin/python"),
@@ -24,7 +40,7 @@ function findPythonVenv() {
   return null;
 }
 function findCliScript() {
-  const home = os.homedir();
+  const home = getEffectiveHome();
   const scriptPaths = [
     path.join(home, ".dsh", "skills", "gemini-web-agent", "scripts", "gemini_web.py"),
     path.join(home, ".gemini", "config", "skills", "gemini-web-agent", "scripts", "gemini_web.py")
@@ -36,7 +52,7 @@ function findCliScript() {
   return null;
 }
 function findAgentLimbScript() {
-  const home = os.homedir();
+  const home = getEffectiveHome();
   const scriptPaths = [
     path.join(home, ".dsh", "skills", "gemini-web-agent", "scripts", "gemini_agentlimb.py"),
     path.join(home, ".gemini", "config", "skills", "gemini-web-agent", "scripts", "gemini_agentlimb.py")
@@ -48,7 +64,7 @@ function findAgentLimbScript() {
   return null;
 }
 function scanChromiumCdpInstances() {
-  const home = os.homedir();
+  const home = getEffectiveHome();
   const isWin = process.platform === "win32";
   const isMac = process.platform === "darwin";
   const localAppData = process.env.LOCALAPPDATA || path.join(home, "AppData", "Local");
@@ -231,7 +247,7 @@ function detectBrowserCdp2(portOverride) {
 }
 function trySpawnAgentLimbBridge() {
   try {
-    const home = os.homedir();
+    const home = getEffectiveHome();
     const nodeCandidates = [
       process.execPath,
       path.join(home, ".dsh", "dsh-runtimes", "dsh-primary-runtime", "dependencies", "node", "bin", "node"),
@@ -500,7 +516,6 @@ import { execFile as execFile2 } from "node:child_process";
 import { promisify as promisify2 } from "node:util";
 import path3 from "node:path";
 import fs3 from "node:fs";
-import os2 from "node:os";
 var execFileAsync2 = promisify2(execFile2);
 var lastSessionId = null;
 async function executeAgentTask(options) {
@@ -521,9 +536,8 @@ async function executeAgentTask(options) {
       error: "未找到 Python 虛擬環境 (.venv)，請先執行一鍵初始化"
     };
   }
-  const home = os2.homedir();
-  const agentlimbScript = path3.join(home, ".dsh", "skills", "gemini-web-agent", "scripts", "gemini_agentlimb.py");
-  const cdpScript = path3.join(home, ".dsh", "skills", "gemini-web-agent", "scripts", "gemini_web.py");
+  const agentlimbScript = findAgentLimbScript();
+  const cdpScript = findCliScript();
   const targetModel = options.model || cfg.defaultModel || "gemini-3.5-flash-lite";
   const targetSite = options.site || "aistudio";
   const timeoutSec = options.timeoutSec || cfg.timeoutSec || 180;
@@ -542,7 +556,7 @@ async function executeAgentTask(options) {
       fs3.mkdirSync(downloadDir, { recursive: true });
     }
   } catch {}
-  if (status.activeChannel === "agentlimb" && fs3.existsSync(agentlimbScript)) {
+  if (status.activeChannel === "agentlimb" && agentlimbScript && fs3.existsSync(agentlimbScript)) {
     try {
       const args = [
         agentlimbScript,
@@ -588,7 +602,7 @@ async function executeAgentTask(options) {
       }
     }
   }
-  if (fs3.existsSync(cdpScript)) {
+  if (cdpScript && fs3.existsSync(cdpScript)) {
     try {
       let modelArg = "flash-lite";
       if (targetModel.includes("hydrogen"))

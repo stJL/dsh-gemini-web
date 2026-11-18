@@ -3,7 +3,7 @@ import { promisify } from 'node:util'
 import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
-import { detectDualChannel } from './detector.js'
+import { detectDualChannel, findAgentLimbScript, findCliScript } from './detector.js'
 import { loadConfig } from '../config.js'
 
 const execFileAsync = promisify(execFile)
@@ -53,9 +53,8 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
     }
   }
 
-  const home = os.homedir()
-  const agentlimbScript = path.join(home, '.dsh', 'skills', 'gemini-web-agent', 'scripts', 'gemini_agentlimb.py')
-  const cdpScript = path.join(home, '.dsh', 'skills', 'gemini-web-agent', 'scripts', 'gemini_web.py')
+  const agentlimbScript = findAgentLimbScript()
+  const cdpScript = findCliScript()
 
   const targetModel = options.model || cfg.defaultModel || 'gemini-3.5-flash-lite'
   const targetSite = options.site || 'aistudio'
@@ -81,7 +80,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
   } catch {}
 
   // 3. 通道 A: AgentLimb (零彈窗 / 免 Allow)
-  if (status.activeChannel === 'agentlimb' && fs.existsSync(agentlimbScript)) {
+  if (status.activeChannel === 'agentlimb' && agentlimbScript && fs.existsSync(agentlimbScript)) {
     try {
       const args = [
         agentlimbScript,
@@ -125,7 +124,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
   }
 
   // 4. 通道 B: Playwright CDP 備用
-  if (fs.existsSync(cdpScript)) {
+  if (cdpScript && fs.existsSync(cdpScript)) {
     try {
       let modelArg = 'flash-lite'
       if (targetModel.includes('hydrogen')) modelArg = 'hydrogen'
