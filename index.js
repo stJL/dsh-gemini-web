@@ -564,6 +564,8 @@ async function executeAgentTask(options) {
         options.task,
         "--model",
         targetModel,
+        "--site",
+        targetSite,
         "--timeout",
         String(timeoutSec),
         "--download-dir",

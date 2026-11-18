@@ -87,6 +87,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
         'task',
         options.task,
         '--model', targetModel,
+        '--site', targetSite,
         '--timeout', String(timeoutSec),
         '--download-dir', downloadDir,
       ]
