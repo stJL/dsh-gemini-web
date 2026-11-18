@@ -29,26 +29,26 @@ export async function fetchUsage(): Promise<UsageResult> {
     }
   }
 
-  // 1. 若當前生效通道為 AgentLimb：調用 gemini_agentlimb.py usage (100% 零彈窗，且探測完立刻 tab_close)
+  // 1. 若當前生效通道為 AgentLimb：調用 gemini_agentlimb.py usage --include-flow (100% 零彈窗，且探測完立刻 tab_close)
   if (status.activeChannel === 'agentlimb') {
     const alScript = findAgentLimbScript()
     if (!alScript) {
       return { ok: false, error: '未找到 AgentLimb 腳本' }
     }
     try {
-      const { stdout } = await execFileAsync(venv, [alScript, 'usage'], {
+      const { stdout } = await execFileAsync(venv, [alScript, 'usage', '--include-flow'], {
         timeout: 25000,
         env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
       })
       const parsed = JSON.parse(stdout.trim())
       return {
         ok: true,
-        geminiPlan: parsed.plan || 'PRO',
+        geminiPlan: parsed.plan || 'FREE',
         geminiUsedPct: parsed.used_pct ?? 0,
         geminiResetTime: parsed.reset_time || '',
         geminiWeeklyPct: parsed.used_pct ?? 0,
-        flowCredits: 1050,
-        flowResetTime: '',
+        flowCredits: parsed.flow_credits ?? 1050,
+        flowResetTime: parsed.flow_reset_time || '',
         raw: parsed,
       }
     } catch (err: any) {
@@ -77,7 +77,7 @@ export async function fetchUsage(): Promise<UsageResult> {
       const parsed = JSON.parse(stdout.trim())
       return {
         ok: true,
-        geminiPlan: parsed.plan || 'PRO',
+        geminiPlan: parsed.plan || 'FREE',
         geminiUsedPct: parsed.current_usage?.used_pct ?? 0,
         geminiResetTime: parsed.current_usage?.reset_time || '',
         geminiWeeklyPct: parsed.weekly_usage?.used_pct ?? 0,

@@ -39,14 +39,14 @@ window.__ModuleLoader__.load({
       .gw-card {
         padding: 14px 16px;
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: var(--dsw-alias-bg-layer-2, rgba(255, 255, 255, 0.04));
+        border: 1px solid var(--dsw-alias-border-l1, rgba(255, 255, 255, 0.08));
         margin-bottom: 12px;
         font-size: 13px;
-        transition: border-color 0.2s ease;
+        transition: border-color 0.2s ease, background 0.2s ease;
       }
       .gw-card:hover {
-        border-color: rgba(255, 255, 255, 0.16);
+        border-color: var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.16));
       }
       .gw-title {
         font-weight: 600;
@@ -54,9 +54,11 @@ window.__ModuleLoader__.load({
         display: flex;
         align-items: center;
         gap: 6px;
+        color: var(--dsw-alias-label-primary, inherit);
       }
       .gw-desc {
-        opacity: 0.82;
+        color: var(--dsw-alias-label-secondary, inherit);
+        opacity: 0.9;
         line-height: 1.5;
         font-size: 12px;
       }
@@ -82,14 +84,14 @@ window.__ModuleLoader__.load({
         cursor: not-allowed;
       }
       .gw-btn-secondary {
-        background: rgba(255, 255, 255, 0.1);
-        color: inherit;
-        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: var(--dsw-alias-interactive-bg-hover, rgba(255, 255, 255, 0.1));
+        color: var(--dsw-alias-label-primary, inherit);
+        border: 1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.15));
       }
       .gw-input, .gw-select {
-        background: rgba(0, 0, 0, 0.25);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        color: inherit;
+        background: var(--dsw-specific-input-major, #1e222b);
+        border: 1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.2));
+        color: var(--dsw-alias-label-primary, #f1f5f9);
         padding: 5px 8px;
         border-radius: 6px;
         font-size: 12px;
@@ -97,11 +99,20 @@ window.__ModuleLoader__.load({
       }
       .gw-input:focus, .gw-select:focus {
         border-color: #6366f1;
+        box-shadow: 0 0 0 1px #6366f1;
+      }
+      .gw-select option, .gw-select optgroup {
+        background: #1e222b;
+        color: #f1f5f9;
+      }
+      .gw-select optgroup {
+        font-weight: bold;
+        color: #94a3b8;
       }
       .gw-progress-bar {
         height: 6px;
         border-radius: 3px;
-        background: rgba(255, 255, 255, 0.1);
+        background: var(--dsw-alias-border-l1, rgba(255, 255, 255, 0.1));
         overflow: hidden;
         margin: 6px 0;
       }
@@ -136,6 +147,78 @@ window.__ModuleLoader__.load({
         font-weight: 600;
         background: rgba(239, 68, 68, 0.15);
         color: #ef4444;
+      }
+
+      /* 白天/明亮模式自適應 (Light Mode Adaptive) */
+      @media (prefers-color-scheme: light) {
+        .gw-card {
+          background: #ffffff;
+          border-color: #e2e8f0;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        .gw-card:hover {
+          border-color: #cbd5e1;
+        }
+        .gw-title {
+          color: #0f172a;
+        }
+        .gw-desc {
+          color: #334155;
+          opacity: 1;
+        }
+        .gw-input, .gw-select {
+          background: #ffffff;
+          border-color: #cbd5e1;
+          color: #0f172a;
+        }
+        .gw-select option, .gw-select optgroup {
+          background: #ffffff;
+          color: #0f172a;
+        }
+        .gw-select optgroup {
+          color: #64748b;
+        }
+        .gw-btn-secondary {
+          background: #f8fafc;
+          color: #1e293b;
+          border: 1px solid #cbd5e1;
+        }
+        .gw-progress-bar {
+          background: #e2e8f0;
+        }
+      }
+
+      /* DSH 淺色主題 Class / 屬性支援 */
+      [data-theme="light"] .gw-card, .theme-light .gw-card, body.light-theme .gw-card {
+        background: #ffffff !important;
+        border-color: #e2e8f0 !important;
+      }
+      [data-theme="light"] .gw-title, .theme-light .gw-title, body.light-theme .gw-title {
+        color: #0f172a !important;
+      }
+      [data-theme="light"] .gw-desc, .theme-light .gw-desc, body.light-theme .gw-desc {
+        color: #334155 !important;
+        opacity: 1 !important;
+      }
+      [data-theme="light"] .gw-input, [data-theme="light"] .gw-select,
+      .theme-light .gw-input, .theme-light .gw-select,
+      body.light-theme .gw-input, body.light-theme .gw-select {
+        background: #ffffff !important;
+        border-color: #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      [data-theme="light"] .gw-select option, [data-theme="light"] .gw-select optgroup,
+      .theme-light .gw-select option, .theme-light .gw-select optgroup,
+      body.light-theme .gw-select option, body.light-theme .gw-select optgroup {
+        background: #ffffff !important;
+        color: #0f172a !important;
+      }
+      [data-theme="light"] .gw-btn-secondary,
+      .theme-light .gw-btn-secondary,
+      body.light-theme .gw-btn-secondary {
+        background: #f8fafc !important;
+        color: #1e293b !important;
+        border-color: #cbd5e1 !important;
       }
     `
 
@@ -521,7 +604,7 @@ window.__ModuleLoader__.load({
             // 站點 2: Gemini 官網
             h('div', { style: { padding: '8px 10px', borderRadius: 6, background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)' } }, [
               h('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 2 } }, [
-                h('span', { style: { fontWeight: 600, color: '#34d399' } }, `📈 Gemini 官網 5小時滾動池 (${usage?.geminiPlan || 'PRO'})`),
+                h('span', { style: { fontWeight: 600, color: '#34d399' } }, `📈 Gemini 官網 5小時滾動池 (${usage?.geminiPlan ? (usage.geminiPlan === 'PRO' ? 'PRO' : (usage.geminiPlan === 'FREE' ? '免費版' : usage.geminiPlan)) : '一般方案'})`),
                 h('span', { style: { fontWeight: 600 } }, `${usage?.geminiUsedPct ?? 0}% 已使用`),
               ]),
               h('div', { className: 'gw-progress-bar' }, [
@@ -534,9 +617,11 @@ window.__ModuleLoader__.load({
             h('div', { style: { padding: '8px 10px', borderRadius: 6, background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)' } }, [
               h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
                 h('span', { style: { fontWeight: 600, color: '#fbbf24' } }, '🎨 Google Flow (flow.google.com)'),
-                h('span', { style: { fontWeight: 600, color: '#10b981' } }, `${usage?.flowCredits ?? 1050} 點 (生圖 0 點數)`),
+                h('span', { style: { fontWeight: 600, color: '#10b981' } }, `${usage?.flowCredits !== undefined && usage?.flowCredits !== null ? usage.flowCredits : 1050} 點 (生圖 0 點數)`),
               ]),
-              h('div', { style: { fontSize: 11, opacity: 0.8, marginTop: 4 } }, '獨立點數池：Nano Banana 2.1 享 2K 高清生圖 0 點數消耗；Omni/Veo 生視頻享獨立免費點數。')
+              h('div', { style: { fontSize: 11, opacity: 0.8, marginTop: 4 } },
+                `獨立點數池：Nano Banana 2.1 享 2K 高清生圖 0 點數消耗；Omni/Veo 生視頻享獨立免費點數。${usage?.flowResetTime ? ` (重置時間：${usage.flowResetTime})` : ''}`
+              )
             ])
           ])
         ]),
@@ -760,7 +845,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'gw-card', style: { background: 'rgba(255, 255, 255, 0.02)', borderColor: 'rgba(255, 255, 255, 0.05)' } }, [
           h('div', { className: 'gw-title', style: { fontSize: 12, opacity: 0.9 } }, '🛡️ 運行機制與自用原則聲明'),
           h('div', { className: 'gw-desc', style: { fontSize: 11, opacity: 0.7, lineHeight: 1.6 } }, [
-            h('div', null, '• 🛡️ 不算反代，不導出 API，不抽 Cookie：純本機瀏覽器自動化 Agent，等同於讓 AI 替你打開本機已登入的 Chrome/Brave。'),
+            h('div', null, '• 🛡️ 不算反代，不導出 API，不抽 Cookie：純本機瀏覽器自動化 Agent，等同於讓 AI 替你打開本機已登入的 Chromium 瀏覽器（如 Brave / Chrome / Edge 等）。'),
             h('div', null, '• 🌐 官方真實渲染：所有請求皆透過官方真實網頁打字與接收結果，相對更穩，完全繞開本地 Token 與模型限制。'),
             h('div', null, '• ⚡ 頻率控制建議：日常自用建議保持合理調度頻率，避免極高頻並發刷網頁端；遇到高峰排隊塞車時，建議切換為 Flash Lite 備用。'),
             h('div', null, '• 🔒 100% 迴環安全：所有通訊限制於本機 127.0.0.1 迴環，零憑證外洩風險。')
