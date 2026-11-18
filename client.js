@@ -1,7 +1,7 @@
 /**
  * dsh-gemini-web browser client
  * Hand-written ModuleLoader bundle: 100% self-contained, no external runtime dependencies.
- * Full multi-language support (zh-TW, zh-CN, en-US) with dynamic DSH language auto-detection.
+ * Full multi-language support (zh-CN first, zh-TW, en-US) with dynamic DSH language auto-detection.
  */
 window.__ModuleLoader__.load({
   id: 'dsh-gemini-web',
@@ -225,136 +225,8 @@ window.__ModuleLoader__.load({
       }
     }
 
-    // 2. 多語言字典 (i18n Dictionaries: zh-TW, zh-CN, en-US)
+    // 2. 多語言字典 (i18n: zh-CN, zh-TW, en-US)
     const I18N = {
-      'zh-TW': {
-        title: '✨ Gemini 網頁端調度中心 (Agent 模式)',
-        unauthed_title: '⚠️ Google 帳號尚未登入 / 狀態過期',
-        unauthed_desc: '檢測到瀏覽器尚未登入 Google 或當前分頁被導向登入頁。請點擊下方按鈕登入後再使用：',
-        unauthed_btn: '🔑 一鍵打開瀏覽器 Google 登入',
-        bridge_title: '瀏覽器底層通訊通道 (Bridge)：',
-        bridge_al_preferred: '🟢 AgentLimb 優先 (免彈窗)',
-        bridge_cdp_mode: '🟡 CDP 模式 (備用)',
-        bridge_disconnected: '🔴 未連線',
-        route_al: '🚀 當前生效優先路由：通道 A (AgentLimb) ⚡ 完全靜默・零 Allow 彈窗・CDP 備用通道完全休眠',
-        route_cdp: '⚠️ 當前生效優先路由：通道 B (CDP {port}) — 備用模式，每次連線需手動點擊瀏覽器 Allow 彈窗',
-        route_none: '❌ 目前雙通道皆未連線，請參考下方配置指引完成連線',
-        multi_instance_title: '⚠️ 偵測到多個開啟遠端偵錯的瀏覽器實例：',
-        multi_instance_tip: '💡 建議關閉多餘的瀏覽器視窗以避免通訊衝突，或在下方「CDP 偵錯連接埠」指定您想使用的端口。',
-        channel_a_title: '通道 A: AgentLimb (推薦)',
-        channel_a_connected: '已連線 (零彈窗/永久授權)',
-        channel_a_offline: '未在線',
-        channel_b_title: '通道 B: Chromium CDP (備用)',
-        channel_b_connected: '已連線 (需點擊 Allow)',
-        channel_b_dormant: '已休眠 (零彈窗保護)',
-        channel_b_offline: '未連線',
-        status_prefix: '狀態：',
-        port_prefix: '連接埠：',
-        config_prefix: '配置：',
-        browser_prefix: '瀏覽器：',
-        probing: '探測中 (正輪詢 Gemini 與 Flow)...',
-        probe_all_btn: '🔄 重新探測全部通道與站點',
-        sending: '發送中...',
-        test_al_btn: '⚡ 測試 AgentLimb (Say 側邊欄)',
-        executing: 'Agent 執行中...',
-        test_agent_btn: '🤖 測試 Agent 跑任務',
-        clear_cache_btn: '🧹 清除快取',
-        al_sending_msg: '⏳ 正在向 AgentLimb 側邊欄發送通知...',
-        al_success_msg: '🎉 已向 Brave 側邊欄成功發送即時通知！請看 Brave 側邊欄',
-        al_failed_prefix: '❌ 測試失敗：',
-        agent_executing_msg: '⏳ 正在透過 AgentLimb/CDP 調度 AI Studio 執行任務...',
-        agent_success_title: '✅ 任務完成 ({channel} 通道 · 模型: {model} · 耗時 {duration}ms){fallback}',
-        agent_fallback_tag: ' [塞車自動降級]',
-        agent_failed_prefix: '❌ 調度失敗：',
-        guide_title: '📖 瀏覽器連線配置指引（依需求二選一）',
-        guide_a_title: '🟢 方案 A（強烈推薦・100% 免彈窗）',
-        guide_a_1: '1. 在常用 Chromium 瀏覽器（Brave/Chrome/Edge 等）安裝 AgentLimb 擴充。',
-        guide_a_2: '2. 點擊擴充功能面板的「Pair」完成一次性本機配對。',
-        guide_a_3: '3. 永久免彈窗、不改捷徑、重啟電腦直接可用！',
-        guide_a_btn: '🔗 下載 AgentLimb 擴充套件',
-        guide_b_title: '🟡 方案 B（免安裝擴充・本機內建偵錯）',
-        guide_b_1: '1. 在現有 Chromium 瀏覽器網址列輸入：',
-        guide_b_2: '2. 勾選啟用偵錯開關（或捷徑啟動時加上 --remote-debugging-port=9222）。',
-        guide_b_3: '3. 點擊上方「重新探測通道」即可自動連接。',
-        quota_title: '📊 即時網頁端免費額度大盤',
-        quota_polling_tip: '⏳ 正在輪詢 Gemini 與 Google Flow 獨立點數...',
-        quota_refresh_btn: '🔄 刷新額度 (含 Flow)',
-        quota_refreshing: '探測中...',
-        quota_isolated_badge: '3 大站點額度完全獨立・絕不扣款',
-        aistudio_title: '🌐 Google AI Studio (aistudio.google.com)',
-        aistudio_badge: 'key_off 免費層級',
-        aistudio_desc: '• 免費無限輪詢層級：支援 1M Token 長輸出（Argon / Hydrogen / Flash），未掛載 API Key 時直接享受網頁免費無限額度，絕對不會扣除付費帳號額度！',
-        gemini_title: '📈 Gemini 官網 5小時滾動池 ({plan})',
-        gemini_plan_pro: 'PRO',
-        gemini_plan_free: '免費版',
-        gemini_plan_default: '一般方案',
-        gemini_used_pct: '{pct}% 已使用',
-        gemini_reset: '重置週期：{time} (獨立對話額度)',
-        flow_title: '🎨 Google Flow (flow.google.com)',
-        flow_connected_badge: '🟢 已連通',
-        flow_pending_badge: '🟡 待刷新',
-        flow_credits_unit: '{credits} 點 (生圖 0 點數)',
-        flow_desc: '獨立點數池：Nano Banana 2.1 享 2K 高清生圖 0 點數消耗；Omni/Veo 生視頻享獨立免費點數。',
-        flow_reset_suffix: ' (重置時間：{time})',
-        routing_guide_title: '🧭 渠道自動路由與防扣款指南',
-        routing_text_title: '💬 文字對話 / 複雜程式碼',
-        routing_text_desc: '➔ 自動導向 AI Studio key_off 免費層級（長文本輸出）或 Gemini 網頁端。',
-        routing_image_title: '🎨 2K 高清生圖 (Nano 2.1)',
-        routing_image_desc: '➔ 自動導向 Google Flow 0 點數免費池 / AI Studio。',
-        routing_video_title: '🎬 視頻生成 (Omni 1.2 / Veo)',
-        routing_video_desc: '➔ 自動導向 Google Flow 視頻池 / AI Studio 專用模組。',
-        routing_paid_title: '🔒 付費模型防扣款鎖',
-        routing_paid_desc: '➔ 強制過濾並鎖定 Paid 標記條目（如 Carbon），預設完全避開，保護錢包！',
-        settings_section_title: '⚙️ Agent 調度與瀏覽器通道設定',
-        lang_label: '介面語言 (UI Language)：',
-        lang_desc: '預設自動跟隨 DSH 系統語言，亦可在此手動指定',
-        lang_auto: '🌐 自動 (跟隨 DSH 系統)',
-        lang_zhtw: '🇹🇼 繁體中文',
-        lang_zhcn: '🇨🇳 简体中文',
-        lang_en: '🇺🇸 English',
-        conn_strategy_title: '瀏覽器連線通道策略：',
-        conn_strategy_desc: 'auto 模式優先走 AgentLimb，成功則完全不碰 CDP',
-        conn_auto: '🌟 自動 (AgentLimb 優先)',
-        conn_al: '⚡ 強制 AgentLimb (零彈窗)',
-        conn_cdp: '🛠️ 強制 CDP (9222 端口)',
-        default_model_title: 'Agent 預設首選模型：',
-        sync_models_btn: '🔄 刷新網頁模型池',
-        syncing: '同步中...',
-        models_classified: '已分類 {count} 個模型（已鎖定多模態專用與付費項）',
-        models_default_note: '已載入標準模型池（多模態專用模型已鎖定，由 AI 自動調用）',
-        group_text: '💬 文字與推理對話池 (可選為聊天首選)',
-        group_media: '🔒 多模態專用池（非日常聊天・AI自動調用）',
-        group_paid: '🔒 付費模型池 (需綁付費Key・預設保護防扣款)',
-        tag_media: '[多模態專用]',
-        tag_paid: '[需付費Key]',
-        fallback_title: '免費池塞車階梯降級切換：',
-        fallback_strict_desc: '🛑 嚴格模式：嚴格保持所選模型，遇塞車立即中止並詢問用戶',
-        fallback_ladder_desc: '🌟 智慧階梯：依序嘗試 (Argon ➔ Hydrogen ➔ Flash ➔ Flash Lite)，全滿時詢問用戶',
-        fallback_ladder_opt: '🌟 智慧階梯降級 (推薦)',
-        fallback_strict_opt: '🛑 嚴格模式 (不降級)',
-        thinking_level_title: '推理思考等級 (Thinking Level)：',
-        thinking_high: 'High (推薦默認)',
-        thinking_extra_high: 'Extra High (深度推導)',
-        thinking_medium: 'Medium (折衷)',
-        thinking_low: 'Low (低思考速回)',
-        timeout_title: '單次任務最大超時限制 (秒)：',
-        cdp_port_title: 'CDP 偵錯連接埠 (僅 CDP 模式生效)：',
-        save_btn: '💾 儲存並套用設定',
-        saving: '儲存中...',
-        save_success: '✅ 設定已儲存生效！',
-        save_failed_prefix: '❌ 儲存失敗: ',
-        links_title: '🔗 官方工作台直達',
-        link_aistudio: '🌐 Google AI Studio',
-        link_flow: '🎨 Google Flow',
-        link_gemini: '📈 Gemini 額度大盤',
-        link_accounts: '🔑 Google 帳號中心',
-        safety_title: '🛡️ 運行機制與自用原則聲明',
-        safety_item1: '• 🛡️ 不算反代，不導出 API，不抽 Cookie：純本機瀏覽器自動化 Agent，等同於讓 AI 替你打開本機已登入的 Chromium 瀏覽器（如 Brave / Chrome / Edge 等）。',
-        safety_item2: '• 🌐 官方真實渲染：所有請求皆透過官方真實網頁打字與接收結果，相對更穩，完全繞開本地 Token 與模型限制。',
-        safety_item3: '• ⚡ 頻率控制建議：日常自用建議保持合理調度頻率，避免極高頻並發刷網頁端；遇到高峰排隊塞車時，建議切換為 Flash Lite 備用。',
-        safety_item4: '• 🔒 100% 迴環安全：所有通訊限制於本機 127.0.0.1 迴環，零憑證外洩風險。',
-        nav_label: '✨ Gemini 網頁端 (Agent 調度中心)'
-      },
       'zh-CN': {
         title: '✨ Gemini 网页端调度中心 (Agent 模式)',
         unauthed_title: '⚠️ Google 账号尚未登录 / 状态过期',
@@ -388,7 +260,7 @@ window.__ModuleLoader__.load({
         test_agent_btn: '🤖 测试 Agent 跑任务',
         clear_cache_btn: '🧹 清除缓存',
         al_sending_msg: '⏳ 正在向 AgentLimb 侧边栏发送通知...',
-        al_success_msg: '🎉 已向 Brave 侧边栏成功发送即时通知！请看 Brave 侧边栏',
+        al_success_msg: '🎉 已向浏览器侧边栏成功发送即时通知！请看侧边栏',
         al_failed_prefix: '❌ 测试失败：',
         agent_executing_msg: '⏳ 正在通过 AgentLimb/CDP 调度 AI Studio 执行任务...',
         agent_success_title: '✅ 任务完成 ({channel} 通道 · 模型: {model} · 耗时 {duration}ms){fallback}',
@@ -396,7 +268,7 @@ window.__ModuleLoader__.load({
         agent_failed_prefix: '❌ 调度失败：',
         guide_title: '📖 浏览器连接配置指引（依需求二选一）',
         guide_a_title: '🟢 方案 A（强烈推荐・100% 免弹窗）',
-        guide_a_1: '1. 在常用 Chromium 浏览器（Brave/Chrome/Edge 等）安装 AgentLimb 扩展。',
+        guide_a_1: '1. 在常用 Chromium 浏览器（Chrome / Edge / Brave 等）安装 AgentLimb 扩展。',
         guide_a_2: '2. 点击扩展功能面板的「Pair」完成一次性本机配对。',
         guide_a_3: '3. 永久免弹窗、不改快捷方式、重启电脑直接可用！',
         guide_a_btn: '🔗 下载 AgentLimb 扩展套件',
@@ -421,9 +293,11 @@ window.__ModuleLoader__.load({
         flow_title: '🎨 Google Flow (flow.google.com)',
         flow_connected_badge: '🟢 已连通',
         flow_pending_badge: '🟡 待刷新',
-        flow_credits_unit: '{credits} 点 (生图 0 点数)',
-        flow_desc: '独立点数池：Nano Banana 2.1 享 2K 高清生图 0 点数消耗；Omni/Veo 生视频享独立免费点数。',
-        flow_reset_suffix: ' (重置时间：{time})',
+        flow_credits_unit: '可用点数：{credits} 点（🎨 生图免扣点・完全免费）',
+        flow_desc_p1: '• 点数用途：每月免费享有 {credits} 独立点数，专门用于 Veo / Omni 视频生成（每部视频仅消耗少量点数）。',
+        flow_desc_p2: '• 生图特权：使用 Nano Banana 2.1 生成 2K 高清图片时“完全不扣除点数”（单张消耗 0 点，等同无限免费生图）！',
+        flow_desc_p3: '• 额度重置：每月自动补满额度{time}。',
+        flow_reset_note: '（重置时间：{time}）',
         routing_guide_title: '🧭 渠道自动路由与防扣款指南',
         routing_text_title: '💬 文字对话 / 复杂代码',
         routing_text_desc: '➔ 自动导向 AI Studio key_off 免费层级（长文本输出）或 Gemini 网页端。',
@@ -434,12 +308,12 @@ window.__ModuleLoader__.load({
         routing_paid_title: '🔒 付费模型防扣款锁',
         routing_paid_desc: '➔ 强制过滤并锁定 Paid 标记条目（如 Carbon），默认完全避开，保护钱包！',
         settings_section_title: '⚙️ Agent 调度与浏览器通道设置',
-        lang_label: '界面语言 (UI Language)：',
+        lang_label: '界面语言 (Language)：',
         lang_desc: '默认自动跟随 DSH 系统语言，亦可在此手动指定',
         lang_auto: '🌐 自动 (跟随 DSH 系统)',
-        lang_zhtw: '🇹🇼 繁體中文',
-        lang_zhcn: '🇨🇳 简体中文',
-        lang_en: '🇺🇸 English',
+        lang_zhcn: '简体中文',
+        lang_zhtw: '繁體中文',
+        lang_en: 'English',
         conn_strategy_title: '浏览器连接通道策略：',
         conn_strategy_desc: 'auto 模式优先走 AgentLimb，成功则完全不碰 CDP',
         conn_auto: '🌟 自动 (AgentLimb 优先)',
@@ -477,16 +351,146 @@ window.__ModuleLoader__.load({
         link_gemini: '📈 Gemini 额度大盘',
         link_accounts: '🔑 Google 账号中心',
         safety_title: '🛡️ 运行机制与自用原则声明',
-        safety_item1: '• 🛡️ 不算反代，不导出 API，不抽 Cookie：纯本机浏览器自动化 Agent，等同于让 AI 替你打开本机已登录的 Chromium 浏览器（如 Brave / Chrome / Edge 等）。',
+        safety_item1: '• 🛡️ 不算反代，不导出 API，不抽 Cookie：纯本机浏览器自动化 Agent，等同于让 AI 替你打开本机已登录的 Chromium 浏览器（如 Chrome / Edge / Brave 等）。',
         safety_item2: '• 🌐 官方真实渲染：所有请求皆通过官方真实网页打字与接收结果，相对更稳，完全绕开本地 Token 与模型限制。',
         safety_item3: '• ⚡ 频率控制建议：日常自用建议保持合理调度频率，避免极高频并发刷网页端；遇到高峰排队塞车时，建议切换为 Flash Lite 备用。',
         safety_item4: '• 🔒 100% 回环安全：所有通信限制于本机 127.0.0.1 回环，零凭证外泄风险。',
         nav_label: '✨ Gemini 网页端 (Agent 调度中心)'
       },
+      'zh-TW': {
+        title: '✨ Gemini 網頁端調度中心 (Agent 模式)',
+        unauthed_title: '⚠️ Google 帳號尚未登入 / 狀態過期',
+        unauthed_desc: '檢測到瀏覽器尚未登入 Google 或當前分頁被導向登入頁。請點擊下方按鈕登入後再使用：',
+        unauthed_btn: '🔑 一鍵打開瀏覽器 Google 登入',
+        bridge_title: '瀏覽器底層通訊通道 (Bridge)：',
+        bridge_al_preferred: '🟢 AgentLimb 優先 (免彈窗)',
+        bridge_cdp_mode: '🟡 CDP 模式 (備用)',
+        bridge_disconnected: '🔴 未連線',
+        route_al: '🚀 當前生效優先路由：通道 A (AgentLimb) ⚡ 完全靜默・零 Allow 彈窗・CDP 備用通道完全休眠',
+        route_cdp: '⚠️ 當前生效優先路由：通道 B (CDP {port}) — 備用模式，每次連線需手動點擊瀏覽器 Allow 彈窗',
+        route_none: '❌ 目前雙通道皆未連線，請參考下方配置指引完成連線',
+        multi_instance_title: '⚠️ 偵測到多個開啟遠端偵錯的瀏覽器實例：',
+        multi_instance_tip: '💡 建議關閉多餘的瀏覽器視窗以避免通訊衝突，或在下方「CDP 偵錯連接埠」指定您想使用的端口。',
+        channel_a_title: '通道 A: AgentLimb (推薦)',
+        channel_a_connected: '已連線 (零彈窗/永久授權)',
+        channel_a_offline: '未在線',
+        channel_b_title: '通道 B: Chromium CDP (備用)',
+        channel_b_connected: '已連線 (需點擊 Allow)',
+        channel_b_dormant: '已休眠 (零彈窗保護)',
+        channel_b_offline: '未連線',
+        status_prefix: '狀態：',
+        port_prefix: '連接埠：',
+        config_prefix: '配置：',
+        browser_prefix: '瀏覽器：',
+        probing: '探測中 (正輪詢 Gemini 與 Flow)...',
+        probe_all_btn: '🔄 重新探測全部通道與站點',
+        sending: '發送中...',
+        test_al_btn: '⚡ 測試 AgentLimb (Say 側邊欄)',
+        executing: 'Agent 執行中...',
+        test_agent_btn: '🤖 測試 Agent 跑任務',
+        clear_cache_btn: '🧹 清除快取',
+        al_sending_msg: '⏳ 正在向 AgentLimb 側邊欄發送通知...',
+        al_success_msg: '🎉 已向瀏覽器側邊欄成功發送即時通知！請看側邊欄',
+        al_failed_prefix: '❌ 測試失敗：',
+        agent_executing_msg: '⏳ 正在透過 AgentLimb/CDP 調度 AI Studio 執行任務...',
+        agent_success_title: '✅ 任務完成 ({channel} 通道 · 模型: {model} · 耗時 {duration}ms){fallback}',
+        agent_fallback_tag: ' [塞車自動降級]',
+        agent_failed_prefix: '❌ 調度失敗：',
+        guide_title: '📖 瀏覽器連線配置指引（依需求二選一）',
+        guide_a_title: '🟢 方案 A（強烈推薦・100% 免彈窗）',
+        guide_a_1: '1. 在常用 Chromium 瀏覽器（Chrome / Edge / Brave 等）安裝 AgentLimb 擴充。',
+        guide_a_2: '2. 點擊擴充功能面板的「Pair」完成一次性本機配對。',
+        guide_a_3: '3. 永久免彈窗、不改捷徑、重啟電腦直接可用！',
+        guide_a_btn: '🔗 下載 AgentLimb 擴充套件',
+        guide_b_title: '🟡 方案 B（免安裝擴充・本機內建偵錯）',
+        guide_b_1: '1. 在現有 Chromium 瀏覽器網址列輸入：',
+        guide_b_2: '2. 勾選啟用偵錯開關（或捷徑啟動時加上 --remote-debugging-port=9222）。',
+        guide_b_3: '3. 點擊上方「重新探測通道」即可自動連接。',
+        quota_title: '📊 即時網頁端免費額度大盤',
+        quota_polling_tip: '⏳ 正在輪詢 Gemini 與 Google Flow 獨立點數...',
+        quota_refresh_btn: '🔄 刷新額度 (含 Flow)',
+        quota_refreshing: '探測中...',
+        quota_isolated_badge: '3 大站點額度完全獨立・絕不扣款',
+        aistudio_title: '🌐 Google AI Studio (aistudio.google.com)',
+        aistudio_badge: 'key_off 免費層級',
+        aistudio_desc: '• 免費無限輪詢層級：支援 1M Token 長輸出（Argon / Hydrogen / Flash），未掛載 API Key 時直接享受網頁免費無限額度，絕對不會扣除付費帳號額度！',
+        gemini_title: '📈 Gemini 官網 5小時滾動池 ({plan})',
+        gemini_plan_pro: 'PRO',
+        gemini_plan_free: '免費版',
+        gemini_plan_default: '一般方案',
+        gemini_used_pct: '{pct}% 已使用',
+        gemini_reset: '重置週期：{time} (獨立對話額度)',
+        flow_title: '🎨 Google Flow (flow.google.com)',
+        flow_connected_badge: '🟢 已連通',
+        flow_pending_badge: '🟡 待刷新',
+        flow_credits_unit: '可用點數：{credits} 點（🎨 生圖免扣點・完全免費）',
+        flow_desc_p1: '• 點數用途：每月免費享有 {credits} 點獨立額度，專門用於 Veo / Omni 視頻生成（每支影片僅消耗少量點數）。',
+        flow_desc_p2: '• 生圖特權：使用 Nano Banana 2.1 生成 2K 高清圖片時「完全不扣除點數」（單張消耗 0 點，等同無限免費生圖）！',
+        flow_desc_p3: '• 額度重置：每月自動補滿額度{time}。',
+        flow_reset_note: '（重置時間：{time}）',
+        routing_guide_title: '🧭 渠道自動路由與防扣款指南',
+        routing_text_title: '💬 文字對話 / 複雜程式碼',
+        routing_text_desc: '➔ 自動導向 AI Studio key_off 免費層級（長文本輸出）或 Gemini 網頁端。',
+        routing_image_title: '🎨 2K 高清生圖 (Nano 2.1)',
+        routing_image_desc: '➔ 自動導向 Google Flow 0 點數免費池 / AI Studio。',
+        routing_video_title: '🎬 視頻生成 (Omni 1.2 / Veo)',
+        routing_video_desc: '➔ 自動導向 Google Flow 視頻池 / AI Studio 專用模組。',
+        routing_paid_title: '🔒 付費模型防扣款鎖',
+        routing_paid_desc: '➔ 強制過濾並鎖定 Paid 標記條目（如 Carbon），預設完全避開，保護錢包！',
+        settings_section_title: '⚙️ Agent 調度與瀏覽器通道設定',
+        lang_label: '介面語言 (UI Language)：',
+        lang_desc: '預設自動跟隨 DSH 系統語言，亦可在此手動指定',
+        lang_auto: '🌐 自動 (跟隨 DSH 系統)',
+        lang_zhcn: '简体中文',
+        lang_zhtw: '繁體中文',
+        lang_en: 'English',
+        conn_strategy_title: '瀏覽器連線通道策略：',
+        conn_strategy_desc: 'auto 模式優先走 AgentLimb，成功則完全不碰 CDP',
+        conn_auto: '🌟 自動 (AgentLimb 優先)',
+        conn_al: '⚡ 強制 AgentLimb (零彈窗)',
+        conn_cdp: '🛠️ 強制 CDP (9222 端口)',
+        default_model_title: 'Agent 預設首選模型：',
+        sync_models_btn: '🔄 刷新網頁模型池',
+        syncing: '同步中...',
+        models_classified: '已分類 {count} 個模型（已鎖定多模態專用與付費項）',
+        models_default_note: '已載入標準模型池（多模態專用模型已鎖定，由 AI 自動調用）',
+        group_text: '💬 文字與推理對話池 (可選為聊天首選)',
+        group_media: '🔒 多模態專用池（非日常聊天・AI自動調用）',
+        group_paid: '🔒 付費模型池 (需綁付費Key・預設保護防扣款)',
+        tag_media: '[多模態專用]',
+        tag_paid: '[需付費Key]',
+        fallback_title: '免費池塞車階梯降級切換：',
+        fallback_strict_desc: '🛑 嚴格模式：嚴格保持所選模型，遇塞車立即中止並詢問用戶',
+        fallback_ladder_desc: '🌟 智慧階梯：依序嘗試 (Argon ➔ Hydrogen ➔ Flash ➔ Flash Lite)，全滿時詢問用戶',
+        fallback_ladder_opt: '🌟 智慧階梯降級 (推薦)',
+        fallback_strict_opt: '🛑 嚴格模式 (不降級)',
+        thinking_level_title: '推理思考等級 (Thinking Level)：',
+        thinking_high: 'High (推薦默認)',
+        thinking_extra_high: 'Extra High (深度推導)',
+        thinking_medium: 'Medium (折衷)',
+        thinking_low: 'Low (低思考速回)',
+        timeout_title: '單次任務最大超時限制 (秒)：',
+        cdp_port_title: 'CDP 偵錯連接埠 (僅 CDP 模式生效)：',
+        save_btn: '💾 儲存並套用設定',
+        saving: '儲存中...',
+        save_success: '✅ 設定已儲存生效！',
+        save_failed_prefix: '❌ 儲存失敗: ',
+        links_title: '🔗 官方工作台直達',
+        link_aistudio: '🌐 Google AI Studio',
+        link_flow: '🎨 Google Flow',
+        link_gemini: '📈 Gemini 額度大盤',
+        link_accounts: '🔑 Google 帳號中心',
+        safety_title: '🛡️ 運行機制與自用原則聲明',
+        safety_item1: '• 🛡️ 不算反代，不導出 API，不抽 Cookie：純本機瀏覽器自動化 Agent，等同於讓 AI 替你打開本機已登入的 Chromium 瀏覽器（如 Chrome / Edge / Brave 等）。',
+        safety_item2: '• 🌐 官方真實渲染：所有請求皆透過官方真實網頁打字與接收結果，相對更穩，完全繞開本地 Token 與模型限制。',
+        safety_item3: '• ⚡ 頻率控制建議：日常自用建議保持合理調度頻率，避免極高頻並發刷網頁端；遇到高峰排隊塞車時，建議切換為 Flash Lite 備用。',
+        safety_item4: '• 🔒 100% 迴環安全：所有通訊限制於本機 127.0.0.1 迴環，零憑證外洩風險。',
+        nav_label: '✨ Gemini 網頁端 (Agent 調度中心)'
+      },
       'en-US': {
         title: '✨ Gemini Web Orchestration (Agent Mode)',
         unauthed_title: '⚠️ Google Account Not Logged In / Session Expired',
-        unauthed_desc: 'Browser has not logged in to Google or the active tab redirected to login page. Please log in before proceeding:',
+        unauthed_desc: 'Browser has not logged in to Google or active tab was redirected to login page. Please log in before proceeding:',
         unauthed_btn: '🔑 Open Browser Google Login',
         bridge_title: 'Browser Communication Bridge:',
         bridge_al_preferred: '🟢 AgentLimb Preferred (Zero-Popup)',
@@ -516,7 +520,7 @@ window.__ModuleLoader__.load({
         test_agent_btn: '🤖 Test Agent Task Execution',
         clear_cache_btn: '🧹 Clear Cache',
         al_sending_msg: '⏳ Sending notification to AgentLimb sidebar...',
-        al_success_msg: '🎉 Successfully sent live notification to Brave sidebar! Check Brave sidebar.',
+        al_success_msg: '🎉 Successfully sent live notification to browser sidebar! Check sidebar.',
         al_failed_prefix: '❌ Test Failed: ',
         agent_executing_msg: '⏳ Orchestrating AI Studio task via AgentLimb/CDP...',
         agent_success_title: '✅ Task Completed ({channel} channel · Model: {model} · Elapsed: {duration}ms){fallback}',
@@ -524,7 +528,7 @@ window.__ModuleLoader__.load({
         agent_failed_prefix: '❌ Orchestration Failed: ',
         guide_title: '📖 Browser Connection Guide (Choose Either)',
         guide_a_title: '🟢 Option A (Highly Recommended · 100% Zero-Popup)',
-        guide_a_1: '1. Install AgentLimb extension in your Chromium browser (Brave/Chrome/Edge).',
+        guide_a_1: '1. Install AgentLimb extension in your Chromium browser (Chrome / Edge / Brave).',
         guide_a_2: '2. Click "Pair" in the extension popup for a one-time local pairing.',
         guide_a_3: '3. Permanent zero-popup, no shortcut changes, survives reboots!',
         guide_a_btn: '🔗 Download AgentLimb Extension',
@@ -549,9 +553,11 @@ window.__ModuleLoader__.load({
         flow_title: '🎨 Google Flow (flow.google.com)',
         flow_connected_badge: '🟢 Connected',
         flow_pending_badge: '🟡 Pending',
-        flow_credits_unit: '{credits} Credits (Image Gen: 0 Credits)',
-        flow_desc: 'Independent pool: Nano Banana 2.1 generates 2K HD images at 0 credits; Omni/Veo video uses separate free credits.',
-        flow_reset_suffix: ' (Reset: {time})',
+        flow_credits_unit: 'Available: {credits} Credits (🎨 Images: 100% Free / 0 Cost)',
+        flow_desc_p1: '• Credit Purpose: {credits} free monthly credits dedicated to Veo / Omni video generation (costs few credits per video).',
+        flow_desc_p2: '• Free Image Gen: 2K HD image generation via Nano Banana 2.1 costs 0 credits (completely free, unlimited generation)!',
+        flow_desc_p3: '• Balance Reset: Automatically replenished monthly{time}.',
+        flow_reset_note: ' (Reset: {time})',
         routing_guide_title: '🧭 Automatic Routing & Billing Safety Guide',
         routing_text_title: '💬 Text Chat / Complex Code',
         routing_text_desc: '➔ Routed to AI Studio key_off free tier (1M output) or Gemini Web.',
@@ -565,9 +571,9 @@ window.__ModuleLoader__.load({
         lang_label: 'Interface Language (Language):',
         lang_desc: 'Default follows DSH system language, or choose manually here',
         lang_auto: '🌐 Auto (Follow DSH System)',
-        lang_zhtw: '🇹🇼 繁體中文',
-        lang_zhcn: '🇨🇳 简体中文',
-        lang_en: '🇺🇸 English',
+        lang_zhcn: 'Simplified Chinese',
+        lang_zhtw: 'Traditional Chinese',
+        lang_en: 'English',
         conn_strategy_title: 'Browser Connection Strategy:',
         conn_strategy_desc: 'Auto mode prioritizes AgentLimb; if successful, leaves CDP dormant',
         conn_auto: '🌟 Auto (AgentLimb Preferred)',
@@ -605,7 +611,7 @@ window.__ModuleLoader__.load({
         link_gemini: '📈 Gemini Quota Dashboard',
         link_accounts: '🔑 Google Account Center',
         safety_title: '🛡️ Operational Mechanism & Fair-Use Statement',
-        safety_item1: '• 🛡️ Not a proxy, no API export, no Cookie extraction: Pure local browser automation agent, equivalent to letting AI use your logged-in Chromium browser.',
+        safety_item1: '• 🛡️ Not a proxy, no API export, no Cookie extraction: Pure local browser automation agent, equivalent to letting AI use your logged-in Chromium browser (Chrome / Edge / Brave, etc.).',
         safety_item2: '• 🌐 Authentic official rendering: All requests are typed and rendered directly on official web pages, bypassing token limits.',
         safety_item3: '• ⚡ Rate limit recommendations: Keep a reasonable request frequency for daily personal use; switch to Flash Lite during peak congestion.',
         safety_item4: '• 🔒 100% Loopback Security: All communications are restricted to 127.0.0.1 loopback with zero credential exposure.',
@@ -617,20 +623,20 @@ window.__ModuleLoader__.load({
       try {
         if (typeof document !== 'undefined' && document.documentElement?.lang) {
           const l = document.documentElement.lang.toLowerCase()
-          if (l.includes('tw') || l.includes('hk') || l.includes('hant')) return 'zh-TW'
           if (l.includes('cn') || l.includes('hans') || l === 'zh') return 'zh-CN'
+          if (l.includes('tw') || l.includes('hk') || l.includes('hant')) return 'zh-TW'
           if (l.startsWith('en')) return 'en-US'
         }
       } catch {}
       try {
         if (typeof navigator !== 'undefined' && navigator.language) {
           const l = navigator.language.toLowerCase()
-          if (l.includes('tw') || l.includes('hk') || l.includes('hant')) return 'zh-TW'
           if (l.includes('cn') || l.includes('hans') || l === 'zh') return 'zh-CN'
+          if (l.includes('tw') || l.includes('hk') || l.includes('hant')) return 'zh-TW'
           if (l.startsWith('en')) return 'en-US'
         }
       } catch {}
-      return 'zh-TW'
+      return 'zh-CN'
     }
 
     // 3. 視覺化設定與控制主面板 (嵌入 DSH Settings)
@@ -655,7 +661,7 @@ window.__ModuleLoader__.load({
       const [availableModels, setAvailableModels] = useState([])
       const [syncingModels, setSyncingModels] = useState(false)
 
-      // 語言狀態管理 (支援 auto, zh-TW, zh-CN, en-US)
+      // 語言狀態管理 (支援 auto, zh-CN, zh-TW, en-US)
       const [langChoice, setLangChoice] = useState(() => {
         try {
           return localStorage.getItem('dsh_gemini_web_lang') || 'auto'
@@ -676,9 +682,9 @@ window.__ModuleLoader__.load({
       }, [])
 
       const activeLang = langChoice === 'auto' ? dshLang : langChoice
-      const dict = I18N[activeLang] || I18N['zh-TW']
+      const dict = I18N[activeLang] || I18N['zh-CN']
       const t = (k, params) => {
-        let text = dict[k] ?? I18N['zh-TW'][k] ?? k
+        let text = dict[k] ?? I18N['zh-CN'][k] ?? k
         if (params) {
           for (const [pk, pv] of Object.entries(params)) {
             text = text.replaceAll(`{${pk}}`, String(pv))
@@ -910,7 +916,7 @@ window.__ModuleLoader__.load({
               h('div', { style: { fontSize: 11, opacity: 0.8, lineHeight: 1.5 } }, [
                 h('div', null, `${t('status_prefix')}${cdpConnected ? t('channel_b_connected') : (alConnected ? t('channel_b_dormant') : t('channel_b_offline'))}`),
                 h('div', null, `${t('port_prefix')}127.0.0.1:${status?.cdp?.port || status?.dual?.cdp?.port || config.port}`),
-                cdpConnected && h('div', null, `${t('browser_prefix')}${status?.cdp?.browserType || status?.dual?.cdp?.browserType || 'Brave'}`),
+                cdpConnected && h('div', null, `${t('browser_prefix')}${status?.cdp?.browserType || status?.dual?.cdp?.browserType || 'Chrome'}`),
               ])
             ])
           ]),
@@ -1053,7 +1059,7 @@ window.__ModuleLoader__.load({
               h('div', { style: { fontSize: 11, opacity: 0.7 } }, t('gemini_reset', { time: usage?.geminiResetTime || '即時更新' })),
             ]),
 
-            // 站點 3: Flow
+            // 站點 3: Flow (優化點數與生圖免扣點說明)
             h('div', { style: { padding: '8px 10px', borderRadius: 6, background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)' } }, [
               h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, [
@@ -1066,9 +1072,13 @@ window.__ModuleLoader__.load({
                 h('span', { style: { fontWeight: 600, color: '#10b981' } },
                   t('flow_credits_unit', { credits: usage?.flowCredits !== undefined && usage?.flowCredits !== null ? usage.flowCredits : 1050 })),
               ]),
-              h('div', { style: { fontSize: 11, opacity: 0.8, marginTop: 4 } },
-                t('flow_desc') + (usage?.flowResetTime ? t('flow_reset_suffix', { time: usage.flowResetTime }) : '')
-              )
+              h('div', { style: { fontSize: 11, opacity: 0.85, marginTop: 6, lineHeight: 1.6 } }, [
+                h('div', null, t('flow_desc_p1', { credits: usage?.flowCredits !== undefined && usage?.flowCredits !== null ? usage.flowCredits : 1050 })),
+                h('div', { style: { color: '#10b981', fontWeight: 500 } }, t('flow_desc_p2')),
+                h('div', { style: { opacity: 0.8 } }, t('flow_desc_p3', {
+                  time: usage?.flowResetTime ? t('flow_reset_note', { time: usage.flowResetTime }) : ''
+                }))
+              ])
             ])
           ])
         ]),
@@ -1101,7 +1111,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'gw-title', style: { color: '#818cf8' } }, t('settings_section_title')),
           h('div', { className: 'gw-desc', style: { display: 'flex', flexDirection: 'column', gap: 12 } }, [
 
-            // 設定 0: 介面語言選擇 (Language Selection)
+            // 設定 0: 介面語言選擇 (Language Selection: 簡體中文排第一位，無國旗)
             h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
               h('div', null, [
                 h('div', { style: { fontWeight: 500 } }, t('lang_label')),
@@ -1118,8 +1128,8 @@ window.__ModuleLoader__.load({
                 }
               }, [
                 h('option', { value: 'auto' }, `${t('lang_auto')} [${activeLang}]`),
-                h('option', { value: 'zh-TW' }, t('lang_zhtw')),
                 h('option', { value: 'zh-CN' }, t('lang_zhcn')),
+                h('option', { value: 'zh-TW' }, t('lang_zhtw')),
                 h('option', { value: 'en-US' }, t('lang_en')),
               ])
             ]),
@@ -1312,7 +1322,7 @@ window.__ModuleLoader__.load({
           ])
         ]),
 
-        // 卡片 5: 原作者架構原則與透明宣告
+        // 卡片 5: 原作者架構原則與透明宣告 (順序優化為 Chrome / Edge / Brave 等)
         h('div', { className: 'gw-card', style: { background: 'rgba(255, 255, 255, 0.02)', borderColor: 'rgba(255, 255, 255, 0.05)' } }, [
           h('div', { className: 'gw-title', style: { fontSize: 12, opacity: 0.9 } }, t('safety_title')),
           h('div', { className: 'gw-desc', style: { fontSize: 11, opacity: 0.7, lineHeight: 1.6 } }, [
@@ -1342,9 +1352,9 @@ window.__ModuleLoader__.load({
         try {
           if (ctx.locale && typeof ctx.locale.register === 'function') {
             return ctx.locale.register(NS, {
-              'zh-TW': I18N['zh-TW'],
               'zh-CN': I18N['zh-CN'],
-              'zh': I18N['zh-TW'],
+              'zh-TW': I18N['zh-TW'],
+              'zh': I18N['zh-CN'],
               'en': I18N['en-US'],
               'en-US': I18N['en-US']
             })
@@ -1364,7 +1374,7 @@ window.__ModuleLoader__.load({
               order: 38,
               label: () => {
                 const lang = resolveDshLanguage()
-                return (I18N[lang] || I18N['zh-TW']).nav_label
+                return (I18N[lang] || I18N['zh-CN']).nav_label
               },
               locale: NS,
             }, () => h(SettingsPanel, { isModal: false }))
@@ -1385,7 +1395,7 @@ window.__ModuleLoader__.load({
               locale: NS,
             }, (ownerProps) => {
               const lang = resolveDshLanguage()
-              const title = (I18N[lang] || I18N['zh-TW']).nav_label
+              const title = (I18N[lang] || I18N['zh-CN']).nav_label
               return ownerProps?.view === 'summary' ? title : h(SettingsPanel, { isModal: false })
             })
           })

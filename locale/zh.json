@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Gemini 網頁端",
-    "description": "將 Brave / Chrome / Edge 登入之 Google 帳號網頁免費用量（AI Studio 4 Hydrogen/Argon、Google Flow 0 點數生圖）無縫接入 DSH。"
+    "description": "將 Chrome / Edge / Brave 登入之 Google 帳號網頁免費用量（AI Studio 4 Hydrogen/Argon、Google Flow 0 點數生圖）無縫接入 DSH。"
   },
   "badge": {
     "connecting": "檢測中...",
@@ -35,7 +35,7 @@
       "geminiReset": "重置週期",
       "flowCredits": "🎨 Google Flow 獨立點數",
       "flowReset": "重置時間",
-      "flowDesc": "獨立點數池：Nano Banana 2.1 享 2K 高清生圖 0 點數消耗；Omni/Veo 生視頻享獨立免費點數。"
+      "flowDesc": "獨立點數池說明：每月享有 1050 點免費額度（主要用於 Veo/Omni 視頻生成）；使用 Nano Banana 2.1 生成 2K 高清圖片時「完全不扣點數」（每張消耗 0 點，等同無限生圖）！"
     },
     "guide": {
       "title": "🧭 渠道自動路由與防扣款指南",

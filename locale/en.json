@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Gemini Web",
-    "description": "Seamlessly connect Google Web quotas (AI Studio 4 Hydrogen/Argon 1M tokens, Google Flow 0-credit image gen) via Brave/Chrome into DSH."
+    "description": "Seamlessly connect Google Web quotas (AI Studio 4 Hydrogen/Argon 1M tokens, Google Flow image gen) via Chrome / Edge / Brave into DSH."
   },
   "badge": {
     "connecting": "Detecting...",
@@ -35,7 +35,7 @@
       "geminiReset": "Reset Cycle",
       "flowCredits": "🎨 Google Flow Independent Credits",
       "flowReset": "Reset Time",
-      "flowDesc": "Independent credits: Nano Banana 2.1 generates 2K HD images at 0 credits; Omni/Veo video generation uses separate credits."
+      "flowDesc": "Independent credit pool: 1050 free monthly credits dedicated to Veo/Omni video generation; Nano Banana 2.1 2K HD image generation is 100% free (costs 0 credits, unlimited generation)!"
     },
     "guide": {
       "title": "🧭 Routing & Billing Safety Guide",

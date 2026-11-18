@@ -1,7 +1,7 @@
 {
   "name": "dsh-gemini-web",
   "version": "0.1.0",
-  "description": "Multi-site & multi-modal Gemini web quota orchestration plugin for DeepSeek Harness (AI Studio + Google Flow + Gemini Web via Brave/Chrome).",
+  "description": "Multi-site & multi-modal Gemini web quota orchestration plugin for DeepSeek Harness (AI Studio + Google Flow + Gemini Web via Chrome / Edge / Brave).",
   "type": "module",
   "main": "./index.js",
   "exports": {

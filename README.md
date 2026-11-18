@@ -19,7 +19,7 @@
   - ⚡ **100% 零彈窗**：利用本機配對協議，徹底告別傳統 CDP 每次連線的「Allow」惱人授權彈窗。
   - 🛡️ **通道 B 絕對休眠**：當 AgentLimb 處於連線就緒時，CDP 備用通道完全休眠，不碰觸 9222 端口。
 * **通道 B (Chromium CDP - 備援模式)**：
-  - 免安裝額外擴充套件，全自動動態遍歷掃描本機 Chromium 家族瀏覽器（Brave、Chrome、Edge、Vivaldi 等）的 DevToolsActivePort，並具備多實例防衝突機制。
+  - 免安裝額外擴充套件，全自動動態遍歷掃描本機 Chromium 家族瀏覽器（Chrome、Edge、Brave、Vivaldi 等）的 DevToolsActivePort，並具備多實例防衝突機制。
 
 ### 2. 三大站點額度獨立與付費防扣款保護
 * **AI Studio (`aistudio.google.com`)**：
@@ -28,7 +28,14 @@
 * **Gemini 官網 (`gemini.google.com`)**：
   - 獨立 5 小時滾動免費/會員對話池，探測完畢立即關閉分頁，零垃圾分頁殘留。
 * **Google Flow (`flow.google.com`)**：
-  - 獨立點數池：Nano Banana 2.1 享 2K 高清生圖 0 點數消耗；Omni 1.2 / Veo 享視頻生成專用免費點數。
+  - **獨立點數用途**：帳號預設享有每月 1050 點免費額度，專門用於 Veo / Omni 視頻生成（每支影片消耗少量點數）。
+  - **生圖免扣點特權**：使用 Nano Banana 2.1 生成 2K 高清圖片時「完全不扣除點數」（單張扣 0 點，等同無限免費生圖）！
+  - **點數重置機制**：每月定期自動補滿額度，零扣款風險。
+
+### 3. 多語言動態切換 (i18n) 與中立設計
+* **全語系覆蓋**：完整支援**簡體中文**、**繁體中文**與 **English**。
+* **無敏感國旗圖標**：採用標準中立文字標籤，避免地域敏感性；選單順序依序為「自動 (跟隨系統)」、「簡體中文」、「繁體中文」、「English」。
+* **DSH 系統語言熱聯動**：外掛掛載 `MutationObserver` 實時監聽 DSH 根頁面語言，DSH 主介面切換語言時本外掛即刻動態刷新，無需重整頁面。
 
 ### 3. 模型池動態分類與非對話模型安全鎖
 * **💬 文字與推理對話池**：開放選取為日常對話首選模型（`Gemini 4 Argon`, `Gemini 4 Hydrogen`, `Gemini 3.8 Flash`, `Gemini 3.5 Flash Lite`, `Gemini Decision 1`）。
