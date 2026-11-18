@@ -151,6 +151,8 @@ window.__ModuleLoader__.load({
         background: var(--dsw-alias-badge-bg, rgba(99, 102, 241, 0.15));
         color: var(--dsw-alias-badge-text, #818cf8);
         border: 1px solid rgba(99, 102, 241, 0.3);
+        white-space: nowrap;
+        flex-shrink: 0;
       }
       .gw-badge-warn {
         background: rgba(245, 158, 11, 0.15);
@@ -1160,8 +1162,8 @@ window.__ModuleLoader__.load({
           h('div', { className: 'gw-desc', style: { display: 'flex', flexDirection: 'column', gap: 10 } }, [
             // 站點 1: AI Studio
             h('div', { style: { padding: '8px 10px', borderRadius: 6, background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.2)' } }, [
-              h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 } }, [
-                h('span', { style: { fontWeight: 600, color: '#818cf8' } }, t('aistudio_title')),
+              h('div', { className: 'gw-header-split', style: { marginBottom: 4 } }, [
+                h('span', { style: { fontWeight: 600, color: '#818cf8', whiteSpace: 'nowrap' } }, t('aistudio_title')),
                 h('span', { className: 'gw-badge', style: { background: '#4f46e5', color: '#fff' } }, t('aistudio_badge'))
               ]),
               h('div', { style: { fontSize: 11, opacity: 0.85, lineHeight: 1.5 } }, t('aistudio_desc'))
@@ -1169,14 +1171,14 @@ window.__ModuleLoader__.load({
 
             // 站點 2: Gemini 官網
             h('div', { style: { padding: '8px 10px', borderRadius: 6, background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)' } }, [
-              h('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 2 } }, [
-                h('span', { style: { fontWeight: 600, color: '#34d399' } },
+              h('div', { className: 'gw-header-split', style: { marginBottom: 2 } }, [
+                h('span', { style: { fontWeight: 600, color: '#34d399', whiteSpace: 'nowrap' } },
                   t('gemini_title', {
                     plan: usage?.geminiPlan
                       ? (usage.geminiPlan === 'PRO' ? t('gemini_plan_pro') : (usage.geminiPlan === 'FREE' ? t('gemini_plan_free') : usage.geminiPlan))
                       : t('gemini_plan_default')
                   })),
-                h('span', { style: { fontWeight: 600 } }, t('gemini_used_pct', { pct: usage?.geminiUsedPct ?? 0 })),
+                h('span', { style: { fontWeight: 600, whiteSpace: 'nowrap' } }, t('gemini_used_pct', { pct: usage?.geminiUsedPct ?? 0 })),
               ]),
               h('div', { className: 'gw-progress-bar' }, [
                 h('div', { className: 'gw-progress-fill', style: { width: `${100 - (usage?.geminiUsedPct ?? 0)}%` } })
@@ -1184,20 +1186,33 @@ window.__ModuleLoader__.load({
               h('div', { style: { fontSize: 11, opacity: 0.7 } }, t('gemini_reset', { time: usage?.geminiResetTime || '即時更新' })),
             ]),
 
-            // 站點 3: Flow (優化點數與生圖免扣點說明)
+            // 站點 3: Flow (分行優化：行 1 標題+狀態，行 2 獨立點數與免扣點特權)
             h('div', { style: { padding: '8px 10px', borderRadius: 6, background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)' } }, [
-              h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
-                h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, [
-                  h('span', { style: { fontWeight: 600, color: '#fbbf24' } }, t('flow_title')),
-                  h('span', {
-                    className: 'gw-badge',
-                    style: usage?.flowResetTime ? { background: '#059669', color: '#fff' } : { background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' }
-                  }, usage?.flowResetTime ? t('flow_connected_badge') : t('flow_pending_badge'))
-                ]),
-                h('span', { style: { fontWeight: 600, color: '#10b981' } },
-                  t('flow_credits_unit', { credits: usage?.flowCredits !== undefined && usage?.flowCredits !== null ? usage.flowCredits : 1050 })),
+              // 行 1: 標題與連通狀態徽章 (左右分開，永不擠壓換行)
+              h('div', { className: 'gw-header-split', style: { marginBottom: 6 } }, [
+                h('span', { style: { fontWeight: 600, color: '#fbbf24', whiteSpace: 'nowrap' } }, t('flow_title')),
+                h('span', {
+                  className: 'gw-badge',
+                  style: usage?.flowResetTime ? { background: '#059669', color: '#fff' } : { background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' }
+                }, usage?.flowResetTime ? t('flow_connected_badge') : t('flow_pending_badge'))
               ]),
-              h('div', { style: { fontSize: 11, opacity: 0.85, marginTop: 6, lineHeight: 1.6 } }, [
+              // 行 2: 獨立一行的可用點數與免扣點特權標籤 (單獨佔一行，空間充裕絕不截斷)
+              h('div', {
+                style: {
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '5px 9px',
+                  borderRadius: 5,
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  border: '1px solid rgba(16, 185, 129, 0.22)',
+                  marginBottom: 8
+                }
+              }, [
+                h('span', { style: { fontWeight: 600, color: '#10b981', fontSize: 12, lineHeight: 1.4, whiteSpace: 'nowrap' } },
+                  t('flow_credits_unit', { credits: usage?.flowCredits !== undefined && usage?.flowCredits !== null ? usage.flowCredits : 1050 }))
+              ]),
+              // 行 3: 額度用途與重置時間詳細說明
+              h('div', { style: { fontSize: 11, opacity: 0.85, lineHeight: 1.6 } }, [
                 h('div', null, t('flow_desc_p1', { credits: usage?.flowCredits !== undefined && usage?.flowCredits !== null ? usage.flowCredits : 1050 })),
                 h('div', { style: { color: '#10b981', fontWeight: 500 } }, t('flow_desc_p2')),
                 h('div', { style: { opacity: 0.8 } }, t('flow_desc_p3', {
