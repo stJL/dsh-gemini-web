@@ -727,8 +727,9 @@ function createApiRouter() {
         return send(200, { ok: true, url: targetUrl });
       }
       if (routePath === "/usage" && method === "GET") {
+        const force = url.searchParams.get("force") === "1";
         const now = Date.now();
-        if (cachedUsage && now - lastUsageTime < 1e4) {
+        if (!force && cachedUsage && now - lastUsageTime < 1e4) {
           return send(200, cachedUsage);
         }
         const usage = await fetchUsage();

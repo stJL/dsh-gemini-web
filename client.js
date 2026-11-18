@@ -227,7 +227,7 @@ window.__ModuleLoader__.load({
     })()
 
     async function api(path, options) {
-      const { timeout = 8000, body, ...fetchOptions } = options ?? {}
+      const { timeout = 25000, body, ...fetchOptions } = options ?? {}
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), timeout)
       try {
@@ -269,7 +269,7 @@ window.__ModuleLoader__.load({
       const syncModels = async () => {
         setSyncingModels(true)
         try {
-          const m = await api('/models', { timeout: 15000 })
+          const m = await api('/models', { timeout: 20000 })
           if (m?.ok && Array.isArray(m.models)) {
             setAvailableModels(m.models)
           }
@@ -287,7 +287,7 @@ window.__ModuleLoader__.load({
           const s = await api('/status')
           setStatus(s)
           if (s?.config) setConfig(s.config)
-          const u = await api('/usage')
+          const u = await api('/usage?force=1', { timeout: 25000 })
           setUsage(u)
           const m = await api('/models')
           if (m?.ok && Array.isArray(m.models)) {
@@ -410,7 +410,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'gw-title', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, [
               h('span', { className: `gw-dot ${alConnected ? 'gw-dot-ok' : (cdpConnected ? 'gw-dot-warn' : 'gw-dot-err')}` }),
-              h('span', null, '瀏覽器連線通道狀態：'),
+              h('span', null, '瀏覽器底層通訊通道 (Bridge)：'),
             ]),
             h('span', {
               className: alConnected ? 'gw-badge' : (cdpConnected ? 'gw-badge-warn' : 'gw-badge-err'),
@@ -496,7 +496,7 @@ window.__ModuleLoader__.load({
 
           // 操作按鈕列
           h('div', { style: { marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' } }, [
-            h('button', { className: 'gw-btn', onClick: loadData, disabled: loading }, loading ? '探測中...' : '🔄 重新探測通道'),
+            h('button', { className: 'gw-btn', onClick: loadData, disabled: loading }, loading ? '探測中 (正輪詢 Gemini 與 Flow)...' : '🔄 重新探測全部通道與站點'),
             alConnected && h('button', {
               className: 'gw-btn',
               style: { background: '#059669' },
@@ -586,8 +586,19 @@ window.__ModuleLoader__.load({
         // 卡片 2: 即時額度大盤 (3 大站點額度完全獨立)
         h('div', { className: 'gw-card' }, [
           h('div', { className: 'gw-title', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
-            h('span', null, '📊 即時網頁端免費額度大盤'),
-            h('span', { className: 'gw-badge' }, '3 大站點額度完全獨立・絕不扣款')
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, [
+              h('span', null, '📊 即時網頁端免費額度大盤'),
+              loading && h('span', { style: { fontSize: 11, color: '#f59e0b', fontWeight: 400 } }, '⏳ 正在輪詢 Gemini 與 Google Flow 獨立點數...')
+            ]),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, [
+              h('button', {
+                className: 'gw-btn',
+                style: { padding: '2px 8px', fontSize: 11, background: '#10b981' },
+                onClick: loadData,
+                disabled: loading
+              }, loading ? '探測中...' : '🔄 刷新額度 (含 Flow)'),
+              h('span', { className: 'gw-badge' }, '3 大站點額度完全獨立・絕不扣款')
+            ])
           ]),
           h('div', { className: 'gw-desc', style: { display: 'flex', flexDirection: 'column', gap: 10 } }, [
             // 站點 1: AI Studio
@@ -616,7 +627,13 @@ window.__ModuleLoader__.load({
             // 站點 3: Flow
             h('div', { style: { padding: '8px 10px', borderRadius: 6, background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)' } }, [
               h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
-                h('span', { style: { fontWeight: 600, color: '#fbbf24' } }, '🎨 Google Flow (flow.google.com)'),
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, [
+                  h('span', { style: { fontWeight: 600, color: '#fbbf24' } }, '🎨 Google Flow (flow.google.com)'),
+                  h('span', {
+                    className: 'gw-badge',
+                    style: usage?.flowResetTime ? { background: '#059669', color: '#fff' } : { background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' }
+                  }, usage?.flowResetTime ? '🟢 已連通' : '🟡 待刷新')
+                ]),
                 h('span', { style: { fontWeight: 600, color: '#10b981' } }, `${usage?.flowCredits !== undefined && usage?.flowCredits !== null ? usage.flowCredits : 1050} 點 (生圖 0 點數)`),
               ]),
               h('div', { style: { fontSize: 11, opacity: 0.8, marginTop: 4 } },
