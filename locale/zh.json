@@ -1,41 +1,59 @@
 {
   "meta": {
     "title": "Gemini 網頁端",
-    "description": "將 Brave / Chrome 登入的 Google 帳號網頁免費用量（AI Studio 4 Hydrogen/Argon、Google Flow 0 點數生圖）接入 DSH。"
+    "description": "將 Brave / Chrome / Edge 登入之 Google 帳號網頁免費用量（AI Studio 4 Hydrogen/Argon、Google Flow 0 點數生圖）無縫接入 DSH。"
   },
   "badge": {
     "connecting": "檢測中...",
-    "connected": "Brave 網頁端",
+    "connected": "Gemini 網頁端",
     "disconnected": "瀏覽器未連線",
     "tooltip": "點擊查看網頁端額度大盤與連線狀態"
   },
   "settings": {
-    "title": "Gemini 網頁端調度中心",
+    "title": "✨ Gemini 網頁端 (Agent 調度中心)",
     "subtitle": "直接利用本機外部瀏覽器已登入之 Google 帳號，享受 1M 最長輸出與免費用量池",
     "privacyNotice": "隱私承諾：純 127.0.0.1 本機迴路通訊，絕不讀取本機個人文件夾，無密碼儲存，100% 透明安全。",
     "status": {
-      "title": "瀏覽器連線狀態",
-      "connected": "已成功連線至本機瀏覽器",
-      "disconnected": "未偵測到偵錯連線",
-      "detectBtn": "一鍵連線檢測",
-      "detecting": "正在探測瀏覽器...",
+      "title": "瀏覽器底層通訊通道 (Bridge)",
+      "connectedAl": "🟢 AgentLimb 優先 (免彈窗)",
+      "connectedCdp": "🟡 CDP 模式 (備用)",
+      "disconnected": "🔴 未連線",
+      "detectBtn": "🔄 重新探測全部通道與站點",
+      "detecting": "探測中 (正輪詢 Gemini 與 Flow)...",
       "portLabel": "偵錯連接埠",
       "browserLabel": "偵測到之瀏覽器"
     },
     "quota": {
-      "title": "網頁端即時額度大盤",
-      "plan": "方案等級",
-      "geminiUsage": "Gemini 5 小時滾動用量",
-      "geminiWeekly": "每週限額用量",
-      "flowCredits": "Google Flow 獨立點數",
-      "resetTime": "重置時間"
+      "title": "📊 即時網頁端免費額度大盤",
+      "refreshBtn": "🔄 刷新額度 (含 Flow)",
+      "isolatedBadge": "3 大站點額度完全獨立・絕不扣款",
+      "aiStudio": "🌐 Google AI Studio (aistudio.google.com)",
+      "aiStudioBadge": "key_off 免費層級",
+      "aiStudioDesc": "• 免費無限輪詢層級：支援 1M Token 長輸出（Argon / Hydrogen / Flash），未掛載 API Key 時直接享受網頁免費無限額度，絕對不會扣除付費帳號額度！",
+      "geminiUsage": "📈 Gemini 官網 5小時滾動池",
+      "geminiUsed": "已使用",
+      "geminiReset": "重置週期",
+      "flowCredits": "🎨 Google Flow 獨立點數",
+      "flowReset": "重置時間",
+      "flowDesc": "獨立點數池：Nano Banana 2.1 享 2K 高清生圖 0 點數消耗；Omni/Veo 生視頻享獨立免費點數。"
     },
-    "compat": {
-      "title": "瀏覽器相容性說明",
-      "chromium": "✅ Brave / Chrome / Edge / Vivaldi：原生完美支援（自動偵測 DevToolsActivePort）。",
-      "agentlimb": "✅ AgentLimb 擴展：跨開機免改參數持久連線，支援多 Profile 分流。",
-      "firefox": "ℹ️ Firefox 家族：建議安裝 AgentLimb 擴展或搭配 Brave / Chrome 使用。",
-      "safari": "⚠️ Safari：WebKit 不支援原生 CDP，請使用 Brave / Chrome 或配置 AgentLimb。"
+    "guide": {
+      "title": "🧭 渠道自動路由與防扣款指南",
+      "text": "💬 文字對話 / 複雜程式碼 ➔ 自動導向 AI Studio key_off 免費層級或 Gemini 網頁端",
+      "image": "🎨 2K 高清生圖 (Nano 2.1) ➔ 自動導向 Google Flow 0 點數免費池 / AI Studio",
+      "video": "🎬 視頻生成 (Omni 1.2 / Veo) ➔ 自動導向 Google Flow 視頻池 / AI Studio 專用模組",
+      "paidLock": "🔒 付費模型防扣款鎖 ➔ 強制過濾並鎖定 Paid 標記條目（如 Carbon），預設完全避開，保護錢包！"
+    },
+    "config": {
+      "title": "⚙️ Agent 調度與瀏覽器通道設定",
+      "connMode": "瀏覽器連線通道策略",
+      "defaultModel": "Agent 預設首選模型",
+      "fallbackMode": "免費池塞車階梯降級切換",
+      "thinkingLevel": "推理思考等級 (Thinking Level)",
+      "timeoutSec": "單次任務最大超時限制 (秒)",
+      "cdpPort": "CDP 偵錯連接埠",
+      "saveBtn": "💾 儲存並套用設定",
+      "saved": "✅ 設定已儲存生效！"
     }
   }
 }

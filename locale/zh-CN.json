@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "title": "Gemini 网页端",
+    "description": "将 Brave / Chrome / Edge 登录的 Google 账号网页免费用量（AI Studio 4 Hydrogen/Argon、Google Flow 0 点数生图）无缝接入 DSH。"
+  },
+  "badge": {
+    "connecting": "检测中...",
+    "connected": "Gemini 网页端",
+    "disconnected": "浏览器未连接",
+    "tooltip": "点击查看网页端额度大盘与连接状态"
+  },
+  "settings": {
+    "title": "✨ Gemini 网页端 (Agent 调度中心)",
+    "subtitle": "直接利用本机外部浏览器已登录之 Google 账号，享受 1M 最长输出与免费用量池",
+    "privacyNotice": "隐私承诺：纯 127.0.0.1 本机回环通信，绝不读取本机个人文件夹，无密码存储，100% 透明安全。",
+    "status": {
+      "title": "浏览器底层通信通道 (Bridge)",
+      "connectedAl": "🟢 AgentLimb 优先 (免弹窗)",
+      "connectedCdp": "🟡 CDP 模式 (备用)",
+      "disconnected": "🔴 未连接",
+      "detectBtn": "🔄 重新探测全部通道与站点",
+      "detecting": "探测中 (正轮询 Gemini 与 Flow)...",
+      "portLabel": "调试端口",
+      "browserLabel": "检测到之浏览器"
+    },
+    "quota": {
+      "title": "📊 实时网页端免费额度大盘",
+      "refreshBtn": "🔄 刷新额度 (含 Flow)",
+      "isolatedBadge": "3 大站点额度完全独立・绝不扣款",
+      "aiStudio": "🌐 Google AI Studio (aistudio.google.com)",
+      "aiStudioBadge": "key_off 免费层级",
+      "aiStudioDesc": "• 免费无限轮询层级：支持 1M Token 长输出（Argon / Hydrogen / Flash），未挂载 API Key 时直接享受网页免费无限额度，绝对不会扣除付费账号额度！",
+      "geminiUsage": "📈 Gemini 官网 5小时滚动池",
+      "geminiUsed": "已使用",
+      "geminiReset": "重置周期",
+      "flowCredits": "🎨 Google Flow 独立点数",
+      "flowReset": "重置时间",
+      "flowDesc": "独立点数池：Nano Banana 2.1 享 2K 高清生图 0 点数消耗；Omni/Veo 生视频享独立免费点数。"
+    },
+    "guide": {
+      "title": "🧭 渠道自动路由与防扣款指南",
+      "text": "💬 文字对话 / 复杂代码 ➔ 自动导向 AI Studio key_off 免费层级或 Gemini 网页端",
+      "image": "🎨 2K 高清生图 (Nano 2.1) ➔ 自动导向 Google Flow 0 点数免费池 / AI Studio",
+      "video": "🎬 视频生成 (Omni 1.2 / Veo) ➔ 自动导向 Google Flow 视频池 / AI Studio 专用模块",
+      "paidLock": "🔒 付费模型防扣款锁 ➔ 强制过滤并锁定 Paid 标记条目（如 Carbon），默认完全避开，保护钱包！"
+    },
+    "config": {
+      "title": "⚙️ Agent 调度与浏览器通道设置",
+      "connMode": "浏览器连接通道策略",
+      "defaultModel": "Agent 默认首选模型",
+      "fallbackMode": "免费池塞车阶梯降级切换",
+      "thinkingLevel": "推理思考等级 (Thinking Level)",
+      "timeoutSec": "单次任务最大超时限制 (秒)",
+      "cdpPort": "CDP 调试端口",
+      "saveBtn": "💾 保存并应用设置",
+      "saved": "✅ 设置已保存生效！"
+    }
+  }
+}

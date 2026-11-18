@@ -1,8 +1,11 @@
-// dsh-gemini-web/src/transport/router.ts
+// src/index.ts
+import path4 from "node:path";
+
+// src/transport/router.ts
 import { spawn as spawn3, execFile as execFile3 } from "node:child_process";
 import { promisify as promisify3 } from "node:util";
 
-// dsh-gemini-web/src/bridge/detector.ts
+// src/bridge/detector.ts
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -371,11 +374,11 @@ async function detectDualChannel(cfgMode, cfgPort) {
   };
 }
 
-// dsh-gemini-web/src/bridge/runner.ts
+// src/bridge/runner.ts
 import { spawn as spawn2, execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-// dsh-gemini-web/src/config.ts
+// src/config.ts
 import fs2 from "node:fs";
 import path2 from "node:path";
 import { fileURLToPath } from "node:url";
@@ -415,7 +418,7 @@ function saveConfig(cfg) {
   return merged;
 }
 
-// dsh-gemini-web/src/bridge/runner.ts
+// src/bridge/runner.ts
 var execFileAsync = promisify(execFile);
 async function fetchUsage() {
   const cfg = loadConfig();
@@ -492,7 +495,7 @@ async function fetchUsage() {
   };
 }
 
-// dsh-gemini-web/src/bridge/agent-executor.ts
+// src/bridge/agent-executor.ts
 import { execFile as execFile2 } from "node:child_process";
 import { promisify as promisify2 } from "node:util";
 import path3 from "node:path";
@@ -632,7 +635,7 @@ async function executeAgentTask(options) {
   return { ok: false, channel: status.activeChannel, error: "未找到執行腳本" };
 }
 
-// dsh-gemini-web/src/transport/router.ts
+// src/transport/router.ts
 var execFileAsync3 = promisify3(execFile3);
 async function readBody(req) {
   return new Promise((resolve) => {
@@ -779,7 +782,7 @@ function createApiRouter() {
   };
 }
 
-// dsh-gemini-web/src/index.ts
+// src/index.ts
 var name = "dsh-gemini-web";
 var inject = ["tools", "commands", "webServer"];
 function apply(ctx) {
@@ -854,7 +857,15 @@ ${res.error}
 
 `;
           }
-          return `${notice}${res.output}`;
+          let fileLinks = "";
+          if (res.files && res.files.length > 0) {
+            fileLinks = `
+
+\uD83D\uDCC1 **多模態檔案落地**：
+` + res.files.map((f) => `- [${path4.basename(f)}](file://${f})`).join(`
+`);
+          }
+          return `${notice}${res.output}${fileLinks}`;
         }
       });
     } catch (e) {

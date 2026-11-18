@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "title": "Gemini Web",
+    "description": "Seamlessly connect Google Web quotas (AI Studio 4 Hydrogen/Argon 1M tokens, Google Flow 0-credit image gen) via Brave/Chrome into DSH."
+  },
+  "badge": {
+    "connecting": "Detecting...",
+    "connected": "Gemini Web",
+    "disconnected": "Browser Disconnected",
+    "tooltip": "Click to view web quota dashboard & connection status"
+  },
+  "settings": {
+    "title": "✨ Gemini Web (Agent Orchestration Center)",
+    "subtitle": "Leverage logged-in Google accounts in your local browser to access 1M output tokens & free quota pools.",
+    "privacyNotice": "Privacy Guarantee: 100% loopback on 127.0.0.1, never accesses local folders, zero password storage, completely secure.",
+    "status": {
+      "title": "Browser Communication Bridge",
+      "connectedAl": "🟢 AgentLimb Preferred (Zero-Popup)",
+      "connectedCdp": "🟡 CDP Mode (Fallback)",
+      "disconnected": "🔴 Disconnected",
+      "detectBtn": "🔄 Probe All Channels & Sites",
+      "detecting": "Probing (Polling Gemini & Flow)...",
+      "portLabel": "Debug Port",
+      "browserLabel": "Detected Browser"
+    },
+    "quota": {
+      "title": "📊 Real-Time Web Free Quota Dashboard",
+      "refreshBtn": "🔄 Refresh Quota (incl. Flow)",
+      "isolatedBadge": "3 Sites Quotas Isolated · Zero Charges",
+      "aiStudio": "🌐 Google AI Studio (aistudio.google.com)",
+      "aiStudioBadge": "key_off Free Tier",
+      "aiStudioDesc": "• Free Unlimited Polling Tier: Supports 1M token output (Argon / Hydrogen / Flash). Directly uses web free quota without API key, never charges paid accounts!",
+      "geminiUsage": "📈 Gemini Web 5-Hour Rolling Pool",
+      "geminiUsed": "Used",
+      "geminiReset": "Reset Cycle",
+      "flowCredits": "🎨 Google Flow Independent Credits",
+      "flowReset": "Reset Time",
+      "flowDesc": "Independent credits: Nano Banana 2.1 generates 2K HD images at 0 credits; Omni/Veo video generation uses separate credits."
+    },
+    "guide": {
+      "title": "🧭 Routing & Billing Safety Guide",
+      "text": "💬 Text Chat / Complex Code ➔ Routed to AI Studio key_off free tier or Gemini Web",
+      "image": "🎨 2K HD Image Gen (Nano 2.1) ➔ Routed to Google Flow 0-credit pool or AI Studio",
+      "video": "🎬 Video Gen (Omni 1.2 / Veo) ➔ Routed to Google Flow video pool or AI Studio",
+      "paidLock": "🔒 Paid Model Safety Lock ➔ Automatically filters and locks Paid-tagged models (e.g. Carbon) to protect your wallet!"
+    },
+    "config": {
+      "title": "⚙️ Agent Orchestration & Channel Settings",
+      "connMode": "Browser Connection Strategy",
+      "defaultModel": "Agent Default Preferred Model",
+      "fallbackMode": "Free Pool Congestion Fallback Strategy",
+      "thinkingLevel": "Reasoning Thinking Level",
+      "timeoutSec": "Max Task Timeout (Seconds)",
+      "cdpPort": "CDP Debug Port",
+      "saveBtn": "💾 Save & Apply Settings",
+      "saved": "✅ Settings saved and applied!"
+    }
+  }
+}

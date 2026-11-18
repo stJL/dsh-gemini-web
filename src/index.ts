@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { createApiRouter } from './transport/router.js'
 import { executeAgentTask } from './bridge/agent-executor.js'
 
@@ -70,7 +71,11 @@ Google AI Studio 的所有免費模型在尖峰時段均可能遇到免費池塞
           if (res.fellBack) {
             notice = `\n\n> ⚠️ *提示：原選模型遭遇 Google 免費池尖峰塞車，已自動為您無縫降級至備援模型 ${res.model} 完成輸出。*\n\n`
           }
-          return `${notice}${res.output}`
+          let fileLinks = ''
+          if (res.files && res.files.length > 0) {
+            fileLinks = '\n\n📁 **多模態檔案落地**：\n' + res.files.map((f: string) => `- [${path.basename(f)}](file://${f})`).join('\n')
+          }
+          return `${notice}${res.output}${fileLinks}`
         },
       })
     } catch (e) {
