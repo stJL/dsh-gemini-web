@@ -389,7 +389,7 @@ window.__ModuleLoader__.load({
         flow_connected_badge: '🟢 已连通',
         flow_pending_badge: '🟡 待刷新',
         flow_credits_unit: '可用点数：{credits} 点（🎨 生图免扣点・完全免费）',
-        flow_desc_p1: '• 点数用途：每月免费享有 {credits} 独立点数，专门用于 Veo / Omni 视频生成（每部视频仅消耗少量点数）。',
+        flow_desc_p1: '• 点数用途：每月免费享有独立点数，专门用于 Veo / Omni 视频生成（每部视频仅消耗少量点数）。',
         flow_desc_p2: '• 生图特权：使用 Nano Banana 2.1 生成 2K 高清图片时“完全不扣除点数”（单张消耗 0 点，等同无限免费生图）！',
         flow_desc_p3: '• 额度重置：每月自动补满额度{time}。',
         flow_reset_note: '（重置时间：{time}）',
@@ -519,7 +519,7 @@ window.__ModuleLoader__.load({
         flow_connected_badge: '🟢 已連通',
         flow_pending_badge: '🟡 待刷新',
         flow_credits_unit: '可用點數：{credits} 點（🎨 生圖免扣點・完全免費）',
-        flow_desc_p1: '• 點數用途：每月免費享有 {credits} 點獨立額度，專門用於 Veo / Omni 視頻生成（每支影片僅消耗少量點數）。',
+        flow_desc_p1: '• 點數用途：每月免費享有獨立點數，專門用於 Veo / Omni 視頻生成（每支影片僅消耗少量點數）。',
         flow_desc_p2: '• 生圖特權：使用 Nano Banana 2.1 生成 2K 高清圖片時「完全不扣除點數」（單張消耗 0 點，等同無限免費生圖）！',
         flow_desc_p3: '• 額度重置：每月自動補滿額度{time}。',
         flow_reset_note: '（重置時間：{time}）',
@@ -649,7 +649,7 @@ window.__ModuleLoader__.load({
         flow_connected_badge: '🟢 Connected',
         flow_pending_badge: '🟡 Pending',
         flow_credits_unit: 'Available: {credits} Credits (🎨 Images: 100% Free / 0 Cost)',
-        flow_desc_p1: '• Credit Purpose: {credits} free monthly credits dedicated to Veo / Omni video generation (costs few credits per video).',
+        flow_desc_p1: '• Credit Purpose: Free monthly credits dedicated to Veo / Omni video generation (costs few credits per video).',
         flow_desc_p2: '• Free Image Gen: 2K HD image generation via Nano Banana 2.1 costs 0 credits (completely free, unlimited generation)!',
         flow_desc_p3: '• Balance Reset: Automatically replenished monthly{time}.',
         flow_reset_note: ' (Reset: {time})',
@@ -1213,7 +1213,7 @@ window.__ModuleLoader__.load({
               ]),
               // 行 3: 額度用途與重置時間詳細說明
               h('div', { style: { fontSize: 11, opacity: 0.85, lineHeight: 1.6 } }, [
-                h('div', null, t('flow_desc_p1', { credits: usage?.flowCredits !== undefined && usage?.flowCredits !== null ? usage.flowCredits : 1050 })),
+                h('div', null, t('flow_desc_p1')),
                 h('div', { style: { color: '#10b981', fontWeight: 500 } }, t('flow_desc_p2')),
                 h('div', { style: { opacity: 0.8 } }, t('flow_desc_p3', {
                   time: usage?.flowResetTime ? t('flow_reset_note', { time: usage.flowResetTime }) : ''

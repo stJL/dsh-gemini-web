@@ -35,7 +35,7 @@
       "geminiReset": "重置週期",
       "flowCredits": "🎨 Google Flow 獨立點數",
       "flowReset": "重置時間",
-      "flowDesc": "獨立點數池說明：每月享有 1050 點免費額度（主要用於 Veo/Omni 視頻生成）；使用 Nano Banana 2.1 生成 2K 高清圖片時「完全不扣點數」（每張消耗 0 點，等同無限生圖）！"
+      "flowDesc": "獨立點數池說明：每月享有獨立點數免費額度（主要用於 Veo/Omni 視頻生成）；使用 Nano Banana 2.1 生成 2K 高清圖片時「完全不扣點數」（每張消耗 0 點，等同無限生圖）！"
     },
     "guide": {
       "title": "🧭 渠道自動路由與防扣款指南",

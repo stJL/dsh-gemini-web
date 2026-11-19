@@ -12,6 +12,7 @@ export interface AgentTaskOptions {
   task: string
   model?: string
   site?: 'aistudio' | 'flow' | 'gemini'
+  entry?: 'chat' | 'task'
   thinkingLevel?: string
   timeoutSec?: number
   sessionId?: string
@@ -28,6 +29,21 @@ export interface AgentTaskResult {
   fellBack?: boolean
   error?: string
   elapsedSec?: number
+}
+
+export function getWorkspaceDownloadDir(): string {
+  try {
+    const wsFile = path.join(os.homedir(), '.dsh', 'storages', 'workspace.json')
+    if (fs.existsSync(wsFile)) {
+      const data = JSON.parse(fs.readFileSync(wsFile, 'utf-8'))
+      const defId = data?.global?.defaultWorkspaceId
+      const wsPath = data?.tables?.workspaces?.[defId]?.path
+      if (wsPath && fs.existsSync(wsPath)) {
+        return path.join(wsPath, 'downloads')
+      }
+    }
+  } catch {}
+  return path.join(process.cwd(), 'downloads')
 }
 
 let lastSessionId: string | null = null
@@ -72,7 +88,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
   }
 
   // 2. 確保工作區 downloads 目錄存在
-  const downloadDir = options.downloadDir || path.join(process.cwd(), 'downloads')
+  const downloadDir = options.downloadDir || getWorkspaceDownloadDir()
   try {
     if (!fs.existsSync(downloadDir)) {
       fs.mkdirSync(downloadDir, { recursive: true })
@@ -92,6 +108,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
         '--download-dir', downloadDir,
       ]
       if (isNewChat) args.push('--new-chat')
+      if (options.entry) args.push('--entry', options.entry)
       if (cfg.autoFallback === false || cfg.fallbackMode === 'strict') {
         args.push('--no-fallback')
       }

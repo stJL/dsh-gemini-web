@@ -28,7 +28,7 @@
 * **Gemini 官網 (`gemini.google.com`)**：
   - 獨立 5 小時滾動免費/會員對話池，探測完畢立即關閉分頁，零垃圾分頁殘留。
 * **Google Flow (`flow.google.com`)**：
-  - **獨立點數用途**：帳號預設享有每月 1050 點免費額度，專門用於 Veo / Omni 視頻生成（每支影片消耗少量點數）。
+  - **獨立點數用途**：帳號享有每月獨立點數免費額度（依帳號方案等級而異），專門用於 Veo / Omni 視頻生成（每支影片消耗少量點數）。
   - **生圖免扣點特權**：使用 Nano Banana 2.1 生成 2K 高清圖片時「完全不扣除點數」（單張扣 0 點，等同無限免費生圖）！
   - **點數重置機制**：每月定期自動補滿額度，零扣款風險。
 
@@ -60,17 +60,72 @@
   - [gemini_img_1732000000.png](file:///workspace/downloads/gemini_img_1732000000.png)
   ```
 
-### 6. DSH 會話生命週期無感綁定
+### 6. DSH 會話生命週期無感綁定與自動分頁清理
 * **同一話題無感延續**：自動綁定 DSH 會話 ID，連續追問時複用瀏覽器上下文，不重複開新分頁。
 * **全新話題乾淨重置**：當用戶開啟新話題或輸入斜槓命令 `/gw --new` 時，自動開啟乾淨會話。
+* **分頁生命週期自動關閉**：任務執行完畢後，後台自動執行 `tab_close` 關閉任務分頁，保持用戶瀏覽器視窗乾淨清爽；若需手動除錯可傳入 `--keep-tab`。
+
+---
+
+## 💡 人類使用者召喚秘笈與使用動機指南 (Cheat Sheet & Motivation Guide)
+
+### 📌 核心關鍵觀念：為什麼不能只說「請幫我寫個快速排序」？
+> **本地模型本身就能回答！**
+> 在 DeepSeek Harness (DSH) 或 Antigravity 內，宿主 AI 大模型（如 DeepSeek V3、Claude、GPT）本身就具備極強的通用編程與對話能力。
+> 如果人類用戶只是講大白話「幫我寫個快速排序」，宿主 AI 會直接在本地生成答案，**沒有任何理由耗費額外時間去啟動外部瀏覽器**。
+>
+> **因此，人類使用者在召喚時，請務必表明您的「使用動機」！**
+> 只要在提示詞中帶出動機（節省配額、超長上下文、畫布生圖、官網 Task 聯網），宿主 AI 就會立刻心領神會，精準調用 `gemini_web_agent`！
+
+---
+
+### 🚀 五大黃金使用動機與召喚秘笈
+
+| 使用場景 / 動機 | 為什麼要調用外部 Google 網頁？ | 🗣️ 推薦召喚提示詞 (Prompt 範例) | 底層自動路由通道 |
+| :--- | :--- | :--- | :--- |
+| **1. 節省本地 / API 配額** | 本地 API 按 Token 計費。Google AI Studio 提供完全免費的 `key_off` 額度，完全不扣本機額度！ | `「請使用 gemini_web_agent 幫我重構這段代碼，幫我節省本地額度」`<br>`「請用 Google 免費額度幫我總結這份文檔」` | Google AI Studio (`aistudio.google.com`)<br>模型：`gemini-3.5-flash-lite` 或 `3.8-flash` |
+| **2. 巨型上下文與深度推理** | 本地上下文窗口受限（如 32k~64k）。AI Studio 支援 **1M~2M 超巨型上下文**，且 Gemini 4 Hydrogen / Argon 具備頂級深度思考能力。 | `「這份 10 萬行日誌請用 AI Studio 的 Gemini 4 Hydrogen 分析瓶頸」`<br>`「請用 Gemini 4 Argon 開啟深度思考，幫我推導快速排序時間複雜度的數學證明」` | Google AI Studio (`aistudio.google.com`)<br>模型：`gemini-4-hydrogen` 或 `gemini-4-argon` |
+| **3. 零點數 2K 高清生圖** | 本地文本模型無法生圖。Google Flow 享有獨立點數池，且 **Nano Banana 2.1 享有 0 點數消耗特權**（無限免費生圖）！ | `「請使用 gemini_web_agent（site 設定為 flow），用 Nano Banana 2.1 生一張賽博朋克風格的貓咪圖」`<br>`「請在 Google Flow 幫我生一張科幻太空站 2K 桌布」` | Google Flow (`flow.google.com`)<br>模型：`gemini-nano-banana-2.1` |
+| **4. 連貫短視頻生成** | 利用 Google Flow 專屬獨立點數影片池生成高品質短視頻。 | `「請在 Google Flow 畫布使用 Omni 1.2 Flash 生成一段未來飛車穿梭賽博朋克城市的影片」` | Google Flow (`flow.google.com`)<br>模型：`omni` / `veo-3.1` |
+| **5. 即時深度聯網與行程畫布** | 需要最新時效資訊（機票、酒店、實時新聞），並需要 Google 生成互動式 SVG 預算表、地鐵圖與本地落地指南。 | `「請在 Gemini 官網切換至 task 模式，幫我建立一個三天兩夜的東京旅遊規劃任務」`<br>`「請使用 Gemini 官網 task 模式聯網調研最新 AI 晶片進展並做成圖表」` | Gemini 官網 (`gemini.google.com`)<br>入口：`entry: "task"` |
+
+---
+
+### ⚡ 斜槓指令快速直達 (Slash Commands)
+
+> [!NOTE] **關於 DSH 選單中的 `/gw` 與 `/gemini-web-agent`**
+> 當您在 DSH 輸入框按下 `/` 時，會看到兩個相關項目：
+> * 🚀 **`/gw`（指令 / Command）**：這是本外掛提供的**快速直達通道**！日常使用時，**請直接使用 `/gw`**，後台會自動嗅探關鍵字與參數並執行任務。
+> * 📖 **`/gemini-web-agent`（技能 / Skill）**：這是 DSH / Antigravity 自動探測工作區與系統技能目錄發現的**技能手冊**。它的主要用途是為底層 AI Agent 提供調度規則，一般用戶日常對話時**無需手動點選**。
+> *(註：為避免選單過度擁擠，外掛已移除重複的全名 `/gemini-web` 指令，統一以極簡清爽的 `/gw` 提供服務)*
+
+若不想在對話中打長句子，推薦直接使用外掛內建的 `/gw` 斜槓指令：
+* **全新對話打招呼**：
+  ```bash
+  /gw --new 請用繁體中文一句話打招呼
+  ```
+* **調用 Hydrogen 極限代碼生成**：
+  ```bash
+  /gw 請用 Gemini 4 Hydrogen 實作高效能紅黑樹並附帶完整繁中註釋
+  ```
+* **直達 Google Flow 畫布生圖**：
+  ```bash
+  /gw --site flow 請用 Nano Banana 2.1 生一張極簡日式庭園桌布
+  ```
 
 ---
 
 ## 🛠️ 安裝與使用
 
-1. 將本外掛軟連結或放置於 `~/.dsh/profiles/desktop/node_modules/dsh-gemini-web`。
-2. 啟動 DSH 桌面端，進入「設定 ➔ ✨ Gemini 網頁端 (Agent 調度中心)」完成連線檢查。
-3. 在任何對話中，DeepSeek Agent 會在需要時自動調用 `gemini_web_agent`，或直接輸入斜槓指令 `/gw <任務>`。
+1. **外掛自包含安裝**：
+   將本外掛軟連結或放置於 `~/.dsh/profiles/desktop/node_modules/dsh-gemini-web`。
+2. **連線檢查**：
+   啟動 DSH 桌面端，進入「設定 ➔ ✨ Gemini 網頁端 (Agent 調度中心)」完成連線檢查。
+3. **人類極速直達 (Slash Commands)**：
+   在任何對話框直接輸入 `/gw <任務>`，外掛已註冊獨立頂級指令，並支援自然語言模型意圖自動解析（如提到 Hydrogen 自動切換 Gemini 4 Hydrogen，提到 Flow 自動切換 Google Flow）。
+4. **Antigravity CLI / Agent 調用整合**：
+   * **Skill 穿透多帳號隔離**：執行 `python scripts/setup_skill.py --auto`，腳本會自動將技能軟連結至工作區根目錄的 `.agents/skills/gemini-web-agent`，確保無論 DSH 切換至哪個隔離帳號皆能 100% 探索到本技能。
+   * **Tool 原生橋接**：若希望 Antigravity CLI 直接調用 DSH 註冊的 `gemini_web_agent` 工具，只需在 `cordis.patch.yml` 中將 `dsh-agy-link` 的 `mcpBridge` 設為 `true`。
 
 ---
 

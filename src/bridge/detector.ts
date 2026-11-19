@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 export interface BrowserInstance {
   name: string
@@ -40,12 +41,30 @@ export function getEffectiveHome(): string {
   return rawHome
 }
 
+export function getPluginDir(): string {
+  try {
+    const currentFile = fileURLToPath(import.meta.url)
+    let dir = path.dirname(currentFile)
+    for (let i = 0; i < 4; i++) {
+      if (fs.existsSync(path.join(dir, 'package.json'))) {
+        return dir
+      }
+      dir = path.dirname(dir)
+    }
+  } catch {}
+  return path.resolve(process.cwd())
+}
+
 export function findPythonVenv(): string | null {
+  const pluginDir = getPluginDir()
   const home = getEffectiveHome()
   const isWin = process.platform === 'win32'
+  const binName = isWin ? 'Scripts/python.exe' : 'bin/python'
   const venvPaths = [
-    path.join(home, '.dsh', 'skills', 'gemini-web-agent', '.venv', isWin ? 'Scripts/python.exe' : 'bin/python'),
-    path.join(home, '.gemini', 'config', 'skills', 'gemini-web-agent', '.venv', isWin ? 'Scripts/python.exe' : 'bin/python'),
+    path.join(pluginDir, '.venv', binName),
+    path.join(home, '.dsh', 'gemini-web-agent', '.venv', binName),
+    path.join(home, '.dsh', 'skills', 'gemini-web-agent', '.venv', binName),
+    path.join(home, '.gemini', 'config', 'skills', 'gemini-web-agent', '.venv', binName),
   ]
   for (const p of venvPaths) {
     if (fs.existsSync(p)) return p
@@ -54,8 +73,11 @@ export function findPythonVenv(): string | null {
 }
 
 export function findCliScript(): string | null {
+  const pluginDir = getPluginDir()
   const home = getEffectiveHome()
   const scriptPaths = [
+    path.join(pluginDir, 'scripts', 'gemini_web.py'),
+    path.join(home, '.dsh', 'gemini-web-agent', 'scripts', 'gemini_web.py'),
     path.join(home, '.dsh', 'skills', 'gemini-web-agent', 'scripts', 'gemini_web.py'),
     path.join(home, '.gemini', 'config', 'skills', 'gemini-web-agent', 'scripts', 'gemini_web.py'),
   ]
@@ -66,8 +88,11 @@ export function findCliScript(): string | null {
 }
 
 export function findAgentLimbScript(): string | null {
+  const pluginDir = getPluginDir()
   const home = getEffectiveHome()
   const scriptPaths = [
+    path.join(pluginDir, 'scripts', 'gemini_agentlimb.py'),
+    path.join(home, '.dsh', 'gemini-web-agent', 'scripts', 'gemini_agentlimb.py'),
     path.join(home, '.dsh', 'skills', 'gemini-web-agent', 'scripts', 'gemini_agentlimb.py'),
     path.join(home, '.gemini', 'config', 'skills', 'gemini-web-agent', 'scripts', 'gemini_agentlimb.py'),
   ]
