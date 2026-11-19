@@ -442,6 +442,8 @@ window.__ModuleLoader__.load({
         fallback_ladder_add_btn: '+ 添加备援',
         fallback_ladder_reset_btn: '恢复默认',
         ladder_tier_label: '第 {level} 级备援',
+        ladder_move_up: '上移优先级 (升至前一级备援)',
+        ladder_move_down: '下移优先级 (降至后一级备援)',
         ladder_remove_tip: '移除此级备援',
         thinking_level_title: '推理思考等级 (Thinking Level)：',
         thinking_high: 'High (推荐默认)',
@@ -594,6 +596,8 @@ window.__ModuleLoader__.load({
         fallback_ladder_add_btn: '+ Add Tier',
         fallback_ladder_reset_btn: 'Reset',
         ladder_tier_label: 'Tier #{level}',
+        ladder_move_up: 'Move up priority',
+        ladder_move_down: 'Move down priority',
         ladder_remove_tip: 'Remove tier',
         thinking_level_title: 'Reasoning Thinking Level:',
         thinking_high: 'High (Recommended Default)',
@@ -1419,8 +1423,8 @@ window.__ModuleLoader__.load({
               ])
             ]) : null,
 
-            // 设定 3.2: 降级阶梯序列 (Fallback Ladder) — 仅在智能自适应模式下展开
-            (config.thinkingPolicy === 'adaptive' || !config.thinkingPolicy) ? h('div', {
+            // 设定 3.2: 降级阶梯序列 (Fallback Ladder) — 自适应与自定义超时模式皆启用展开 (严格模式绝不降级自动隐藏)
+            (config.thinkingPolicy !== 'strict') ? h('div', {
               className: 'gw-setting-row',
               style: {
                 background: 'rgba(99, 102, 241, 0.08)',
@@ -1472,7 +1476,7 @@ window.__ModuleLoader__.load({
               ]),
               h('div', { style: { fontSize: 11, opacity: 0.65, lineHeight: 1.4 } }, t('fallback_ladder_desc')),
               h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' } },
-                (config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder).map((modelId, index) => {
+                (config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder).map((modelId, index, arr) => {
                   return h('div', {
                     key: index,
                     style: {
@@ -1491,10 +1495,10 @@ window.__ModuleLoader__.load({
                         t('ladder_tier_label', { level: index + 1 })
                       )
                     ]),
-                    h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+                    h('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } }, [
                       h('select', {
                         className: 'gw-select',
-                        style: { minWidth: 170, maxWidth: 210, fontSize: 12, padding: '3px 8px' },
+                        style: { minWidth: 155, maxWidth: 195, fontSize: 12, padding: '3px 6px' },
                         value: modelId,
                         onChange: (e) => {
                           const newLadder = [...(config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder)]
@@ -1504,23 +1508,71 @@ window.__ModuleLoader__.load({
                       }, selectableLadderModels.map(m =>
                         h('option', { key: m.id, value: m.id }, m.name)
                       )),
+                      // 上移优先级按钮 ↑
+                      h('button', {
+                        className: 'gw-btn gw-btn-secondary',
+                        style: {
+                          padding: '2px 6px',
+                          fontSize: 12,
+                          lineHeight: '16px',
+                          minWidth: 24,
+                          opacity: index === 0 ? 0.3 : 1,
+                          cursor: index === 0 ? 'not-allowed' : 'pointer'
+                        },
+                        disabled: index === 0,
+                        title: t('ladder_move_up'),
+                        onClick: () => {
+                          if (index > 0) {
+                            const newLadder = [...(config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder)]
+                            const temp = newLadder[index - 1]
+                            newLadder[index - 1] = newLadder[index]
+                            newLadder[index] = temp
+                            updateConfig({ fallbackLadder: newLadder })
+                          }
+                        }
+                      }, '↑'),
+                      // 下移优先级按钮 ↓
+                      h('button', {
+                        className: 'gw-btn gw-btn-secondary',
+                        style: {
+                          padding: '2px 6px',
+                          fontSize: 12,
+                          lineHeight: '16px',
+                          minWidth: 24,
+                          opacity: index === arr.length - 1 ? 0.3 : 1,
+                          cursor: index === arr.length - 1 ? 'not-allowed' : 'pointer'
+                        },
+                        disabled: index === arr.length - 1,
+                        title: t('ladder_move_down'),
+                        onClick: () => {
+                          if (index < arr.length - 1) {
+                            const newLadder = [...(config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder)]
+                            const temp = newLadder[index + 1]
+                            newLadder[index + 1] = newLadder[index]
+                            newLadder[index] = temp
+                            updateConfig({ fallbackLadder: newLadder })
+                          }
+                        }
+                      }, '↓'),
+                      // 移除按钮 ✕
                       h('button', {
                         className: 'gw-btn',
                         style: {
-                          padding: '2px 7px',
+                          padding: '2px 6px',
                           fontSize: 12,
+                          lineHeight: '16px',
+                          minWidth: 24,
                           background: 'rgba(239, 68, 68, 0.15)',
                           color: '#ef4444',
                           border: '1px solid rgba(239, 68, 68, 0.3)',
-                          cursor: (config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder).length <= 1 ? 'not-allowed' : 'pointer',
-                          opacity: (config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder).length <= 1 ? 0.4 : 1
+                          cursor: arr.length <= 1 ? 'not-allowed' : 'pointer',
+                          opacity: arr.length <= 1 ? 0.3 : 1
                         },
-                        disabled: (config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder).length <= 1,
+                        disabled: arr.length <= 1,
                         title: t('ladder_remove_tip'),
                         onClick: () => {
-                          const current = config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder
-                          if (current.length > 1) {
-                            const newLadder = current.filter((_, i) => i !== index)
+                          if (arr.length > 1) {
+                            const newLadder = (config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder).filter((_, i) => i !== index)
                             updateConfig({ fallbackLadder: newLadder })
                           }
                         }
