@@ -354,6 +354,19 @@ Looking back across countless hours of debugging, we conquered roadblocks that s
 * **The KISS Evolution**: Refactoring bloated 290-line static prompt scenarios down to a 75-line orthogonal parameterization matrix upon @stJL's keen suggestion;
 * **The Final Breakthrough**: Troubleshooting 8B-tier model inertia across 60,000-token histories, diagnosing in-context attention decay, and achieving that victorious moment of 100% parameter fidelity!
 
+### 📊 The Blood & Tears Dashboard (Real-World Battle Stats)
+This Vibe Coding sprint was far more intense and thrilling than anyone anticipated. Below are the actual telemetry metrics logged from our overnight session:
+* ⚡ **Agentic Steps**: **3,700+ steps** of intense tool calls, live repairs, and validation runs
+* 📥 **Total Input Tokens**: **~9,410,000 (9.41 Million)**
+* 📤 **Total Output Tokens**: **~980,000 (Nearly 1 Million)**
+* 🧠 **Deep Context Cache Reads**: **Over 224 Million (224,000,000+) Tokens**
+* ⏳ **Total Sprint Duration**: **10+ consecutive hours** (coding straight from midnight into dawn!)
+
+<!-- [Author's Blood & Tears Screenshot] -->
+<!-- Screenshot Note: Place your screenshot showing intense debugging, token burn, or successful dispatches at docs/images/blood_and_tears.png -->
+![Author's Blood & Tears Memorial](docs/images/blood_and_tears.png)  
+*( "Watching 200M+ tokens burn and navigating endless 403 retries, the author shed tears of both agony and victory..." )*
+
 ### To Future Contributors and Fellow Travelers
 This repository represents the synthesis of human intuition, passion, and AI reasoning. The codebase may still have quirks or naive patterns, but the spirit of delivering a free, elegant, zero-token AI experience is genuine.
 
