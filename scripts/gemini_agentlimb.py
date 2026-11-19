@@ -66,6 +66,15 @@ def wait_for_selector(tab_id: int, selector: str, timeout: float = 15.0) -> bool
 
 import base64
 
+FALLBACK_LADDER = {
+    "gemini-4-neon": ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"],
+    "gemini-4-argon": ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"],
+    "gemini-4-hydrogen": ["gemini-3.8-flash", "gemini-3.5-flash-lite"],
+    "gemini-3.8-flash": ["gemini-3.5-flash-lite"],
+    "gemini-3.5-flash-lite": [],
+    "gemini-decision-1": ["gemini-4-argon", "gemini-4-hydrogen", "gemini-3.8-flash"],
+}
+
 
 def _save_data_url(data_url: str, out_dir: Path, prefix: str) -> str:
     """将 data:<mime>;base64,... 解码保存到本地文件"""
@@ -1107,26 +1116,47 @@ def run_agent_task(
         # 若失败且启用了自动降级 (Auto-Fallback)
         # 注意：若 thinking_policy == "strict"，auto_fallback 必定为 False，绝不走入以下降级
         if not success and auto_fallback and thinking_policy != "strict":
-            # 极简直通备援：AI Studio 遭遇排队拥塞时，直接无缝切换至官网通道，无需在 AI Studio 内部反复多轮无效跳转
-            web_res = _run_gemini_web_task(
-                task=task,
-                model=initial_model_id,
-                timeout_sec=timeout_sec,
-                new_chat=True,
-                download_dir=download_dir,
-                keep_tab=keep_tab,
-                entry=entry,
-            )
-            if web_res.get("ok"):
-                success = True
-                output = web_res.get("output", "")
-                files = web_res.get("files", [])
-                err = ""
-                active_model = web_res.get("model", "gemini.google.com (官网通道)")
-                fallback_chain.append(active_model)
-                fell_back = True
-            else:
-                err = "CONGESTION_HALT: Google AI Studio 与 Gemini 官网免费池全数高负载排队拥塞。"
+            # 依次使用 AI Studio 阶梯备援模型
+            ladder = FALLBACK_LADDER.get(initial_model_id, ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"])
+            fallback_targets = [c for c in ladder if c != initial_model_id]
+
+            for target in fallback_targets:
+                fallback_chain.append(target)
+                fb_url = f"https://aistudio.google.com/prompts/new_chat?model={target}"
+                agentlimb_client.call_tool("navigate", {"tabId": tab_id, "url": fb_url})
+                wait_for_selector(tab_id, 'textarea[aria-label="Enter a prompt"]', timeout=15.0)
+
+                fb_success, fb_output, fb_files, fb_err = _attempt_run(target)
+                if fb_success:
+                    success = True
+                    output = fb_output
+                    files = fb_files
+                    err = ""
+                    active_model = target
+                    fell_back = True
+                    break
+
+            if not success:
+                # 终极备援：AI Studio 均不可用时，跨站点无缝降级至 gemini.google.com 官网通道
+                web_res = _run_gemini_web_task(
+                    task=task,
+                    model=initial_model_id,
+                    timeout_sec=timeout_sec,
+                    new_chat=True,
+                    download_dir=download_dir,
+                    keep_tab=keep_tab,
+                    entry=entry,
+                )
+                if web_res.get("ok"):
+                    success = True
+                    output = web_res.get("output", "")
+                    files = web_res.get("files", [])
+                    err = ""
+                    active_model = web_res.get("model", "gemini.google.com (官网通道)")
+                    fallback_chain.append(active_model)
+                    fell_back = True
+                else:
+                    err = "CONGESTION_HALT: Google AI Studio 与 Gemini 官网免费池全数高负载排队拥塞。"
 
         # 自动代码检测与保存落地（AI Studio 通道防吞噬）
         if success and output:
