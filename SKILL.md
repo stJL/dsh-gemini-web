@@ -2,7 +2,7 @@
 name: gemini-web-agent
 description: >-
   【必须最优先加载・一律先问后用】当用户提到 AI Studio, Google Flow, Gemini 网页端, 或指定 Hydrogen, Argon, Neon, Flash, Flash-Lite, Nano Banana, Omni, Lyria, TTS, 或要求并发算法、生图/生视频/长文本时，必须第一步调用本 skill！
-  1. 严格遵循「一律先问后用」：第 1 步必须先在聊天中输出【Gemini Web Agent 调度提案卡】并停止回复，严禁直接调用 gemini_web_agent 工具发包，严禁调用 ask_user_question！
+  1. 严格遵循「一律先问后用」：第 1 步必须先在聊天中输出【🌐 Gemini Web Agent】卡片并停止回复，严禁直接调用 gemini_web_agent 工具发包，严禁调用 ask_user_question！
   2. 待用户明确确认（回复「1」或「确认」）后才在下一轮正式发包！
   3. 严格尊重用户指定的模型（如 Flash Lite、Argon），提案卡必须原样呈现，严禁擅自升级为 Hydrogen！严禁本地代劳，严禁调用 subagent。
 ---
@@ -14,14 +14,14 @@ description: >-
 > 当使用者在对话中显式指定调用 **`gemini-web-agent`**、**`gemini_web_agent`**、**`/gw`**、**“Gemini 网页端”**、**“Google 网页”**、**“AI Studio”**、**“Google Flow”**，指定使用 **`Hydrogen` / `Argon` / `Neon` / `Flash` / `Flash-Lite` / `Nano Banana` / `Omni` / `Lyria`** 等模型，或提出高算力架构推演、C++/Rust/Python 高效能并发算法（如无锁队列、线程池、内存模型）等复杂编程任务时：  
 > 1. **【绝对禁令】**：本地宿主 AI（DeepSeek / Claude / GPT 等）**严禁自行在本地编写答案或擅自代劳作答**！  
 > 2. **【严禁 Subagent 劫持】**：**严禁调用 `subagent` 或 `list_subagent_models` 打付费 Google API 路由**！使用者的核心诉求是使用外部浏览器的【零 Token 免费池 (key_off)】，严禁偷开 subagent 消耗用户本地付费配额！
-> 3. **【一律先问后用提案工作流 (唯一标准流程)】**：
->    - **第 1 步绝对禁令**：在接收到用户指令的第 1 步，**绝对禁止直接调用 `gemini_web_agent` 工具发包，绝对禁止调用 `ask_user_question`**！宿主 AI 必须先在文本回复中向用户呈现【Gemini Web Agent 调度提案】卡片（目标渠道 `site`、入口模式 `entry`、推荐模型 `model`、思考等级 `thinking_level`、预估成本 0 Token 免费），并**立即结束当前回显**等待用户确认；
+> 3. **【一律先问后用确认卡工作流 (唯一标准流程)】**：
+>    - **第 1 步绝对禁令**：在接收到用户指令的第 1 步，**绝对禁止直接调用 `gemini_web_agent` 工具发包，绝对禁止调用 `ask_user_question`**！宿主 AI 必须先在文本回复中向用户呈现【🌐 Gemini Web Agent】确认卡（执行渠道 `site`、入口模式 `entry`、执行模型 `model`、推演配置 `thinking_level` 与话题隔离 `new_chat`），并**立即结束当前回显**等待用户确认；
 >    - **第 2 步授权发包**：待用户明确确认（回复「确认」、「1」或调整参数）后，才在下一轮正式调用 `gemini_web_agent` 发包执行；
 > 4. **🎯【严格尊重用户指定模型・严禁擅自“升级”】**：
 >    - 若用户明确要求「用 Gemini 3.5 Flash Lite」、「用 Flash」、「用 Argon」等，**必须 100% 将用户指定的模型代号（如 `flash-lite`、`flash`、`argon`）写入提案卡并传入 `model` 参数**！
 >    - **严禁**因为看到代码任务就自作聪明把用户的 `flash-lite` 擅自“升级”成 `hydrogen`！只有当用户**完全没有指定任何模型名称**时，才允许根据场景表格推荐默认模型。
 > 5. **【0 探测开销】**：底层 Chrome 与 AgentLimb 桥接已由外挂 Daemon 背景完全托管。**发包前严禁进行任何端口扫描、进程检查、代码逆向或环境探测**！直接发包执行！
-> 6. **【📦 致命铁律：严禁摘要，必须 100% 完整贴出代码全文与降级通知】**：调用 `gemini_web_agent` 完成后，使用者在前端聊天窗口看不见 tool result 内部细节！你必须在最终回复中，将工具回传之「降级流程通知」、「落地文件超链接」以及「全部源代码与注释全文」100% 原封不动完整呈现给使用者，严禁仅以「已为您完成...」等一句话摘要概括！未贴出代码全文视同严重调度失败！
+> 6. **【📦 成果交付规范】**：调用 `gemini_web_agent` 完成后，使用者在前端聊天窗口看不见 tool result 内部细节！你必须在最终回复中，将工具回传之「降级流程通知」、「落地文件超链接 (file://)」以及核心架构设计与关键实现精华完整呈现给使用者。完整源码已自动落地保存至本地工作区文件，引导用户直接点击文件链接查看，切忌全量重抄超长全量源码导致小模型 SSE 串流中断（Incomplete JSON segment at the end）！
 
 优先通过 **AgentLimb MCP**（永久免弹窗操控已登录外部 Chrome），或备用 [gemini_web.py](scripts/gemini_web.py)，统筹调度 **`aistudio.google.com`**、**`flow.google.com`** 与 **`gemini.google.com`**。
 
@@ -31,7 +31,7 @@ description: >-
 
 > [!TIP]
 > 🛡️ **先问后用模式（原作者规范・安全透明）**：
-> 当用户提出需要调用外部资源的任务时，宿主 AI 先输出「Gemini Web Agent 调度提案」，将底层的真实参数（渠道、入口、模型、思考等级、话题策略与 0 成本）透明化呈现给用户审阅。待用户确认（回复「确认」、「1」或调整参数）后，下一轮立即调用 `gemini_web_agent` 真实发包执行。无任何例外分支，小模型零理解负担！
+> 当用户提出需要调用外部资源的任务时，宿主 AI 先输出「🌐 Gemini Web Agent」卡片，将底层的真实参数（执行渠道、入口模式、执行模型、推演配置与话题隔离策略）透明化呈现给用户审阅。待用户确认（回复「确认」、「1」或调整参数）后，下一轮立即调用 `gemini_web_agent` 真实发包执行。无任何例外分支，小模型零理解负担！
 >
 > **【🚨 严禁使用 Subagent 劫持】**：
 > 任何情况下严禁调用 `subagent` 或 `list_subagent_models` 呼叫付费 Google API 路由！使用者的核心诉求是使用外部浏览器的【零 Token 免费池 (key_off)】，绝不偷跑消耗本地付费配额！
@@ -66,25 +66,92 @@ description: >-
    - **Google Flow 点数**：开 `https://flow.google.com/` 点 `[aria-label="账号详情"]`，读 `[role="dialog"]` 内 `X 个 Google Flow 点数` 与重置时间后关页；通道 B 运行 `flow-usage`。
    - **本地 Antigravity 对比（仅 Antigravity 环境，Claude Code/Codex 跳过）**：使用 `setup_skill.py` 输出的 `inspect=` 路径执行 `python "<inspect路径>"`（已内置增量缓存与轻量探测；默认 3 行极简摘要，可选 `--live-only` 仅查配额、`--all-history` 扫全部历史、`--markdown` 看详表）。
 
-2. **先问后用调度提案（Proposal Before Execution）标准范式**：
-   在「先问后用」模式下（用户未明确指定直接发包时），宿主 AI 扮演专业架构师，先向用户呈现如下结构化提案（或在支持 `ask_question` / `AskUserQuestion` 的宿主环境中弹出交互式卡片）：
+2. **先问后用确认卡（Proposal Before Execution）标准范式**：
+   在「先问后用」模式下（用户未明确指定直接发包时），宿主 AI 先向用户呈现如下结构化卡片，并**在此立即停止回复**，等待用户确认：
 
-   ```markdown
-   ### 🌐 Gemini Web Agent 调度提案（先问后用）
+   **核心格式规范**：
+   - 标题统一为 `### 🌐 Gemini Web Agent`（无括号与额外后缀）
+   - 第二行保留具体任务描述反馈（例如：`检测到您欲调用外部 Google 网页端实现并发任务，相关配置如下：`）
+   - `🚪 入口模式：chat`（保持极简，无额外括号）
+   - `⚙️ 推演配置：Thinking 设为 high`（按设定动态显示 high/medium，无多余冗余解释）
+   - `🔄 话题隔离：new_chat: true（预设开启全新独立对话）`
+   - **完全不显示预估成本项**
 
-   检测到您欲调用外部 Google 资源完成任务：
-   - 🎯 **推荐渠道**：Google AI Studio（`aistudio`，代码/推理）/ Google Flow（`flow`，生图/视频）/ Gemini 官网（`gemini`，任务/画布）
-   - 🚪 **入口模式**：`chat`（工作台对话）/ `task`（官网 Task 模式）
-   - 🧠 **推荐模型**：`gemini-4-hydrogen`（1M 上下文）/ `gemini-4-neon` / `gemini-nano-banana-2.1`
-   - ⚙️ **推演配置**：Thinking 设为 `high`（封印 Extra High 确保免费池稳定流畅）
-   - 🔄 **话题隔离**：`new_chat: false`（延续对话）或 `true`（全新独立对话）
-   - 💰 **预估成本**：`key_off` 完全免费（0 本地 Token 消耗，0 API 扣款）
+   **全部四大情景标准模板**：
 
-   👉 **请确认是否发包执行？**
-   - 回复 **「确认」** 或 **「1」**：立即调用外部 Chrome 执行发包
-   - 回复 **调整参数**（如「改用 Neon」、「开新对话」或「Medium 思考」）：按新参数直接发包
-   - 回复 **「取消」**：中止外部调度，改由本地模型作答
-   ```
+   - **情景一：Google AI Studio（智能 / 定时模式）**
+     > 用户配置了备援梯队（严格根据用户 GUI 设置的 1~5 个备援模型动态展示，不强制绑定任何未选择的模型）：
+     ```markdown
+     ### 🌐 Gemini Web Agent
+     检测到您欲调用外部 Google 网页端实现并发任务，相关配置如下：
+
+     🎯 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
+     🚪 入口模式：chat
+     🧠 执行模型：（智能/定时模式）
+     gemini-4-neon -> gemini-4-hydrogen -> gemini-3.8-flash -> gemini-3.5-flash-lite
+     ⚙️ 推演配置：Thinking 设为 high
+     🔄 话题隔离：new_chat: true（预设开启全新独立对话）
+
+     👉 请确认是否发包执行？
+     - 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行
+     - 回复 调整参数（如「改用 Flash Lite」、「改用 Argon」等）：按您的要求调整后直接发包
+     - 回复 「取消」：中止外部调度，改由本地作答
+     ```
+
+   - **情景二：Google AI Studio（严格模式）**
+     > 用户选择了严格模式（锁定单模型不降级）：
+     ```markdown
+     ### 🌐 Gemini Web Agent
+     检测到您欲调用外部 Google 网页端实现并发任务，相关配置如下：
+
+     🎯 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
+     🚪 入口模式：chat
+     🧠 执行模型：（严格模式）
+     gemini-4-hydrogen
+     ⚙️ 推演配置：Thinking 设为 high
+     🔄 话题隔离：new_chat: true（预设开启全新独立对话）
+
+     👉 请确认是否发包执行？
+     - 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行
+     - 回复 调整参数（如「改用 Flash Lite」、「改用 Argon」等）：按您的要求调整后直接发包
+     - 回复 「取消」：中止外部调度，改由本地作答
+     ```
+
+   - **情景三：Gemini 官网通道（Gemini Web）**
+     > 用户指定或选择了 gemini.google.com 渠道：
+     ```markdown
+     ### 🌐 Gemini Web Agent
+     检测到您欲调用外部 Google 网页端实现任务，相关配置如下：
+
+     🎯 执行渠道：gemini.google.com（可选择：Google AI Studio / Gemini Web）
+     🚪 入口模式：chat
+     🧠 执行模型：Auto
+     ⚙️ 推演配置：Thinking 设为 high
+     🔄 话题隔离：new_chat: true（预设开启全新独立对话）
+
+     👉 请确认是否发包执行？
+     - 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行
+     - 回复 调整参数：按您的要求调整后直接发包
+     - 回复 「取消」：中止外部调度，改由本地作答
+     ```
+
+   - **情景四：Google Flow（生图 / 视频）**
+     > 图像生成、视频生成创意流：
+     ```markdown
+     ### 🌐 Gemini Web Agent
+     检测到您欲调用外部 Google 网页端实现多媒体生成，相关配置如下：
+
+     🎯 执行渠道：Google Flow（flow）
+     🚪 入口模式：chat
+     🧠 执行模型：gemini-nano-banana-2.1
+     ⚙️ 推演配置：将生成数量设为 x1，分辨率设为 2K
+     🔄 话题隔离：new_chat: true（预设开启全新独立对话）
+
+     👉 请确认是否发包执行？
+     - 回复 「确认」 或 「1」：立即调用外部 Chrome 发包生成图像或视频
+     - 回复 调整参数（如「改用 Omni」、「生成 4 张」等）：按您的要求调整后直接发包
+     - 回复 「取消」：中止外部调度，改由本地作答
+     ```
 
 3. **提案参数与底层工具映射表**：
    提案里的每一项均与底层 `gemini_web_agent` 的真实参数严格一一对应：
