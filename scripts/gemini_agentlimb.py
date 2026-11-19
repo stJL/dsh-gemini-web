@@ -218,31 +218,28 @@ def _run_gemini_web_task(
                 return { ok: true, activeModel: currentPickerLabel, reason: 'all_locked' };
             }
 
-            // 智能評分器 (Scorer)：版本號權重 (5 > 4 > 3) + 能級語意權重
-            function score(opt, targetIntent) {
+            // 極簡功能定位評分：以官網角色副標題為準（拋棄版本號猜測，完全免疫 Google 命名隨意變更）
+            function score(opt, idx, targetIntent) {
                 let s = 0;
                 const full = opt.text.toLowerCase();
-                const verMatch = full.match(/\b(\d+)\b/);
-                if (verMatch) {
-                    s += parseInt(verMatch[1], 10) * 100;
-                }
                 if (targetIntent === 'reasoning') {
-                    if (/deeper|analysis|neon|argon|ultra|pro|code|complex/i.test(full)) s += 150;
+                    if (/deeper|analysis|code|complex|ultra|pro|neon|argon/i.test(full)) s += 200;
                     else if (/everyday|hydrogen|balanced/i.test(full)) s += 50;
                     else if (/auto/i.test(full)) s += 10;
+                    // 若無任何關鍵字命中，選單越後面的項目權重越高 (Google 慣例：進階旗艦排在後方)
+                    s += idx * 10;
                 } else if (targetIntent === 'balanced') {
-                    if (/everyday|hydrogen|balanced|flash/i.test(full)) s += 150;
+                    if (/everyday|hydrogen|balanced|flash|help/i.test(full)) s += 200;
                     else if (/auto/i.test(full)) s += 80;
-                    else if (/deeper|neon/i.test(full)) s += 40;
+                    else s += 30;
                 } else {
-                    if (/auto/i.test(full)) s += 150;
-                    else if (/everyday|hydrogen/i.test(full)) s += 80;
-                    else s += 40;
+                    if (/auto|adapt/i.test(full)) s += 200;
+                    else s += 50;
                 }
                 return s;
             }
 
-            unlocked.sort((a, b) => score(b, intent) - score(a, intent));
+            unlocked.sort((a, b) => score(b, unlocked.indexOf(b), intent) - score(a, unlocked.indexOf(a), intent));
             const best = unlocked[0];
             const lines = best.text.split('\n');
             const bestModelName = (lines.length > 1 ? lines[1] : lines[0]).trim();
