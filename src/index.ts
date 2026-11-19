@@ -2,25 +2,89 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { createApiRouter } from './transport/router.js'
 import { executeAgentTask, getWorkspaceDownloadDir } from './bridge/agent-executor.js'
+import { loadConfig } from './config.js'
 
 export const name = 'dsh-gemini-web'
-export const inject = ['tools', 'webServer']
+export const inject = ['tools', 'webServer', 'systemPrompt']
+
+export function buildDynamicCardGuidance(): string {
+  const cfg = loadConfig()
+  const isStrict = cfg.thinkingPolicy === 'strict'
+  const policyLabel = isStrict ? '（严格模式）' : '（智能/定时模式）'
+  const ladderStr = (!isStrict && cfg.fallbackLadder && cfg.fallbackLadder.length > 0)
+    ? cfg.fallbackLadder.join(' -> ')
+    : (cfg.defaultModel || 'gemini-4-hydrogen')
+  const thinkingVal = cfg.thinkingLevel || 'high'
+
+  return `【🌐 Gemini Web Agent 调度铁律与确认卡排版规范】
+在调用本工具发包前，你必须在第 1 步先在聊天中输出【🌐 Gemini Web Agent】确认卡并【停止当前回应】，等待用户确认！
+严禁擅自直接发包，严禁调用 ask_user_question！
+确认卡必须严格以 Markdown 列表「- 」逐行呈现（严禁丢弃「- 」导致折叠合并为一行）：
+
+【当前系统生效之确认卡配置】：
+- 🎯 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
+- 🚪 入口模式：chat
+- 🧠 执行模型：${policyLabel}
+  ${ladderStr}
+- ⚙️ 推演配置：Thinking 设为 ${thinkingVal}
+- 🔄 话题隔离：new_chat: true（预设开启全新独立对话）
+
+👉 请确认是否发包执行？
+- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行
+- 回复 调整参数（如「改用 Flash Lite」、「改用 Argon」等）：按您的要求调整后直接发包
+- 回复 「取消」：中止外部调度，改由本地作答
+
+【核心判断铁律】：
+1. 智能/定时模式（默认）：执行模型必须完整展示备援阶梯序列「${ladderStr}」，换行呈现，严禁擅自缩水只输出单个模型（如严禁只写 gemini-4-hydrogen）！
+2. 严格模式：仅当用户配置或指定严格模式时，执行模型才显示单个模型（如「- 🧠 执行模型：（严格模式）\\n  ${cfg.defaultModel || 'gemini-4-hydrogen'}」）。
+3. 渠道变化：若为多媒体生图/视频任务，渠道设为 Google Flow（flow），模型设为 gemini-nano-banana-2.1；若用户指定官网渠道，渠道设为 gemini.google.com，模型设为 Auto。
+4. 用户指定模型绝对优先：若用户输入明确指定了模型（如「用 Flash Lite」），执行模型必须 100% 原样采用用户指定的模型，严禁擅自升级！`
+}
 
 export function apply(ctx: any) {
-  // 1. 註冊 DSH 核心代理工具: gemini_web_agent 與 gemini-web-agent
+  // 1. 給 Agent 注入動態提示詞段落（含當前 GUI 配置的階梯序列）
+  ctx.inject(['systemPrompt'], (scoped: any) => {
+    let disposeSection: any = null
+    const syncPrompt = () => {
+      if (disposeSection) {
+        try { disposeSection() } catch {}
+        disposeSection = null
+      }
+      try {
+        if (scoped.systemPrompt?.section) {
+          disposeSection = scoped.systemPrompt.section({
+            name: 'gemini-web:card-guidance',
+            order: 600,
+            text: buildDynamicCardGuidance(),
+          })
+        }
+      } catch (err) {
+        console.warn('[dsh-gemini-web] systemPrompt registration warning:', err)
+      }
+    }
+    syncPrompt()
+    ctx.on('gemini-web/config-updated', syncPrompt)
+  })
+
+  // 2. 註冊 DSH 核心代理工具: gemini_web_agent 與 gemini-web-agent
   ctx.inject(['tools'], (scoped: any) => {
     try {
       const toolDef = {
         name: 'gemini_web_agent',
-        description: `【🚨 Google 外部免费算力与多模态网关 / 唯一铁律：一律先问后用】
+        get description() {
+          return `【🚨 Google 外部免费算力与多模态网关 / 唯一铁律：一律先问后用】
 【🚨 致命调用前置条件 - 第 1 步绝对禁止直接调用发包】：
 本工具严格遵循「一律先问后用」规范，无任何例外！
 在使用者提出任何需求后，你【第 1 步绝对禁止直接调用本工具发包，绝对禁止调用 ask_user_question】！
-你必须在第 1 步先在聊天中输出【🌐 Gemini Web Agent】确认卡（严格以 Markdown 列表「- 」逐行呈现执行渠道 site、入口模式 entry、执行模型 model、推演配置 thinking_level 与话题隔离 new_chat），并在此【停止当前回应】，等待用户确认！
+你必须在第 1 步先在聊天中输出【🌐 Gemini Web Agent】确认卡，并在此【停止当前回应】，等待用户确认！
 只有当用户在下一轮明确回复「确认」、「1」或给予明确发包授权时，才正式调用本工具发包！
-1. 🎯【用户指定模型绝对优先】：若用户指定了具体模型（如「用 Gemini 3.5 Flash Lite」、「用 Argon」），确认卡与发包必须 100% 采用该模型，严禁擅自升级或替换！只有用户完全未指定时才推荐默认模型。
+
+${buildDynamicCardGuidance()}
+
+1. 🎯【用户指定模型绝对优先】：若用户指定了具体模型（如「用 Gemini 3.5 Flash Lite」、「用 Argon」），确认卡与发包必须 100% 采用该模型，严禁擅自升级或替换！只有用户完全未指定时才采用系统默认阶梯。
 2. 🛑【明令禁止本地擅自代劳与 Subagent 劫持】：严禁在本地自行编写答案，严禁调用 subagent 消耗付费额度！
-3. 📦【调用完成后的展示义务】：调用完成后，必须完整呈现降级流程通知、落地文件超链接以及核心架构说明与代码！`,
+3. 📦【调用完成后的展示义务】：调用完成后，必须完整呈现降级流程通知、落地文件超链接以及核心架构说明与代码！`
+        },
         parameters: {
           type: 'object',
           required: ['task'],
@@ -31,7 +95,7 @@ export function apply(ctx: any) {
             },
             model: {
               type: 'string',
-              description: '指定调度的模型别名（选填，如 hydrogen, argon, flash, flash-lite, nano2.1, omni1.2, lyria 等）',
+              description: '指定调度的模型别名（选填，如 hydrogen, argon, flash, flash-lite 等）。注意：在第 1 步确认卡中，智能/定时模式下必须完整输出降级阶梯序列，严禁只写单个模型！',
             },
             site: {
               type: 'string',
@@ -133,9 +197,9 @@ export function apply(ctx: any) {
     }
   })
 
-  // 2. 機會性註冊 WebServer 路由 (供設定面板 API 調用)
+  // 3. 機會性註冊 WebServer 路由 (供設定面板 API 調用)
   ctx.inject(['webServer'], (scoped: any) => {
-    const router = createApiRouter()
+    const router = createApiRouter(ctx)
     scoped.effect(
       () => scoped.webServer.register({ kind: 'prefix', path: '/api/gemini-web', handler: router }),
       'gemini-web: api routes'

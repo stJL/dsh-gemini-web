@@ -22,7 +22,7 @@ async function readBody(req: IncomingMessage): Promise<any> {
   })
 }
 
-export function createApiRouter() {
+export function createApiRouter(ctx?: any) {
   let cachedUsage: any = null
   let lastUsageTime = 0
 
@@ -64,6 +64,7 @@ export function createApiRouter() {
       if (routePath === '/config' && method === 'POST') {
         const body = await readBody(req)
         const updated = saveConfig(body)
+        try { ctx?.emit?.('gemini-web/config-updated') } catch {}
         return send(200, { ok: true, config: updated })
       }
 
