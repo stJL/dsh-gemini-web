@@ -896,45 +896,47 @@ function apply(ctx) {
 3. ⚡【極速直通，嚴禁前置思考與環境探測】：底層瀏覽器連線、AgentLimb 轉發與進程狀態已由外掛背景 Daemon 100% 全自動託管。本地模型在收到任務後，**嚴禁在調用前執行端口掃描、進程檢查、環境排錯、額度巡檢或長篇推理**，第一步直接呼叫本工具，0 思考開銷立刻交差！
 4. \uD83D\uDCE6【結果如實傳遞】：調用完成後，將網頁端回傳之成果（含代碼與落地檔案超連結）完整呈現給使用者，嚴禁擅自吞噬或覆蓋。`,
         parameters: {
-          task: {
+          type: "object",
+          required: ["task"],
+          properties: {
+            task: {
+              type: "string",
+              description: "交由 Gemini 網頁端執行的完整任務指令、需求描述與要求"
+            },
+            model: {
+              type: "string",
+              description: "指定調度的模型別名（選填，如 hydrogen, argon, flash, flash-lite, nano2.1, omni1.2, lyria 等）"
+            },
+            site: {
+              type: "string",
+              description: "目標站點：aistudio (預設，代碼與長文本), flow (生圖生視頻，Nano 2.1 享 0 點數), 或 gemini (官網對話與 task 模式)"
+            },
+            entry: {
+              type: "string",
+              description: "入口模式：chat (預設對話), task (Gemini 官網任務與畫布模式)"
+            },
+            thinking_level: {
+              type: "string",
+              description: "思考等級：high (預設穩定), medium, 或 low。注意：extra-high 已封印，避免免費池引發 Permission Denied 錯誤"
+            },
+            thinking_policy: {
+              type: "string",
+              description: "思考閾值策略：adaptive (智慧自適應，預設), custom (自定義超時), strict (嚴格模式不降級)"
+            },
+            timeout_sec: {
+              type: "number",
+              description: "任務超時限制秒數 (自定義模式下生效，如 240)"
+            },
+            new_chat: {
+              type: "boolean",
+              description: "是否開啟全新對話視窗（若為 true 則重置為全新聊天室，預設為 false 延續對話）"
+            }
+          }
+        },
+        output: {
+          schema: {
             type: "string",
-            required: true,
-            description: "交由 Gemini 網頁端執行的完整任務指令、需求描述與要求"
-          },
-          model: {
-            type: "string",
-            required: false,
-            description: "指定調度的模型別名（選填，如 hydrogen, argon, flash, flash-lite, nano2.1, omni1.2, lyria 等）"
-          },
-          site: {
-            type: "string",
-            required: false,
-            description: "目標站點：aistudio (預設，代碼與長文本), flow (生圖生視頻，Nano 2.1 享 0 點數), 或 gemini (官網對話與 task 模式)"
-          },
-          entry: {
-            type: "string",
-            required: false,
-            description: "入口模式：chat (預設對話), task (Gemini 官網任務與畫布模式)"
-          },
-          thinking_level: {
-            type: "string",
-            required: false,
-            description: "思考等級：high (預設穩定), medium, 或 low。注意：extra-high 已封印，避免免費池引發 Permission Denied 錯誤"
-          },
-          thinking_policy: {
-            type: "string",
-            required: false,
-            description: "思考閾值策略：adaptive (智慧自適應，預設), custom (自定義超時), strict (嚴格模式不降級)"
-          },
-          timeout_sec: {
-            type: "number",
-            required: false,
-            description: "任務超時限制秒數 (自定義模式下生效，如 240)"
-          },
-          new_chat: {
-            type: "boolean",
-            required: false,
-            description: "是否開啟全新對話視窗（若為 true 則重置為全新聊天室，預設為 false 延續對話）"
+            description: "Gemini 網頁端執行產出成果"
           }
         },
         async execute(args, exec) {
