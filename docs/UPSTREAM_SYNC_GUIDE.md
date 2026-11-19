@@ -1,12 +1,12 @@
-# 上游同步与本机相容性测试流程指南
+# 上游同步与本机兼容性测试流程指南
 
-本指南记录了当原作者仓库（`582835293/gemini-web-agent`）更新时，如何安全地在本机进行相容性测试、确认无误后再合并的全套流程。
+本指南记录了当原作者仓库（`582835293/gemini-web-agent`）更新时，如何安全地在本机进行兼容性测试、确认无误后再合并的全套流程。
 
 ---
 
 ## 1. 整体机制总览
 
-为了保证 DSH 外挂的生产稳定性，本专案设计了 **「安全隔离网」** 机制：
+为了保证 DSH 插件的生产稳定性，本项目设计了 **「安全隔离网」** 机制：
 
 ```mermaid
 flowchart TD
@@ -25,7 +25,7 @@ flowchart TD
 
 ---
 
-## 2. 本机测试相容性（3 步简易流程）
+## 2. 本机测试兼容性（3 步简易流程）
 
 当你在 GitHub 收到新的 PR 通知，或想手动测试最新同步分支时：
 
@@ -38,7 +38,7 @@ git checkout auto-sync-upstream
 ```
 > [!NOTE]
 > **为什么这样就能测？**
-> 因为 DSH 的外挂目录是通过软链接（Symlink）直接连结到这个工作区目录的。当你切换到 `auto-sync-upstream` 时，DSH 客户端就会**立刻即时运行该分支的最新代码**，无需重新打包安装！
+> 因为 DSH 的插件目录是通过软链接（Symlink）直接连接到这个工作区目录的。当你切换到 `auto-sync-upstream` 时，DSH 客户端就会**立刻即时运行该分支的最新代码**，无需重新打包安装！
 
 ---
 
@@ -58,7 +58,7 @@ git checkout auto-sync-upstream
    /gemini-web-agent 请简短回复一段 1+1=2 的验证测试
    ```
 3. 观察：
-   - 浏览器是否顺畅呼叫与连结
+   - 浏览器是否顺畅调用与连接
    - 回答是否完整回传给 DSH
    - 画面与 Token 统计是否正常展示
 
@@ -66,10 +66,10 @@ git checkout auto-sync-upstream
 
 ## 3. 测试后决策处理
 
-### 场景 A：测试完全通过（相容良好）
+### 场景 A：测试完全通过（兼容良好）
 1. 打开 GitHub 仓库的 Pull Request 页面：
    👉 [https://github.com/stJL/dsh-gemini-web/pulls](https://github.com/stJL/dsh-gemini-web/pulls)
-2. 点选绿色的 **「Merge pull request」** 并确认合并。
+2. 点击绿色的 **「Merge pull request」** 并确认合并。
 3. 回到本机终端，切回主分支并拉取最新状态：
    ```bash
    git checkout main
@@ -79,7 +79,7 @@ git checkout auto-sync-upstream
 
 ---
 
-### 场景 B：发现报错或不相容（原作者大幅变动）
+### 场景 B：发现报错或不兼容（原作者大幅变动）
 1. **千万不要点击 GitHub 的 Merge！**
 2. 本机终端立刻切回稳定的主分支：
    ```bash
@@ -87,8 +87,8 @@ git checkout auto-sync-upstream
    ```
    ⚡ **秒级恢复**：你的 DSH 客户端立刻恢复使用完全正常的稳定版，完全不会影响日常工作。
 3. 在 GitHub PR 页面：
-   - 可以直接点选 **「Close pull request」** 关掉该次更新；或者
-   - 在该分支上除错修复后，再 `git push` 到该 PR 分支重新测试。
+   - 可以直接点击 **「Close pull request」** 关掉该次更新；或者
+   - 在该分支上排查修复后，再 `git push` 到该 PR 分支重新测试。
 
 ---
 

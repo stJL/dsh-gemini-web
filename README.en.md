@@ -1,6 +1,6 @@
 # dsh-gemini-web
 
-[English](README.en.md) | [繁體中文](README.md)
+[English](README.en.md) | [简体中文](README.md)
 
 > **DeepSeek Harness (DSH) Native Dispatch Plugin**: A specialized GUI manager and Agent tool adapter designed to interface with the [@582835293/gemini-web-agent](https://github.com/582835293/gemini-web-agent) multi-channel web quota ecosystem.
 
