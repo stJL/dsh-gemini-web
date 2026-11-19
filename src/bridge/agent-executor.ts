@@ -14,6 +14,9 @@ export interface AgentTaskOptions {
   site?: 'aistudio' | 'flow' | 'gemini'
   entry?: 'chat' | 'task'
   thinkingLevel?: string
+  thinkingPolicy?: 'adaptive' | 'custom' | 'strict'
+  thinkingTimeout?: number
+  noFallback?: boolean
   timeoutSec?: number
   sessionId?: string
   newChat?: boolean
@@ -72,9 +75,19 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
   const agentlimbScript = findAgentLimbScript()
   const cdpScript = findCliScript()
 
+  const thinkingPolicy = options.thinkingPolicy || cfg.thinkingPolicy || (cfg.fallbackMode === 'strict' ? 'strict' : 'adaptive')
+  const isStrict = thinkingPolicy === 'strict' || cfg.fallbackMode === 'strict' || cfg.autoFallback === false || options.noFallback
+
   const targetModel = options.model || cfg.defaultModel || 'gemini-3.5-flash-lite'
   const targetSite = options.site || 'aistudio'
-  const timeoutSec = options.timeoutSec || cfg.timeoutSec || 180
+
+  // 任務量級與超時研判 (自適應模式下複雜任務自動放寬至至少 300 秒)
+  let baseTimeout = options.timeoutSec || cfg.timeoutSec || 180
+  const isHeavyTask = options.task.length > 150 || /(?:c\+\+|cpp|rust|紅黑樹|red-black|算法|演算法|架構|從零|完整實作|生產級|完整代碼|重構)/i.test(options.task)
+  if (thinkingPolicy === 'adaptive' && isHeavyTask) {
+    baseTimeout = Math.max(baseTimeout, 300)
+  }
+  const timeoutSec = baseTimeout
 
   // 1. 判斷會話生命週期（同一 DSH 對話無感延續，全新話題開新聊天室）
   let isNewChat = false
@@ -105,10 +118,14 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
         '--model', targetModel,
         '--site', targetSite,
         '--timeout', String(timeoutSec),
+        '--thinking-policy', thinkingPolicy,
         '--download-dir', downloadDir,
       ]
+      if (options.thinkingTimeout) {
+        args.push('--thinking-timeout', String(options.thinkingTimeout))
+      }
       // 封印 Extra High：免費池強制安全降級至 high，避免 Permission Denied 與死迴圈
-      let safeThinking = options.thinkingLevel || 'high'
+      let safeThinking = options.thinkingLevel || cfg.thinkingLevel || 'high'
       if (safeThinking.includes('extra') || safeThinking === 'xhigh' || safeThinking === 'max') {
         safeThinking = 'high'
       }
@@ -116,12 +133,14 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
 
       if (isNewChat) args.push('--new-chat')
       if (options.entry) args.push('--entry', options.entry)
-      if (cfg.autoFallback === false || cfg.fallbackMode === 'strict') {
+      if (isStrict) {
         args.push('--no-fallback')
       }
 
+      // 保障 Node.js 執行超時寬限（多給 30 秒，防止提早中斷 Python 自適應思考進程）
+      const nodeExecTimeout = (timeoutSec + 30) * 1000
       const { stdout } = await execFileAsync(venv, args, {
-        timeout: (timeoutSec + 15) * 1000,
+        timeout: nodeExecTimeout,
         env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
       })
       const lines = stdout.trim().split('\n')
@@ -171,7 +190,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
       if (status.cdp.port) args.push('--port', String(status.cdp.port))
 
       const { stdout } = await execFileAsync(venv, args, {
-        timeout: (timeoutSec + 15) * 1000,
+        timeout: (timeoutSec + 30) * 1000,
         env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
       })
       return {

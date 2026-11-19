@@ -426,6 +426,8 @@ def run_agent_task(
     site: str = "aistudio",
     entry: str = "chat",
     thinking_level: str = "high",
+    thinking_policy: str = "adaptive",
+    thinking_timeout: int = 0,
     auto_fallback: bool = True,
     timeout_sec: int = 180,
     new_chat: bool = False,
@@ -565,10 +567,39 @@ def run_agent_task(
 
         # 3. 監控輸出與完成狀態
         has_started_generating = False
-        deadline = time.time() + timeout_sec
-        # 深度思考模型思考時間上限設為 80 秒，普通模型 35 秒（超時無增長立即階梯降級，拒絕乾等）
+
+        # 智慧思考閾值與任務量級研判 (三大策略：adaptive, custom, strict)
         is_deep_reasoning = any(k in current_model_id.lower() for k in ["argon", "hydrogen", "decision"])
-        thinking_limit = 80.0 if is_deep_reasoning else 35.0
+        heavy_keywords = [
+            "c++", "cpp", "rust", "紅黑樹", "red-black", "算法", "演算法", "架構",
+            "從零", "完整實作", "生產級", "完整代碼", "重構", "design pattern",
+            "compiler", "parser", "full stack", "全棧", "spring", "kernel", "btree"
+        ]
+        task_lower = task.lower()
+        is_heavy_task = len(task) > 150 or any(kw in task_lower for kw in heavy_keywords)
+
+        # 思考時間上限設定 (三大選項)：
+        # 1. adaptive (智慧自適應 - 預設)：
+        #    - 深度推理模型 (Hydrogen/Argon) + 複雜架構任務：給滿 150 秒（給予模型充足空間推演 500 行邏輯）
+        #    - 深度推理模型 + 一般日常任務：80 秒
+        #    - 輕量模型 (Flash/Flash-Lite)：35 秒
+        #    - 總逾時自動寬限至至少 300 秒 (5分鐘)
+        # 2. custom (自定義超時)：嚴格遵循指定秒數 (thinking_timeout 或 timeout_sec)
+        # 3. strict (嚴格模式)：堅守模型絕不降級，深度模型給滿 150 秒（或自定義秒數），逾時直接中斷提醒
+        if thinking_policy == "custom":
+            thinking_limit = float(thinking_timeout if thinking_timeout > 0 else timeout_sec)
+            actual_timeout = timeout_sec
+        elif thinking_policy == "strict":
+            thinking_limit = float(thinking_timeout if thinking_timeout > 0 else (150.0 if (is_deep_reasoning and is_heavy_task) else (80.0 if is_deep_reasoning else 35.0)))
+            actual_timeout = max(timeout_sec, 300) if is_heavy_task else timeout_sec
+        else:  # adaptive (預設)
+            if is_deep_reasoning:
+                thinking_limit = 150.0 if is_heavy_task else 80.0
+            else:
+                thinking_limit = 35.0
+            actual_timeout = max(timeout_sec, 300) if is_heavy_task else timeout_sec
+
+        deadline = time.time() + actual_timeout
         stuck_threshold = time.time() + thinking_limit
         last_seen_text_len = 0
         last_seen_thought_len = 0
@@ -706,14 +737,15 @@ def run_agent_task(
             if now - last_feedback_time >= 8.0:
                 last_feedback_time = now
                 elapsed = int(now - t0)
+                policy_tag = f"策略: {thinking_policy}/{int(thinking_limit)}s"
                 if is_thinking and thought_text_len > 0:
-                    sys.stderr.write(f"🧠 [Gemini Web Agent] 深度思考中... (已耗時 {elapsed}s, 思考字數 {thought_text_len})\n")
+                    sys.stderr.write(f"🧠 [Gemini Web Agent] 深度思考中... (已耗時 {elapsed}s, {policy_tag}, 思考字數 {thought_text_len})\n")
                 elif is_thinking:
-                    sys.stderr.write(f"🧠 [Gemini Web Agent] 深度思考中... (已耗時 {elapsed}s)\n")
+                    sys.stderr.write(f"🧠 [Gemini Web Agent] 深度思考中... (已耗時 {elapsed}s, {policy_tag})\n")
                 elif total_text_len > 0:
                     sys.stderr.write(f"⏳ [Gemini Web Agent] 內容生成中... (已耗時 {elapsed}s, 累計字數 {total_text_len})\n")
                 else:
-                    sys.stderr.write(f"⏳ [Gemini Web Agent] 排隊等待回應中... (已耗時 {elapsed}s)\n")
+                    sys.stderr.write(f"⏳ [Gemini Web Agent] 排隊等待回應中... (已耗時 {elapsed}s, {policy_tag})\n")
                 sys.stderr.flush()
 
             # 檢測伺服器錯誤、配額耗盡或權限拒絕（立即終止退出，絕不乾等）
@@ -758,7 +790,7 @@ def run_agent_task(
                 stable_ticks = 0
 
         if not completed:
-            return False, "", [], f"執行逾時 ({timeout_sec} 秒)"
+            return False, "", [], f"執行逾時 ({actual_timeout} 秒，思考閾值 {int(thinking_limit)} 秒)"
 
         # 4. 擷取生成結果（強制滾動以喚醒 Angular 虛擬滾動 Virtual Scrolling）
         extract_js = f"""(() => {{
@@ -805,13 +837,14 @@ def run_agent_task(
                   clone.querySelectorAll('ms-code-block').forEach(cb => {{
                     const lang = cb.getAttribute('data-test-language') || '';
                     const codeEl = cb.querySelector('code');
-                    const codeText = codeEl ? codeEl.innerText : '';
-                    const mdBlock = document.createTextNode(nl + '```' + lang + nl + codeText + nl + '```' + nl);
+                    // 使用 textContent 讀取原始代碼記憶體樹，徹底防止 Chromium 離屏/detached DOM 布局排版截斷
+                    const codeText = codeEl ? (codeEl.textContent || '') : '';
+                    const mdBlock = document.createTextNode(nl + '```' + lang + nl + codeText.trim() + nl + '```' + nl);
                     if (cb.parentNode) cb.parentNode.replaceChild(mdBlock, cb);
                   }});
-                  return clone.innerText.trim();
+                  return (clone.textContent || '').trim();
                 }}
-                return el.innerText.trim();
+                return (el.textContent || el.innerText || '').trim();
               }}).filter(Boolean).join(sep);
               if (tText) turnTexts.push(tText);
             }} else {{
@@ -823,8 +856,8 @@ def run_agent_task(
                 const cTexts = codeBlocks.map(cb => {{
                   const lang = cb.getAttribute('data-test-language') || '';
                   const codeEl = cb.querySelector('code');
-                  const codeText = codeEl ? codeEl.innerText : '';
-                  return '```' + lang + nl + codeText + nl + '```';
+                  const codeText = codeEl ? (codeEl.textContent || '') : '';
+                  return '```' + lang + nl + codeText.trim() + nl + '```';
                 }});
                 turnTexts.push(cTexts.join(sep));
               }}
@@ -904,7 +937,8 @@ def run_agent_task(
         fell_back = False
 
         # 若失敗且啟用了自動降級 (Auto-Fallback)
-        if not success and auto_fallback:
+        # 注意：若 thinking_policy == "strict"，auto_fallback 必定為 False，絕不走入以下階梯
+        if not success and auto_fallback and thinking_policy != "strict":
             # 依序使用階梯備援模型
             ladder = FALLBACK_LADDER.get(initial_model_id, ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"])
             fallback_targets = [c for c in ladder if c != initial_model_id]
@@ -947,6 +981,7 @@ def run_agent_task(
             "output": output,
             "files": files,
             "error": err,
+            "thinking_policy": thinking_policy,
             "elapsed_sec": round(time.time() - t0, 2),
         }
     finally:
@@ -1168,9 +1203,11 @@ if __name__ == "__main__":
     p_task.add_argument("--site", default="aistudio")
     p_task.add_argument("--entry", default="chat", help="入口模式：chat 或 task")
     p_task.add_argument("--thinking-level", default="high")
+    p_task.add_argument("--thinking-policy", choices=["adaptive", "custom", "strict"], default="adaptive", help="思考閾值策略：adaptive(智慧自適應), custom(自定義超時), strict(嚴格模式不降級)")
+    p_task.add_argument("--thinking-timeout", type=int, default=0, help="自定義思考逾時秒數 (0 表示由 policy 決定)")
     p_task.add_argument("--timeout", type=int, default=180)
     p_task.add_argument("--new-chat", action="store_true", help="開新對話")
-    p_task.add_argument("--no-fallback", action="store_true", help="關閉階梯降級")
+    p_task.add_argument("--no-fallback", action="store_true", help="關閉階梯降級 (嚴格模式)")
     p_task.add_argument("--download-dir", default="", help="多模態下載目錄")
     p_task.add_argument("--keep-tab", action="store_true", help="執行完畢後保留瀏覽器分頁不關閉")
 
@@ -1204,7 +1241,9 @@ if __name__ == "__main__":
             site=args.site,
             entry=args.entry,
             thinking_level=args.thinking_level,
-            auto_fallback=not args.no_fallback,
+            thinking_policy=args.thinking_policy,
+            thinking_timeout=args.thinking_timeout,
+            auto_fallback=not args.no_fallback and args.thinking_policy != "strict",
             timeout_sec=args.timeout,
             new_chat=args.new_chat,
             download_dir=args.download_dir,

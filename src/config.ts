@@ -7,6 +7,7 @@ export interface PluginConfig {
   defaultModel: string
   autoFallback: boolean
   fallbackMode: 'ladder' | 'strict'
+  thinkingPolicy: 'adaptive' | 'custom' | 'strict'
   thinkingLevel: string
   timeoutSec: number
   port: number
@@ -19,6 +20,7 @@ export const DEFAULT_CONFIG: PluginConfig = {
   defaultModel: 'gemini-3.5-flash-lite',
   autoFallback: true,
   fallbackMode: 'ladder',
+  thinkingPolicy: 'adaptive',
   thinkingLevel: 'high',
   timeoutSec: 180,
   port: 9222,

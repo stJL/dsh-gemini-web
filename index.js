@@ -428,6 +428,7 @@ var DEFAULT_CONFIG = {
   defaultModel: "gemini-3.5-flash-lite",
   autoFallback: true,
   fallbackMode: "ladder",
+  thinkingPolicy: "adaptive",
   thinkingLevel: "high",
   timeoutSec: 180,
   port: 9222,
@@ -578,9 +579,16 @@ async function executeAgentTask(options) {
   }
   const agentlimbScript = findAgentLimbScript();
   const cdpScript = findCliScript();
+  const thinkingPolicy = options.thinkingPolicy || cfg.thinkingPolicy || (cfg.fallbackMode === "strict" ? "strict" : "adaptive");
+  const isStrict = thinkingPolicy === "strict" || cfg.fallbackMode === "strict" || cfg.autoFallback === false || options.noFallback;
   const targetModel = options.model || cfg.defaultModel || "gemini-3.5-flash-lite";
   const targetSite = options.site || "aistudio";
-  const timeoutSec = options.timeoutSec || cfg.timeoutSec || 180;
+  let baseTimeout = options.timeoutSec || cfg.timeoutSec || 180;
+  const isHeavyTask = options.task.length > 150 || /(?:c\+\+|cpp|rust|紅黑樹|red-black|算法|演算法|架構|從零|完整實作|生產級|完整代碼|重構)/i.test(options.task);
+  if (thinkingPolicy === "adaptive" && isHeavyTask) {
+    baseTimeout = Math.max(baseTimeout, 300);
+  }
+  const timeoutSec = baseTimeout;
   let isNewChat = false;
   if (options.newChat !== undefined) {
     isNewChat = options.newChat;
@@ -608,10 +616,15 @@ async function executeAgentTask(options) {
         targetSite,
         "--timeout",
         String(timeoutSec),
+        "--thinking-policy",
+        thinkingPolicy,
         "--download-dir",
         downloadDir
       ];
-      let safeThinking = options.thinkingLevel || "high";
+      if (options.thinkingTimeout) {
+        args.push("--thinking-timeout", String(options.thinkingTimeout));
+      }
+      let safeThinking = options.thinkingLevel || cfg.thinkingLevel || "high";
       if (safeThinking.includes("extra") || safeThinking === "xhigh" || safeThinking === "max") {
         safeThinking = "high";
       }
@@ -620,11 +633,12 @@ async function executeAgentTask(options) {
         args.push("--new-chat");
       if (options.entry)
         args.push("--entry", options.entry);
-      if (cfg.autoFallback === false || cfg.fallbackMode === "strict") {
+      if (isStrict) {
         args.push("--no-fallback");
       }
+      const nodeExecTimeout = (timeoutSec + 30) * 1000;
       const { stdout } = await execFileAsync2(venv, args, {
-        timeout: (timeoutSec + 15) * 1000,
+        timeout: nodeExecTimeout,
         env: { ...process.env, PYTHONIOENCODING: "utf-8" }
       });
       const lines = stdout.trim().split(`
@@ -682,7 +696,7 @@ async function executeAgentTask(options) {
       if (status.cdp.port)
         args.push("--port", String(status.cdp.port));
       const { stdout } = await execFileAsync2(venv, args, {
-        timeout: (timeoutSec + 15) * 1000,
+        timeout: (timeoutSec + 30) * 1000,
         env: { ...process.env, PYTHONIOENCODING: "utf-8" }
       });
       return {
@@ -981,6 +995,26 @@ ${res.error}
           }
           raw = raw.replace(/--thinking(?:-level)?\s+[^\s]+/i, "").trim();
         }
+        let thinkingPolicy = undefined;
+        const policyMatch = raw.match(/--(?:thinking-)?policy\s+([^\s]+)/i);
+        if (policyMatch) {
+          const p = policyMatch[1].toLowerCase();
+          if (p === "adaptive" || p === "custom" || p === "strict")
+            thinkingPolicy = p;
+          raw = raw.replace(/--(?:thinking-)?policy\s+[^\s]+/i, "").trim();
+        }
+        let timeoutSec = undefined;
+        const timeoutMatch = raw.match(/--timeout\s+(\d+)/i);
+        if (timeoutMatch) {
+          timeoutSec = parseInt(timeoutMatch[1], 10);
+          raw = raw.replace(/--timeout\s+\d+/i, "").trim();
+        }
+        let noFallback = false;
+        if (/--(?:no-fallback|strict)\b/i.test(raw)) {
+          noFallback = true;
+          thinkingPolicy = "strict";
+          raw = raw.replace(/--(?:no-fallback|strict)\b/i, "").trim();
+        }
         if (!model) {
           if (/hydrogen/i.test(raw))
             model = "gemini-4-hydrogen";
@@ -1011,6 +1045,9 @@ ${res.error}
           model,
           site,
           thinkingLevel,
+          thinkingPolicy,
+          timeoutSec,
+          noFallback,
           newChat
         });
         if (!res.ok) {

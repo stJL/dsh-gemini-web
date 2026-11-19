@@ -138,6 +138,28 @@ export function apply(ctx: any) {
           raw = raw.replace(/--thinking(?:-level)?\s+[^\s]+/i, '').trim()
         }
 
+        let thinkingPolicy: 'adaptive' | 'custom' | 'strict' | undefined = undefined
+        const policyMatch = raw.match(/--(?:thinking-)?policy\s+([^\s]+)/i)
+        if (policyMatch) {
+          const p = policyMatch[1].toLowerCase()
+          if (p === 'adaptive' || p === 'custom' || p === 'strict') thinkingPolicy = p
+          raw = raw.replace(/--(?:thinking-)?policy\s+[^\s]+/i, '').trim()
+        }
+
+        let timeoutSec: number | undefined = undefined
+        const timeoutMatch = raw.match(/--timeout\s+(\d+)/i)
+        if (timeoutMatch) {
+          timeoutSec = parseInt(timeoutMatch[1], 10)
+          raw = raw.replace(/--timeout\s+\d+/i, '').trim()
+        }
+
+        let noFallback = false
+        if (/--(?:no-fallback|strict)\b/i.test(raw)) {
+          noFallback = true
+          thinkingPolicy = 'strict'
+          raw = raw.replace(/--(?:no-fallback|strict)\b/i, '').trim()
+        }
+
         // 2. 自然語言意圖提取 (防止用戶說了 "用 Gemini 4 Hydrogen" 卻被誤送給預設模型)
         if (!model) {
           if (/hydrogen/i.test(raw)) model = 'gemini-4-hydrogen'
@@ -161,6 +183,9 @@ export function apply(ctx: any) {
           model,
           site,
           thinkingLevel,
+          thinkingPolicy,
+          timeoutSec,
+          noFallback,
           newChat,
         })
         if (!res.ok) {

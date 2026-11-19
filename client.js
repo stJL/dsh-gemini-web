@@ -424,6 +424,13 @@ window.__ModuleLoader__.load({
         group_paid: '🔒 付费模型池 (需绑付费Key・默认保护防扣款)',
         tag_media: '[多模态专用]',
         tag_paid: '[需付费Key]',
+        thinking_policy_title: '思考阈值与降级策略：',
+        thinking_policy_adaptive_desc: '🌟 智能自适应：复杂架构/算法任务自动给予 150s 思考 / 300s 总时；思维链心跳防杀；遇塞车阶梯备援',
+        thinking_policy_custom_desc: '⏱️ 自定义超时：严格遵循下方设定的任务超时秒数；思维链心跳防杀；遇塞车阶梯备援',
+        thinking_policy_strict_desc: '🛑 严格模式：坚守所选模型绝不降级；遇超时或塞车立即中止并提醒，绝不偷偷切换轻量模型',
+        thinking_policy_adaptive_opt: '🌟 智能自适应模式 (推荐)',
+        thinking_policy_custom_opt: '⏱️ 自定义超时模式',
+        thinking_policy_strict_opt: '🛑 严格模式 (绝不降级)',
         fallback_title: '免费池塞车阶梯降级切换：',
         fallback_strict_desc: '🛑 严格模式：严格保持所选模型，遇塞车立即中止并询问用户',
         fallback_ladder_desc: '🌟 智能阶梯：依序尝试 (Argon ➔ Hydrogen ➔ Flash ➔ Flash Lite)，全满时询问用户',
@@ -554,6 +561,13 @@ window.__ModuleLoader__.load({
         group_paid: '🔒 付費模型池 (需綁付費Key・預設保護防扣款)',
         tag_media: '[多模態專用]',
         tag_paid: '[需付費Key]',
+        thinking_policy_title: '思考閾值與降級策略：',
+        thinking_policy_adaptive_desc: '🌟 智慧自適應：複雜架構/演算法任務自動給予 150s 思考 / 300s 總時；思維鏈心跳防殺；遇塞車階梯備援',
+        thinking_policy_custom_desc: '⏱️ 自定義超時：嚴格遵循下方設定的任務超時秒數；思維鏈心跳防殺；遇塞車階梯備援',
+        thinking_policy_strict_desc: '🛑 嚴格模式：堅守所選模型絕不降級；遇超時或塞車立即中止並提醒，絕不偷偷切換輕量模型',
+        thinking_policy_adaptive_opt: '🌟 智慧自適應模式 (推薦)',
+        thinking_policy_custom_opt: '⏱️ 自定義超時模式',
+        thinking_policy_strict_opt: '🛑 嚴格模式 (絕不降級)',
         fallback_title: '免費池塞車階梯降級切換：',
         fallback_strict_desc: '🛑 嚴格模式：嚴格保持所選模型，遇塞車立即中止並詢問用戶',
         fallback_ladder_desc: '🌟 智慧階梯：依序嘗試 (Argon ➔ Hydrogen ➔ Flash ➔ Flash Lite)，全滿時詢問用戶',
@@ -684,6 +698,13 @@ window.__ModuleLoader__.load({
         group_paid: '🔒 Paid Models Pool (Requires Paid Key · Guarded)',
         tag_media: '[Multimodal Only]',
         tag_paid: '[Paid Key Required]',
+        thinking_policy_title: 'Thinking Threshold & Fallback Policy:',
+        thinking_policy_adaptive_desc: '🌟 Smart Adaptive: Auto-allocates 150s thinking / 300s total for complex architecture/algorithms; liveness heartbeat; ladder fallback on congestion',
+        thinking_policy_custom_desc: '⏱️ Custom Timeout: Strictly follows the timeout seconds specified below; liveness heartbeat; ladder fallback on congestion',
+        thinking_policy_strict_desc: '🛑 Strict Mode: Strictly maintains requested model; aborts immediately on timeout or congestion without falling back to lightweight models',
+        thinking_policy_adaptive_opt: '🌟 Smart Adaptive Mode (Recommended)',
+        thinking_policy_custom_opt: '⏱️ Custom Timeout Mode',
+        thinking_policy_strict_opt: '🛑 Strict Mode (No Fallback)',
         fallback_title: 'Free Pool Congestion Fallback Strategy:',
         fallback_strict_desc: '🛑 Strict Mode: Maintain selected model; abort immediately on congestion & ask user',
         fallback_ladder_desc: '🌟 Smart Ladder: Try sequentially (Argon ➔ Hydrogen ➔ Flash ➔ Flash Lite), ask user if all full',
@@ -1380,28 +1401,35 @@ window.__ModuleLoader__.load({
             ])
           })(),
 
-            // 設定 3: 塞車階梯降級策略 (Fallback Mode)
+            // 設定 3: 思考閾值與降級策略 (Thinking Policy)
             h('div', { className: 'gw-setting-row' }, [
               h('div', { className: 'gw-setting-info' }, [
-                h('div', { style: { fontWeight: 500 } }, t('fallback_title')),
+                h('div', { style: { fontWeight: 500 } }, t('thinking_policy_title')),
                 h('div', { style: { fontSize: 11, opacity: 0.6 } },
-                  (config.fallbackMode === 'strict' || config.autoFallback === false)
-                    ? t('fallback_strict_desc')
-                    : t('fallback_ladder_desc'))
+                  (config.thinkingPolicy === 'strict' || config.fallbackMode === 'strict')
+                    ? t('thinking_policy_strict_desc')
+                    : (config.thinkingPolicy === 'custom'
+                        ? t('thinking_policy_custom_desc')
+                        : t('thinking_policy_adaptive_desc')))
               ]),
               h('div', { className: 'gw-setting-ctrl' }, [
                 h('select', {
                   className: 'gw-select',
                   style: { minWidth: 160 },
-                  value: config.fallbackMode || (config.autoFallback !== false ? 'ladder' : 'strict'),
-                  onChange: (e) => setConfig({
-                    ...config,
-                    fallbackMode: e.target.value,
-                    autoFallback: e.target.value === 'ladder'
-                  })
+                  value: config.thinkingPolicy || (config.fallbackMode === 'strict' ? 'strict' : 'adaptive'),
+                  onChange: (e) => {
+                    const policy = e.target.value;
+                    setConfig({
+                      ...config,
+                      thinkingPolicy: policy,
+                      fallbackMode: policy === 'strict' ? 'strict' : 'ladder',
+                      autoFallback: policy !== 'strict'
+                    });
+                  }
                 }, [
-                  h('option', { value: 'ladder' }, t('fallback_ladder_opt')),
-                  h('option', { value: 'strict' }, t('fallback_strict_opt')),
+                  h('option', { value: 'adaptive' }, t('thinking_policy_adaptive_opt')),
+                  h('option', { value: 'custom' }, t('thinking_policy_custom_opt')),
+                  h('option', { value: 'strict' }, t('thinking_policy_strict_opt')),
                 ])
               ])
             ]),
@@ -1419,7 +1447,6 @@ window.__ModuleLoader__.load({
                   onChange: (e) => setConfig({ ...config, thinkingLevel: e.target.value })
                 }, [
                   h('option', { value: 'high' }, t('thinking_high')),
-                  h('option', { value: 'extra-high', disabled: true }, t('thinking_extra_high')),
                   h('option', { value: 'medium' }, t('thinking_medium')),
                   h('option', { value: 'low' }, t('thinking_low')),
                 ])
