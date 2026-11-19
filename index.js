@@ -611,6 +611,11 @@ async function executeAgentTask(options) {
         "--download-dir",
         downloadDir
       ];
+      let safeThinking = options.thinkingLevel || "high";
+      if (safeThinking.includes("extra") || safeThinking === "xhigh" || safeThinking === "max") {
+        safeThinking = "high";
+      }
+      args.push("--thinking-level", safeThinking);
       if (isNewChat)
         args.push("--new-chat");
       if (options.entry)
@@ -889,7 +894,7 @@ function apply(ctx) {
           thinking_level: {
             type: "string",
             required: false,
-            description: "思考等級：high (預設), extra-high, medium, 或 low"
+            description: "思考等級：high (預設穩定), medium, 或 low。注意：extra-high 已封印，避免免費池引發 Permission Denied 錯誤"
           },
           new_chat: {
             type: "boolean",
@@ -967,6 +972,15 @@ ${res.error}
           site = siteMatch[1];
           raw = raw.replace(/--site\s+[^\s]+/i, "").trim();
         }
+        let thinkingLevel = undefined;
+        const thinkingMatch = raw.match(/--thinking(?:-level)?\s+([^\s]+)/i);
+        if (thinkingMatch) {
+          thinkingLevel = thinkingMatch[1].toLowerCase();
+          if (thinkingLevel.includes("extra") || thinkingLevel === "xhigh" || thinkingLevel === "max") {
+            thinkingLevel = "high";
+          }
+          raw = raw.replace(/--thinking(?:-level)?\s+[^\s]+/i, "").trim();
+        }
         if (!model) {
           if (/hydrogen/i.test(raw))
             model = "gemini-4-hydrogen";
@@ -996,6 +1010,7 @@ ${res.error}
           task: cleanTask,
           model,
           site,
+          thinkingLevel,
           newChat
         });
         if (!res.ok) {

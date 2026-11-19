@@ -935,14 +935,11 @@ def _aistudio_tune_playground_max(page, thinking_level: str = "max", max_output:
                         });
                         if (!opts.length) return '';
                         let target = null;
-                        if (mode === 'max' || mode === 'high') {
-                            // AI Studio Hydrogen 等模型不支援 Extra High，安全優先選 High
+                        if (mode === 'max' || mode === 'high' || mode === 'extra high' || mode === 'xhigh') {
+                            // 封印 Extra High：免費池優先選 High，其次選 Medium，絕不選 Extra High（防 403 權限拒絕與分鐘級卡頓）
                             target = opts.find(o => /^high$/i.test((o.innerText || '').trim()))
-                                  || opts.find(o => /extra\\s*high/i.test(o.innerText || ''))
-                                  || opts[opts.length - 1];
-                        } else if (mode === 'extra high' || mode === 'xhigh') {
-                            target = opts.find(o => /extra\\s*high/i.test(o.innerText || ''))
-                                  || opts.find(o => /^high$/i.test((o.innerText || '').trim()));
+                                  || opts.find(o => /medium/i.test(o.innerText || ''))
+                                  || opts[0];
                         } else {
                             target = opts.find(o => (o.innerText || '').toLowerCase().includes(mode));
                         }
@@ -2480,7 +2477,7 @@ def main() -> None:
     p_pg.add_argument("--system", default="", help="系统指令 (System Instructions)")
     p_pg.add_argument("--system-file", default="", help="从本地文件读取文本并写入 System Instructions（如世界观设定 .md/.txt）")
     p_pg.add_argument("--file", dest="files", action="append", default=[], help="无弹窗上传本地文件（可多次传入，支持 txt/md/pdf/docx/图片/音视频）")
-    p_pg.add_argument("--thinking-level", default="max", help="思考等级: max(默认自动选最高如 Extra High) | high | medium | low | default(保留默认)")
+    p_pg.add_argument("--thinking-level", default="high", help="思考等级: high(默认推荐，兼具深度与速度) | medium | low | default(保留默认)；注意: extra-high 已封印防卡死")
     p_pg.add_argument("--no-max-output", action="store_true", help="不自动将 Output length 拉满至模型上限(1048576)")
     p_pg.add_argument("--with-thoughts", action="store_true", help="在输出中附带模型完整思考链（默认省略以省 Token）")
     p_pg.add_argument("--out-file", default="", help="将生成的文本/代码直接写入本地文件，stdout 仅返回回执")

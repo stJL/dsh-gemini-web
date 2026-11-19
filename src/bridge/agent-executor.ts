@@ -107,6 +107,13 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
         '--timeout', String(timeoutSec),
         '--download-dir', downloadDir,
       ]
+      // 封印 Extra High：免費池強制安全降級至 high，避免 Permission Denied 與死迴圈
+      let safeThinking = options.thinkingLevel || 'high'
+      if (safeThinking.includes('extra') || safeThinking === 'xhigh' || safeThinking === 'max') {
+        safeThinking = 'high'
+      }
+      args.push('--thinking-level', safeThinking)
+
       if (isNewChat) args.push('--new-chat')
       if (options.entry) args.push('--entry', options.entry)
       if (cfg.autoFallback === false || cfg.fallbackMode === 'strict') {

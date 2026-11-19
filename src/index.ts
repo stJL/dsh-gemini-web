@@ -53,7 +53,7 @@ export function apply(ctx: any) {
           thinking_level: {
             type: 'string',
             required: false,
-            description: '思考等級：high (預設), extra-high, medium, 或 low',
+            description: '思考等級：high (預設穩定), medium, 或 low。注意：extra-high 已封印，避免免費池引發 Permission Denied 錯誤',
           },
           new_chat: {
             type: 'boolean',
@@ -117,7 +117,7 @@ export function apply(ctx: any) {
         let model: string | undefined = undefined
         let site: 'aistudio' | 'flow' | 'gemini' | undefined = undefined
 
-        // 1. 旗標匹配 (--model, --site)
+        // 1. 旗標匹配 (--model, --site, --thinking)
         const modelMatch = raw.match(/--model\s+([^\s]+)/i)
         if (modelMatch) {
           model = modelMatch[1]
@@ -127,6 +127,15 @@ export function apply(ctx: any) {
         if (siteMatch) {
           site = siteMatch[1] as any
           raw = raw.replace(/--site\s+[^\s]+/i, '').trim()
+        }
+        let thinkingLevel: string | undefined = undefined
+        const thinkingMatch = raw.match(/--thinking(?:-level)?\s+([^\s]+)/i)
+        if (thinkingMatch) {
+          thinkingLevel = thinkingMatch[1].toLowerCase()
+          if (thinkingLevel.includes('extra') || thinkingLevel === 'xhigh' || thinkingLevel === 'max') {
+            thinkingLevel = 'high' // 封印 Extra High
+          }
+          raw = raw.replace(/--thinking(?:-level)?\s+[^\s]+/i, '').trim()
         }
 
         // 2. 自然語言意圖提取 (防止用戶說了 "用 Gemini 4 Hydrogen" 卻被誤送給預設模型)
@@ -151,6 +160,7 @@ export function apply(ctx: any) {
           task: cleanTask,
           model,
           site,
+          thinkingLevel,
           newChat,
         })
         if (!res.ok) {

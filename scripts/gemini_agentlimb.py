@@ -494,6 +494,58 @@ def run_agent_task(
         )
         time.sleep(0.3)
 
+        # 1.2 封印 Extra High：檢測並確保 Thinking Level 不超過 High，避免免費池 Permission Denied 與分鐘級假死
+        safe_thinking = "high"
+        if thinking_level and thinking_level.lower() in ("medium", "low"):
+            safe_thinking = thinking_level.lower()
+
+        tune_js = f"""(async (desiredLevel) => {{
+          const wait = ms => new Promise(r => setTimeout(r, ms));
+          try {{
+            // 檢查並調試 Thinking Level 下拉選單
+            const tl = document.querySelector('mat-select[aria-label*="Thinking"], [aria-label*="Thinking"]');
+            if (tl) {{
+              const curTxt = (tl.innerText || '').toLowerCase();
+              if (curTxt.includes('extra') || desiredLevel) {{
+                tl.click();
+                await wait(250);
+                const opts = Array.from(document.querySelectorAll('.cdk-overlay-pane mat-option')).filter(
+                  o => o.getAttribute('aria-disabled') !== 'true' && !/\\bpaid\\b/i.test(o.innerText || '')
+                );
+                // 嚴格封印 Extra High：優先選擇 High，其次 Medium，絕不選 Extra High
+                let target = null;
+                if (desiredLevel === 'medium') {{
+                  target = opts.find(o => /medium/i.test(o.innerText || ''));
+                }} else if (desiredLevel === 'low') {{
+                  target = opts.find(o => /low/i.test(o.innerText || ''));
+                }} else {{
+                  target = opts.find(o => /^high$/i.test((o.innerText || '').trim()))
+                        || opts.find(o => /high/i.test(o.innerText || '') && !/extra/i.test(o.innerText || ''))
+                        || opts.find(o => /medium/i.test(o.innerText || ''))
+                        || opts.find(o => !/extra/i.test(o.innerText || ''));
+                }}
+                if (target) {{
+                  target.click();
+                  await wait(200);
+                }} else {{
+                  document.body.click();
+                  await wait(150);
+                }}
+              }}
+            }}
+            // 自動關閉任何干擾彈窗（如 Link a paid API key）
+            const dismissBtn = Array.from(document.querySelectorAll('button')).find(b => 
+              /dismiss|close/i.test(b.innerText || '') || /close/i.test(b.getAttribute('aria-label') || '')
+            );
+            if (dismissBtn && dismissBtn.closest('[role="dialog"], mat-dialog-container')) {{
+              dismissBtn.click();
+              await wait(150);
+            }}
+          }} catch(e) {{}}
+          return true;
+        }})('{safe_thinking}')"""
+        agentlimb_client.eval_js(tune_js, tab_id=tab_id)
+
         # 1.5 記錄點擊前初始 turns 數量與廣播器狀態
         init_js = """(() => {
           return {
@@ -514,9 +566,9 @@ def run_agent_task(
         # 3. 監控輸出與完成狀態
         has_started_generating = False
         deadline = time.time() + timeout_sec
-        # 深度思考模型 (Argon / Hydrogen / Decision) 思考時間上限設為 180 秒 (3 分鐘)，普通模型 60 秒
+        # 深度思考模型思考時間上限設為 80 秒，普通模型 35 秒（超時無增長立即階梯降級，拒絕乾等）
         is_deep_reasoning = any(k in current_model_id.lower() for k in ["argon", "hydrogen", "decision"])
-        thinking_limit = 180.0 if is_deep_reasoning else 60.0
+        thinking_limit = 80.0 if is_deep_reasoning else 35.0
         stuck_threshold = time.time() + thinking_limit
         last_seen_text_len = 0
         last_seen_thought_len = 0
