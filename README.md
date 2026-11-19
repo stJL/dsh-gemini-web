@@ -45,7 +45,7 @@
 > [!IMPORTANT]
 > **必须在提示词开头输入 `/gemini-web-agent` 斜杠指令！**
 > 
-> DSH 宿主 AI（如 DeepSeek V3、Claude、GPT 等）本身具备通用的代码与文本生成能力。**若不加上 `/gemini-web-agent`，AI 会倾向于在本地直接作答，直接忽略外部工具**。
+> DSH 宿主 AI（如 DeepSeek、Claude、GPT 等）本身具备通用的代码与文本生成能力。**若不加上 `/gemini-web-agent`，AI 会倾向于在本地直接作答，直接忽略外部工具**。
 > 
 > 只要在提示词开头加上 `/gemini-web-agent`，宿主 AI 就会立刻触发调度协议，严格执行流程，将任务委派给外部 Google 网页端执行！
 
