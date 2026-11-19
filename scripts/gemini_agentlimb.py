@@ -986,14 +986,16 @@ def run_agent_task(
                 ext = ext_map.get(lang, ".txt")
                 stem = "gemini_generated_code"
                 tl = task.lower()
-                if "queue" in tl or "無鎖" in task or "佇列" in task or "队列" in task:
-                    stem = "lock_free_queue"
-                elif "thread" in tl or "線程池" in task or "线程池" in task:
+                if "thread" in tl or "線程池" in task or "线程池" in task:
                     stem = "thread_pool"
+                elif "queue" in tl or "無鎖" in task or "佇列" in task or "队列" in task:
+                    stem = "lock_free_queue"
                 elif "crawler" in tl or "爬蟲" in task or "爬虫" in task:
                     stem = "async_crawler"
                 elif "tree" in tl or "紅黑樹" in task or "红黑树" in task:
                     stem = "red_black_tree"
+                elif "actor" in tl or "akka" in tl:
+                    stem = "actor_system"
 
                 try:
                     code_file_path = out_path / f"{stem}{ext}"

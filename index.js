@@ -881,12 +881,14 @@ function apply(ctx) {
     try {
       const toolDef = {
         name: "gemini_web_agent",
-        description: `【\uD83D\uDEA8 最優先調用的 Google 外部免費算力與多模態網關 / 嚴禁擅自代勞】
-當使用者提到「gemini_web_agent」、「gemini-web-agent」、「gemini-web」、「gw」、「Gemini 網頁端」、「Google 網頁」、「AI Studio」、「Google Flow」、指定相關模型（Hydrogen, Argon, Neon, Flash, Nano Banana, Omni, Lyria, TTS 等），或提出需要高算力架構推演、C++/Rust/Python 高效能演算法（如無鎖佇列、線程池、記憶體模型）、生圖生視頻等複雜任務時：
+        description: `【\uD83D\uDEA8 Google 外部免費算力與多模態網關 / 嚴格先問後用規範】
+【\uD83D\uDEA8 致命調用前置條件 - 嚴禁擅自提前發包】：
+本工具嚴格遵循原作者「一律先問後用」規範。在使用者提出任何需求後，你【絕對禁止】在第 1 步直接調用本工具！
+你必須在第 1 步先在聊天中輸出【Gemini Web Agent 調度提案卡】（列出推薦渠道 site、入口 entry、模型 model、思考等級 thinking_level、話題隔離 new_chat 與 0 成本預算），並在此【停止當前回應】，等待使用者確認！
+只有當使用者回覆「確認」、「1」，或使用者的提問指令中明確包含直通標籤（如「[免確認]」、「直接發包」）時，才允許在下一輪調用本工具！
 1. \uD83D\uDED1【明令禁止本地擅自代勞】：嚴禁在本地自行編寫答案或擅自代勞作答！
 2. \uD83D\uDED1【嚴禁 Subagent 劫持】：嚴禁調用 subagent 或 list_subagent_models 打付費 Google API 路由！使用者的核心訴求是使用外部瀏覽器的【零 Token 免費池 (key_off)】！
-3. \uD83D\uDCE6【致命鐵律：禁止摘要，必須 100% 完整貼出代碼全文】：調用完成後，使用者在前端聊天視窗看不見 tool result 內部細節！你必須在最終回覆中將本工具回傳之「降級流程通知」、「落地檔案超連結」以及「全部程式碼與註釋全文」100% 原封不動完整呈現給使用者，嚴禁僅以「已為您完成...」等一句話摘要概括！未貼出代碼視同嚴重調度失敗！
-4. \uD83D\uDEE1️【先問後用提案工作流】：常規下先出具調度提案卡，待用戶確認後（回覆「確認」、「1」）發包；若用戶附帶直通標籤（/gw, [免確認], 直接發包, 立即執行）則第一時間直接發包！`,
+3. \uD83D\uDCE6【調用完成後的展示義務】：調用完成後，必須完整呈現降級流程通知、落地檔案超連結以及核心架構說明與程式碼！`,
         parameters: {
           type: "object",
           required: ["task"],
