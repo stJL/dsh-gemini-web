@@ -383,7 +383,7 @@ def _run_gemini_web_task(
                 code_text = code_block_match.group(2)
             else:
                 # 檢測 gemini.google.com 網頁端特有的代碼標題格式 (例如 "Rust\nuse ...", "C++\n#include ...", "Python\nimport ...")
-                alt_match = re.search(r'(?:^|\n)(Rust|C\+\+|Python|Go|TypeScript|JavaScript|HTML|CSS|TOML|JSON)\s*\n(.*?)(?=\n[A-Z][a-z]+|\Z)', final_text, re.DOTALL)
+                alt_match = re.search(r'(?:^|\n)(Rust|C\+\+|Python|Go|TypeScript|JavaScript|HTML|CSS|TOML|JSON)\s*\n(.*?)(?=\n\s*(?:[A-Z][a-z]+|#{1,6}\s+|[\u4e00-\u9fa5]{2,})|\Z)', final_text, re.DOTALL)
                 if alt_match:
                     lang = alt_match.group(1).lower().strip()
                     code_text = alt_match.group(2)
