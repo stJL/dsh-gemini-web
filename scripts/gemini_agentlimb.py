@@ -138,22 +138,43 @@ def _fetch_blob_as_data_url(tab_id: int, blob_url: str) -> str:
 
 
 def _extract_and_save_code(text: str, task: str, download_dir: str = "") -> list[str]:
-    """统一提取文本中的代码块并保存到本地工作区（KISS 简洁版，杜绝重复代码）"""
+    """统一提取文本中的代码块并保存到本地工作区（KISS 简洁版，杜绝截断与重复代码）"""
     if not text:
         return []
     code_text = ""
     lang = ""
-    code_block_match = re.search(r'```([a-zA-Z0-9_\-\+\#]+)?\s*\n(.*?)```', text, re.DOTALL)
-    if code_block_match:
-        lang = (code_block_match.group(1) or "").lower().strip()
-        code_text = code_block_match.group(2)
-    else:
-        alt_match = re.search(r'(?:^|\n)(Rust|C\+\+|Python|Go|TypeScript|JavaScript|HTML|CSS|TOML|JSON)\s*\n(.*?)(?=\n\s*(?:[A-Z][a-z]+|#{1,6}\s+|[\u4e00-\u9fa5]{2,})|\Z)', text, re.DOTALL)
-        if alt_match:
-            lang = alt_match.group(1).lower().strip()
-            code_text = alt_match.group(2)
 
+    # 1. 优先尝试提取 Markdown 围栏代码块（若有多块，选取最长的主实现代码块）
+    blocks = re.findall(r'```([a-zA-Z0-9_\-\+\#]+)?\s*\n(.*?)```', text, re.DOTALL)
+    if blocks:
+        longest_block = max(blocks, key=lambda b: len(b[1].strip()))
+        lang = (longest_block[0] or "").lower().strip()
+        code_text = longest_block[1]
+
+    # 2. 若未找到 Markdown 围栏，支持 Gemini Web 网页版富文本 DOM 直出格式 (如 "Python\nimport ...")
     if not code_text:
+        m_start = re.search(r'(?:^|\n)(Rust|C\+\+|Python|Go|TypeScript|JavaScript|HTML|CSS|Bash)\s*\n', text, re.IGNORECASE)
+        if m_start:
+            lang = m_start.group(1).lower().strip()
+            code_tail = text[m_start.end():]
+            code_lines = []
+            for line in code_tail.split('\n'):
+                stripped = line.strip()
+                # 检查是否遇到了代码块外部的自然语言段落标题（注意：代码内部的 #、// 等注释行严禁误判为标题）
+                is_comment = stripped.startswith(('#', '//', '/*', '*', '"""', "'''"))
+                is_code_kw = any(stripped.startswith(kw) for kw in (
+                    'import ', 'from ', 'def ', 'class ', 'async ', 'await ', 'if ', 'elif ', 'else:', 'try:',
+                    'except ', 'finally:', 'with ', 'for ', 'while ', 'return ', 'raise ', '@', 'pass', 'break',
+                    'continue', 'self.', 'logger.', 'print(', 'fn ', 'struct ', 'impl ', 'pub ', 'use ', 'const ',
+                    'let ', 'package ', 'func ', 'template ', 'namespace ', 'int ', 'void ', 'auto '
+                ))
+                if stripped and not is_comment and not is_code_kw:
+                    if re.match(r'^(?:#{1,6}\s+|[一二三四五六七八九十\d]+[、\.]\s*|生产环境|使用说明|注意事项|运行说明|总结|扩展建议|核心特性)', stripped):
+                        break
+                code_lines.append(line)
+            code_text = '\n'.join(code_lines)
+
+    if not code_text or len(code_text.strip()) < 30:
         return []
 
     ext_map = {
@@ -162,7 +183,7 @@ def _extract_and_save_code(text: str, task: str, download_dir: str = "") -> list
         "javascript": ".js", "js": ".js", "typescript": ".ts", "ts": ".ts",
         "html": ".html", "css": ".css", "sh": ".sh", "bash": ".sh", "json": ".json", "yaml": ".yaml", "yml": ".yml", "toml": ".toml"
     }
-    ext = ext_map.get(lang, ".txt")
+    ext = ext_map.get(lang, ".py" if "python" in task.lower() else ".txt")
     stem = "gemini_generated_code"
     tl = task.lower()
     if any(k in tl for k in ("thread", "线程池")):
@@ -175,6 +196,8 @@ def _extract_and_save_code(text: str, task: str, download_dir: str = "") -> list
         stem = "async_crawler"
     elif any(k in tl for k in ("tree", "红黑树")):
         stem = "red_black_tree"
+    elif any(k in tl for k in ("limiter", "限流", "重试")):
+        stem = "rate_limiter"
 
     out_p = Path(download_dir).resolve() if download_dir else (Path.cwd() / "downloads").resolve()
     out_p.mkdir(parents=True, exist_ok=True)

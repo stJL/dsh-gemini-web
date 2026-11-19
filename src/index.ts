@@ -112,11 +112,17 @@ export function apply(ctx: any) {
             })
             fileLinks = '📁 **成果文件已落地存档至本地工作区**：\n' + linkItems.join('\n') + '\n\n'
           }
-          const instructionHeader = `【🚨 系统核心指令：请宿主 AI 在最终回复中务必完整呈现：
+          const instructionHeader = `【系统核心指令：请宿主 AI 在最终回复中务必完整呈现：
 1. 🔄【模型降级调度流程通知】（若有降级）；
 2. 📁【落地文件存档链接与图片预览】（必须原样保留 file:/// 绝对路径，严禁改为相对路径 downloads/，否则前端无法预览）；
-3. 💻【核心架构说明与关键代码精华】（展示核心类、重要算法实现与注释，严禁仅回复一句话摘要）！】\n\n`
-          return `${instructionHeader}${notice}${fileLinks}${res.output}`
+3. 💻【核心架构说明与实现精华】（展示关键设计思路、核心类与使用方法。完整源码已落盘至上方工作区文件，引导用户直接点击文件链接查看完整源码，无需在回复中全量重抄超长代码，防止 SSE 串流中断）！】\n\n`
+
+          let displayOutput = res.output || ''
+          // 若有落地代码文件且内容超长（> 2500 字符），智能截取前半部分核心精华 + 引导提示，防止小模型因重抄超万字而遭遇 Google API SSE 串流中断 (Incomplete JSON segment at the end)
+          if (res.files && res.files.length > 0 && displayOutput.length > 2500) {
+            displayOutput = displayOutput.slice(0, 2200) + '\n\n...\n> 💡 **完整实现与全部代码已完整落盘至上方工作区文件**，请直接点击上方 `file:///` 链接查看完整源码与测试用例。'
+          }
+          return `${instructionHeader}${notice}${fileLinks}${displayOutput}`
         },
       }
 
