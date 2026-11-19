@@ -871,7 +871,7 @@ function createApiRouter() {
 
 // src/index.ts
 var name = "dsh-gemini-web";
-var inject = ["tools", "commands", "webServer"];
+var inject = ["tools", "webServer"];
 function apply(ctx) {
   ctx.inject(["tools"], (scoped) => {
     try {
@@ -982,36 +982,6 @@ ${res.error}
       scoped.tools.register({ ...toolDef, name: "gemini-web-agent" });
     } catch (e) {
       console.error("Failed to register gemini_web_agent tool:", e);
-    }
-  });
-  ctx.inject(["commands"], (scoped) => {
-    try {
-      const sealedHandler = async () => {
-        return {
-          kind: "info",
-          text: `\uD83D\uDCA1【/gw 斜槓指令已封印・全面統一回歸聊天室對話】
-
-` + "為提供完整的實時思考可視化、代碼高亮與多輪連續追問體驗，原先單向的 `/gw` 斜槓指令已正式封印！\n\n" + `\uD83D\uDC49 **推薦主模型呼叫窗口**：
-` + `請直接在當前（或左側「+ 新對話」）聊天室中，**不要加斜槓**，直接向 AI 發送需求即可，例如：
-` + `• *「請幫我用 Gemini 4 Hydrogen 寫 C++20 紅黑樹」*
-` + `• *「請調用 gemini-web-agent 幫我設計分散式系統」*
-` + `• *「請用 Google Flow 生成一張賽博龐克高科技能量核心圖片」*
-
-` + "宿主 AI 會直接在聊天室內調用 `gemini-web-agent`，並將完整推演過程與程式碼即時打印在對話框中！"
-        };
-      };
-      scoped.commands.register({
-        name: "gw",
-        description: "【已封印】Gemini Web Agent 已統一升級為聊天室自然語言調用窗口",
-        handler: sealedHandler
-      });
-      scoped.commands.register({
-        name: "gemini-web",
-        description: "【已封印】Gemini Web Agent 已統一升級為聊天室自然語言調用窗口",
-        handler: sealedHandler
-      });
-    } catch (e) {
-      console.error("Failed to register sealed gw command:", e);
     }
   });
   ctx.inject(["webServer"], (scoped) => {

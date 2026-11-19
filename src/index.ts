@@ -4,7 +4,7 @@ import { createApiRouter } from './transport/router.js'
 import { executeAgentTask, getWorkspaceDownloadDir } from './bridge/agent-executor.js'
 
 export const name = 'dsh-gemini-web'
-export const inject = ['tools', 'commands', 'webServer']
+export const inject = ['tools', 'webServer']
 
 export function apply(ctx: any) {
   // 1. 註冊 DSH 核心代理工具: gemini_web_agent 與 gemini-web-agent
@@ -110,40 +110,7 @@ export function apply(ctx: any) {
     }
   })
 
-  // 2. 封印斜槓指令: 統一引導至聊天室主窗口，徹底消除單向 CLI 與聊天室的割裂感
-  ctx.inject(['commands'], (scoped: any) => {
-    try {
-      const sealedHandler = async () => {
-        return {
-          kind: 'info',
-          text:
-            '💡【/gw 斜槓指令已封印・全面統一回歸聊天室對話】\n\n' +
-            '為提供完整的實時思考可視化、代碼高亮與多輪連續追問體驗，原先單向的 `/gw` 斜槓指令已正式封印！\n\n' +
-            '👉 **推薦主模型呼叫窗口**：\n' +
-            '請直接在當前（或左側「+ 新對話」）聊天室中，**不要加斜槓**，直接向 AI 發送需求即可，例如：\n' +
-            '• *「請幫我用 Gemini 4 Hydrogen 寫 C++20 紅黑樹」*\n' +
-            '• *「請調用 gemini-web-agent 幫我設計分散式系統」*\n' +
-            '• *「請用 Google Flow 生成一張賽博龐克高科技能量核心圖片」*\n\n' +
-            '宿主 AI 會直接在聊天室內調用 `gemini-web-agent`，並將完整推演過程與程式碼即時打印在對話框中！',
-        }
-      }
-
-      scoped.commands.register({
-        name: 'gw',
-        description: '【已封印】Gemini Web Agent 已統一升級為聊天室自然語言調用窗口',
-        handler: sealedHandler,
-      })
-      scoped.commands.register({
-        name: 'gemini-web',
-        description: '【已封印】Gemini Web Agent 已統一升級為聊天室自然語言調用窗口',
-        handler: sealedHandler,
-      })
-    } catch (e) {
-      console.error('Failed to register sealed gw command:', e)
-    }
-  })
-
-  // 3. 機會性註冊 WebServer 路由 (供設定面板 API 調用)
+  // 2. 機會性註冊 WebServer 路由 (供設定面板 API 調用)
   ctx.inject(['webServer'], (scoped: any) => {
     const router = createApiRouter()
     scoped.effect(
