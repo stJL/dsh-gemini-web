@@ -463,6 +463,9 @@ def run_agent_task(
             entry=entry,
         )
 
+    out_path = Path(download_dir).resolve() if download_dir else (Path.cwd() / "downloads").resolve()
+    out_path.mkdir(parents=True, exist_ok=True)
+
     tabs = agentlimb_client.get_tabs()
     target_tab = None
     for t in tabs:
@@ -893,8 +896,7 @@ def run_agent_task(
         final_text = res_data.get("text", "")
 
         saved_files = []
-        if download_dir:
-            out_path = Path(download_dir).resolve()
+        if out_path:
             # 處理圖片
             for idx, img_src in enumerate(res_data.get("images", []), 1):
                 data_url = img_src
