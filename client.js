@@ -436,11 +436,13 @@ window.__ModuleLoader__.load({
         thinking_policy_adaptive_opt: '🌟 智能自适应模式 (推荐)',
         thinking_policy_custom_opt: '⏱️ 自定义超时模式',
         thinking_policy_strict_opt: '🛑 严格模式 (绝不降级)',
-        fallback_title: '免费池塞车阶梯降级切换：',
-        fallback_strict_desc: '🛑 严格模式：严格保持所选模型，遇塞车立即中止并询问用户',
-        fallback_ladder_desc: '🌟 智能阶梯：依序尝试 (Argon ➔ Hydrogen ➔ Flash ➔ Flash Lite)，全满时询问用户',
-        fallback_ladder_opt: '🌟 智能阶梯降级 (推荐)',
-        fallback_strict_opt: '🛑 严格模式 (不降级)',
+        fallback_ladder_title: '降级阶梯序列 (Fallback Ladder)：',
+        fallback_ladder_badge: '1~5 级备援',
+        fallback_ladder_desc: '🌟 遇排队拥塞时按此顺序自动降级尝试。可自由配置备选顺序，支持选用 gemini.google.com 兜底。',
+        fallback_ladder_add_btn: '+ 添加备援',
+        fallback_ladder_reset_btn: '恢复默认',
+        ladder_tier_label: '第 {level} 级备援',
+        ladder_remove_tip: '移除此级备援',
         thinking_level_title: '推理思考等级 (Thinking Level)：',
         thinking_high: 'High (推荐默认)',
         thinking_extra_high: 'Extra High (🔒 已上锁 - 免费池防 403)',
@@ -471,156 +473,6 @@ window.__ModuleLoader__.load({
         safety_item3: '• ⚡ 频率控制建议：日常自用建议保持合理调度频率，避免极高频并发刷网页端；遇到高峰排队塞车时，建议切换为 Flash Lite 备用。',
         safety_item4: '• 🔒 100% 回环安全：所有通信限制于本机 127.0.0.1 回环，零凭证外泄风险。',
         nav_label: '✨ Gemini 网页端 (Agent 调度中心)'
-      },
-      'zh-TW': {
-        title: '✨ Gemini 網頁端調度中心 (Agent 模式)',
-        unauthed_title: '⚠️ Google 帳號尚未登入 / 狀態過期',
-        unauthed_desc: '檢測到瀏覽器尚未登入 Google 或當前分頁被導向登入頁。請點擊下方按鈕登入後再使用：',
-        unauthed_btn: '🔑 一鍵打開瀏覽器 Google 登入',
-        bridge_title: '瀏覽器底層通訊通道 (Bridge)：',
-        bridge_al_preferred: '🟢 AgentLimb 優先 (免彈窗)',
-        bridge_cdp_mode: '🟡 CDP 模式 (備用)',
-        bridge_disconnected: '🔴 未連線',
-        route_al: '🚀 當前生效優先路由：通道 A (AgentLimb) ⚡ 完全靜默・零 Allow 彈窗・CDP 備用通道完全休眠',
-        route_cdp: '⚠️ 當前生效優先路由：通道 B (CDP {port}) — 備用模式，每次連線需手動點擊瀏覽器 Allow 彈窗',
-        route_none: '❌ 目前雙通道皆未連線，請參考下方配置指引完成連線',
-        multi_instance_title: '⚠️ 偵測到多個開啟遠端偵錯的瀏覽器實例：',
-        multi_instance_tip: '💡 建議關閉多餘的瀏覽器視窗以避免通訊衝突，或在下方「CDP 偵錯連接埠」指定您想使用的端口。',
-        channel_a_title: '通道 A: AgentLimb (推薦)',
-        channel_a_connected: '已連線 (零彈窗/永久授權)',
-        channel_a_offline: '未在線',
-        channel_b_title: '通道 B: Chromium CDP (備用)',
-        channel_b_connected: '已連線 (需點擊 Allow)',
-        channel_b_dormant: '已休眠 (零彈窗保護)',
-        channel_b_offline: '未連線',
-        status_prefix: '狀態：',
-        port_prefix: '連接埠：',
-        config_prefix: '配置：',
-        browser_prefix: '瀏覽器：',
-        probing: '探測中 (正輪詢 Gemini 與 Flow)...',
-        probe_all_btn: '🔄 重新探測全部通道與站點',
-        sending: '發送中...',
-        test_al_btn: '⚡ 測試 AgentLimb (Say 側邊欄)',
-        executing: 'Agent 執行中...',
-        test_agent_btn: '🤖 測試 Agent 跑任務',
-        clear_cache_btn: '🧹 清除快取',
-        al_sending_msg: '⏳ 正在向 AgentLimb 側邊欄發送通知...',
-        al_success_msg: '🎉 已向瀏覽器側邊欄成功發送即時通知！請看側邊欄',
-        al_failed_prefix: '❌ 測試失敗：',
-        agent_executing_msg: '⏳ 正在透過 AgentLimb/CDP 調度 AI Studio 執行任務...',
-        agent_success_title: '✅ 任務完成 ({channel} 通道 · 模型: {model} · 耗時 {duration}ms){fallback}',
-        agent_fallback_tag: ' [塞車自動降級]',
-        agent_failed_prefix: '❌ 調度失敗：',
-        guide_title: '📖 瀏覽器連線配置指引（依需求二選一）',
-        guide_a_title: '🟢 方案 A（強烈推薦・100% 免彈窗）',
-        guide_a_1: '1. 在常用 Chromium 瀏覽器（Chrome / Edge / Brave 等）安裝 AgentLimb 擴充。',
-        guide_a_2: '2. 點擊擴充功能面板的「Pair」完成一次性本機配對。',
-        guide_a_3: '3. 永久免彈窗、不改捷徑、重啟電腦直接可用！',
-        guide_a_btn: '🔗 下載 AgentLimb 擴充套件',
-        guide_b_title: '🟡 方案 B（免安裝擴充・本機內建偵錯）',
-        guide_b_1: '1. 在現有 Chromium 瀏覽器網址列輸入：',
-        guide_b_2: '2. 勾選啟用偵錯開關（或捷徑啟動時加上 --remote-debugging-port=9222）。',
-        guide_b_3: '3. 點擊上方「重新探測通道」即可自動連接。',
-        quota_title: '📊 即時網頁端免費額度大盤',
-        quota_polling_tip: '⏳ 正在輪詢 Gemini 與 Google Flow 獨立點數...',
-        quota_refresh_btn: '🔄 刷新額度 (含 Flow)',
-        quota_refreshing: '探測中...',
-        quota_isolated_badge: '3 大站點額度完全獨立・絕不扣款',
-        aistudio_title: '🌐 Google AI Studio (aistudio.google.com)',
-        aistudio_badge: 'key_off 免費層級',
-        aistudio_desc: '• 免費無限輪詢層級：支援 1M Token 長輸出（Argon / Hydrogen / Flash），未掛載 API Key 時直接享受網頁免費無限額度，絕對不會扣除付費帳號額度！',
-        gemini_title: '📈 Gemini 官網 5小時滾動池 ({plan})',
-        gemini_plan_pro: 'PRO',
-        gemini_plan_free: '免費版',
-        gemini_plan_default: '一般方案',
-        gemini_used_pct: '{pct}% 已使用',
-        gemini_reset: '重置週期：{time} (獨立對話額度)',
-        flow_title: '🎨 Google Flow (flow.google.com)',
-        flow_connected_badge: '🟢 已連通',
-        flow_pending_badge: '🟡 待刷新',
-        flow_credits_unit: '可用點數：{credits} 點（🎨 生圖免扣點・完全免費）',
-        flow_desc_p1: '• 點數用途：每月免費享有獨立點數，專門用於 Veo / Omni 視頻生成（每支影片僅消耗少量點數）。',
-        flow_desc_p2: '• 生圖特權：使用 Nano Banana 2.1 生成 2K 高清圖片時「完全不扣除點數」（單張消耗 0 點，等同無限免費生圖）！',
-        flow_desc_p3: '• 額度重置：每月自動補滿額度{time}。',
-        flow_reset_note: '（重置時間：{time}）',
-        routing_guide_title: '🧭 渠道自動路由與防扣款指南',
-        routing_text_title: '💬 文字對話 / 複雜程式碼',
-        routing_text_desc: '➔ 自動導向 AI Studio key_off 免費層級（長文本輸出）或 Gemini 網頁端。',
-        routing_image_title: '🎨 2K 高清生圖 (Nano 2.1)',
-        routing_image_desc: '➔ 自動導向 Google Flow 0 點數免費池 / AI Studio。',
-        routing_video_title: '🎬 視頻生成 (Omni 1.2 / Veo)',
-        routing_video_desc: '➔ 自動導向 Google Flow 視頻池 / AI Studio 專用模組。',
-        routing_paid_title: '🔒 付費模型防扣款鎖',
-        routing_paid_desc: '➔ 強制過濾並鎖定 Paid 標記條目（如 Carbon），預設完全避開，保護錢包！',
-        settings_section_title: '⚙️ Agent 調度與瀏覽器通道設定',
-        dispatch_mode_title: 'Agent 調度執行模式：',
-        dispatch_mode_ask_first_desc: '🛡️ 先問後用（原作者推薦）：發包前呈現渠道與參數提案，待確認後執行；支援「例外直通」（指定直接發包直接跑）',
-        dispatch_mode_fast_track_desc: '⚡ 極速直通：收到任務後第一步直接調用 gemini_web_agent 委派執行，跳過前置確認卡',
-        dispatch_mode_ask_first: '🛡️ 先問後用模式 (原作者推薦・安全控費)',
-        dispatch_mode_fast_track: '⚡ 極速直通模式 (Fast-Track・免確認)',
-        lang_label: '介面語言 (UI Language)：',
-        lang_desc: '預設自動跟隨 DSH 系統語言，亦可在此手動指定',
-        lang_auto: '🌐 自動 (跟隨 DSH 系統)',
-        lang_zhcn: '简体中文',
-        lang_zhtw: '繁體中文',
-        lang_en: 'English',
-        conn_strategy_title: '瀏覽器連線通道策略：',
-        conn_strategy_desc: 'auto 模式優先走 AgentLimb，成功則完全不碰 CDP',
-        conn_auto: '🌟 自動 (AgentLimb 優先)',
-        conn_al: '⚡ 強制 AgentLimb (零彈窗)',
-        conn_cdp: '🛠️ 強制 CDP (9222 端口)',
-        default_model_title: 'Agent 預設首選模型：',
-        sync_models_btn: '🔄 刷新網頁模型池',
-        syncing: '同步中...',
-        models_classified: '已分類 {count} 個模型（已鎖定多模態專用與付費項）',
-        models_default_note: '已載入標準模型池（多模態專用模型已鎖定，由 AI 自動調用）',
-        group_text: '💬 文字與推理對話池 (可選為聊天首選)',
-        group_media: '🔒 多模態專用池（非日常聊天・AI自動調用）',
-        group_paid: '🔒 付費模型池 (需綁付費Key・預設保護防扣款)',
-        tag_media: '[多模態專用]',
-        tag_paid: '[需付費Key]',
-        thinking_policy_title: '思考閾值與降級策略：',
-        thinking_policy_adaptive_desc: '🌟 智慧自適應：複雜架構/演算法任務自動給予 150s 思考 / 300s 總時；思維鏈心跳防殺；遇塞車階梯備援',
-        thinking_policy_custom_desc: '⏱️ 自定義超時：嚴格遵循下方設定的任務超時秒數；思維鏈心跳防殺；遇塞車階梯備援',
-        thinking_policy_strict_desc: '🛑 嚴格模式：堅守所選模型絕不降級；遇超時或塞車立即中止並提醒，絕不偷偷切換輕量模型',
-        thinking_policy_adaptive_opt: '🌟 智慧自適應模式 (推薦)',
-        thinking_policy_custom_opt: '⏱️ 自定義超時模式',
-        thinking_policy_strict_opt: '🛑 嚴格模式 (絕不降級)',
-        fallback_title: '免費池塞車階梯降級切換：',
-        fallback_strict_desc: '🛑 嚴格模式：嚴格保持所選模型，遇塞車立即中止並詢問用戶',
-        fallback_ladder_desc: '🌟 智慧階梯：依序嘗試 (Argon ➔ Hydrogen ➔ Flash ➔ Flash Lite)，全滿時詢問用戶',
-        fallback_ladder_opt: '🌟 智慧階梯降級 (推薦)',
-        fallback_strict_opt: '🛑 嚴格模式 (不降級)',
-        thinking_level_title: '推理思考等級 (Thinking Level)：',
-        thinking_high: 'High (推薦默認)',
-        thinking_extra_high: 'Extra High (🔒 已上鎖 - 免費池防 403)',
-        thinking_medium: 'Medium (折衷)',
-        thinking_low: 'Low (低思考速回)',
-        timeout_title: '任務超時限制：',
-        timeout_active_badge: '⏱️ 自定義模式生效中',
-        timeout_adaptive_badge: '🌟 智慧自適應基準',
-        timeout_strict_badge: '🛑 嚴格模式基準',
-        timeout_custom_hint: '⏱️ 自定義模式：思考與總任務超時嚴格遵循此設定值，不進行自適應放寬。',
-        timeout_adaptive_hint: '🌟 基準為 180 秒；遇複雜架構/演算法 (C++、紅黑樹等) 自動放寬至 300 秒。',
-        timeout_strict_hint: '🛑 堅守所選模型，深度思考上限 150 秒，逾時直接中止提醒。',
-        sec_unit: '秒',
-        auto_saved_tip: '✅ 已自動永久保存',
-        cdp_port_title: 'CDP 偵錯連接埠 (僅 CDP 模式生效)：',
-        save_btn: '💾 儲存並套用設定',
-        saving: '儲存中...',
-        save_success: '✅ 設定已儲存生效！',
-        save_failed_prefix: '❌ 儲存失敗: ',
-        links_title: '🔗 官方工作台直達',
-        link_aistudio: '🌐 Google AI Studio',
-        link_flow: '🎨 Google Flow',
-        link_gemini: '📈 Gemini 額度大盤',
-        link_accounts: '🔑 Google 帳號中心',
-        safety_title: '🛡️ 運行機制與自用原則聲明',
-        safety_item1: '• 🛡️ 不算反代，不導出 API，不抽 Cookie：純本機瀏覽器自動化 Agent，等同於讓 AI 替你打開本機已登入的 Chromium 瀏覽器（如 Chrome / Edge / Brave 等）。',
-        safety_item2: '• 🌐 官方真實渲染：所有請求皆透過官方真實網頁打字與接收結果，相對更穩，完全繞開本地 Token 與模型限制。',
-        safety_item3: '• ⚡ 頻率控制建議：日常自用建議保持合理調度頻率，避免極高頻並發刷網頁端；遇到高峰排隊塞車時，建議切換為 Flash Lite 備用。',
-        safety_item4: '• 🔒 100% 迴環安全：所有通訊限制於本機 127.0.0.1 迴環，零憑證外洩風險。',
-        nav_label: '✨ Gemini 網頁端 (Agent 調度中心)'
       },
       'en-US': {
         title: '✨ Gemini Web Orchestration (Agent Mode)',
@@ -736,11 +588,13 @@ window.__ModuleLoader__.load({
         thinking_policy_adaptive_opt: '🌟 Smart Adaptive Mode (Recommended)',
         thinking_policy_custom_opt: '⏱️ Custom Timeout Mode',
         thinking_policy_strict_opt: '🛑 Strict Mode (No Fallback)',
-        fallback_title: 'Free Pool Congestion Fallback Strategy:',
-        fallback_strict_desc: '🛑 Strict Mode: Maintain selected model; abort immediately on congestion & ask user',
-        fallback_ladder_desc: '🌟 Smart Ladder: Try sequentially (Argon ➔ Hydrogen ➔ Flash ➔ Flash Lite), ask user if all full',
-        fallback_ladder_opt: '🌟 Smart Ladder Fallback (Recommended)',
-        fallback_strict_opt: '🛑 Strict Mode (No Fallback)',
+        fallback_ladder_title: 'Fallback Ladder Sequence:',
+        fallback_ladder_badge: '1~5 Tiers',
+        fallback_ladder_desc: '🌟 Sequentially falls back on congestion. Reorder or customize freely, choose gemini.google.com as safety net.',
+        fallback_ladder_add_btn: '+ Add Tier',
+        fallback_ladder_reset_btn: 'Reset',
+        ladder_tier_label: 'Tier #{level}',
+        ladder_remove_tip: 'Remove tier',
         thinking_level_title: 'Reasoning Thinking Level:',
         thinking_high: 'High (Recommended Default)',
         thinking_extra_high: 'Extra High (🔒 Locked - Free Tier Safe)',
@@ -776,20 +630,8 @@ window.__ModuleLoader__.load({
 
     function resolveDshLanguage() {
       try {
-        if (typeof document !== 'undefined' && document.documentElement?.lang) {
-          const l = document.documentElement.lang.toLowerCase()
-          if (l.includes('cn') || l.includes('hans') || l === 'zh') return 'zh-CN'
-          if (l.includes('tw') || l.includes('hk') || l.includes('hant')) return 'zh-TW'
-          if (l.startsWith('en')) return 'en-US'
-        }
-      } catch {}
-      try {
-        if (typeof navigator !== 'undefined' && navigator.language) {
-          const l = navigator.language.toLowerCase()
-          if (l.includes('cn') || l.includes('hans') || l === 'zh') return 'zh-CN'
-          if (l.includes('tw') || l.includes('hk') || l.includes('hant')) return 'zh-TW'
-          if (l.startsWith('en')) return 'en-US'
-        }
+        const l = ((typeof document !== 'undefined' && document.documentElement?.lang) || (typeof navigator !== 'undefined' && navigator.language) || '').toLowerCase()
+        if (l.startsWith('en')) return 'en-US'
       } catch {}
       return 'zh-CN'
     }
@@ -804,6 +646,12 @@ window.__ModuleLoader__.load({
         defaultModel: 'gemini-3.5-flash-lite',
         autoFallback: true,
         fallbackMode: 'ladder',
+        fallbackLadder: [
+          'gemini-4-hydrogen',
+          'gemini-3.8-flash',
+          'gemini-3.5-flash-lite',
+          'gemini.google.com',
+        ],
         thinkingPolicy: 'adaptive',
         thinkingLevel: 'high',
         timeoutSec: 180,
@@ -812,12 +660,19 @@ window.__ModuleLoader__.load({
         flowCount: 1,
       }
 
-      // 優先從 localStorage 讀取已保存設定，首幀即載入用戶選擇，杜絕刷新倒退回 flash lite
+      // 优先从 localStorage 读取已保存设定，首帧即载入用户选择，杜绝刷新倒退回 flash lite
       const [config, setConfig] = useState(() => {
         try {
           const cached = localStorage.getItem('dsh_gemini_web_config')
           if (cached) {
-            return { ...DEFAULT_LOCAL_CONFIG, ...JSON.parse(cached) }
+            const parsed = JSON.parse(cached)
+            return {
+              ...DEFAULT_LOCAL_CONFIG,
+              ...parsed,
+              fallbackLadder: Array.isArray(parsed.fallbackLadder) && parsed.fallbackLadder.length > 0
+                ? parsed.fallbackLadder
+                : DEFAULT_LOCAL_CONFIG.fallbackLadder
+            }
           }
         } catch {}
         return DEFAULT_LOCAL_CONFIG
@@ -908,8 +763,11 @@ window.__ModuleLoader__.load({
             if (cached) localCfg = JSON.parse(cached)
           } catch {}
           if (s?.config) {
-            // 用戶本地主動選取的配置優先於後端未設定之預設值，杜絕刷新回落
+            // 用户本地主动选取的配置优先于后端未设定之默认值，杜绝刷新回落
             const merged = { ...s.config, ...localCfg }
+            if (!Array.isArray(merged.fallbackLadder) || merged.fallbackLadder.length === 0) {
+              merged.fallbackLadder = DEFAULT_LOCAL_CONFIG.fallbackLadder
+            }
             setConfig(merged)
             if (JSON.stringify(merged) !== JSON.stringify(s.config)) {
               api('/config', { method: 'POST', body: merged }).catch(() => {})
@@ -1037,6 +895,39 @@ window.__ModuleLoader__.load({
       const activeChannel = status?.activeChannel || (alConnected ? 'agentlimb' : (cdpConnected ? 'cdp' : 'none'))
       const isUnauthed = usage?.status === 'unauthenticated' || (!usage?.geminiPlan && isAnyConnected && usage?.plan === null)
 
+      // 模型筛选函数与分类
+      const isMediaModel = (id = '', name = '') => {
+        const s = (id + ' ' + name).toLowerCase()
+        return s.includes('nano') || s.includes('banana') || s.includes('omni') || s.includes('veo') ||
+               s.includes('lyria') || s.includes('music') || s.includes('tts') || s.includes('transcribe') ||
+               s.includes('生图') || s.includes('视频') || s.includes('音乐') || s.includes('配音') || s.includes('转写')
+      }
+      const isPaidModel = (m) => {
+        if (m.paid) return true
+        const s = ((m.id || '') + ' ' + (m.name || '')).toLowerCase()
+        return s.includes('paid') || s.includes('carbon') || s.includes('antigravity-preview')
+      }
+
+      let textGroup = []
+      let mediaGroup = []
+      let paidGroup = []
+
+      if (availableModels.length > 0) {
+        textGroup = availableModels.filter(m => !isMediaModel(m.id, m.name) && !isPaidModel(m))
+        mediaGroup = availableModels.filter(m => isMediaModel(m.id, m.name) && !isPaidModel(m))
+        paidGroup = availableModels.filter(m => isPaidModel(m))
+      }
+
+      const selectableLadderModels = textGroup.length > 0 ? textGroup.map(m => ({ id: m.id, name: m.name })) : [
+        { id: 'gemini-4-argon', name: 'Gemini 4 Argon' },
+        { id: 'gemini-4-hydrogen', name: 'Gemini 4 Hydrogen' },
+        { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash' },
+        { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite' },
+      ]
+      if (!selectableLadderModels.some(m => m.id === 'gemini.google.com')) {
+        selectableLadderModels.push({ id: 'gemini.google.com', name: 'gemini.google.com' })
+      }
+
       return h('div', {
         ref: rootRef,
         className: 'gw-root',
@@ -1156,7 +1047,7 @@ window.__ModuleLoader__.load({
                 h('div', null, `${t('port_prefix')}127.0.0.1:${status?.cdp?.port || status?.dual?.cdp?.port || config.port}`),
                 cdpConnected && h('div', null, `${t('browser_prefix')}${status?.cdp?.browserType || status?.dual?.cdp?.browserType || 'Chrome'}`),
               ])
-            ])
+            ]),
           ]),
 
           // 操作按鈕列
@@ -1249,7 +1140,7 @@ window.__ModuleLoader__.load({
                 h('div', null, t('guide_b_2')),
                 h('div', null, t('guide_b_3'))
               ])
-            ])
+            ]),
           ])
         ]),
 
@@ -1330,7 +1221,7 @@ window.__ModuleLoader__.load({
                   time: usage?.flowResetTime ? t('flow_reset_note', { time: usage.flowResetTime }) : ''
                 }))
               ])
-            ])
+            ]),
           ])
         ]),
 
@@ -1381,30 +1272,7 @@ window.__ModuleLoader__.load({
                 }, [
                   h('option', { value: 'auto' }, `${t('lang_auto')} [${activeLang}]`),
                   h('option', { value: 'zh-CN' }, t('lang_zhcn')),
-                  h('option', { value: 'zh-TW' }, t('lang_zhtw')),
                   h('option', { value: 'en-US' }, t('lang_en')),
-                ])
-              ])
-            ]),
-
-            // 設定 0: 調度執行模式 (Dispatch Mode: 先問後用 vs 極速直通)
-            h('div', { className: 'gw-setting-row' }, [
-              h('div', { className: 'gw-setting-info' }, [
-                h('div', { style: { fontWeight: 500 } }, t('dispatch_mode_title')),
-                h('div', { style: { fontSize: 11, opacity: 0.6 } },
-                  (config.dispatchMode === 'fast_track')
-                    ? t('dispatch_mode_fast_track_desc')
-                    : t('dispatch_mode_ask_first_desc'))
-              ]),
-              h('div', { className: 'gw-setting-ctrl' }, [
-                h('select', {
-                  className: 'gw-select',
-                  style: { minWidth: 160 },
-                  value: config.dispatchMode || 'ask_first',
-                  onChange: (e) => updateConfig({ dispatchMode: e.target.value })
-                }, [
-                  h('option', { value: 'ask_first' }, t('dispatch_mode_ask_first')),
-                  h('option', { value: 'fast_track' }, t('dispatch_mode_fast_track')),
                 ])
               ])
             ]),
@@ -1429,89 +1297,64 @@ window.__ModuleLoader__.load({
               ])
             ]),
 
-            // 設定 2: 預設調度模型 (Default Model) - 即選即寫死永久保存
-            (() => {
-              const isMediaModel = (id = '', name = '') => {
-                const s = (id + ' ' + name).toLowerCase()
-                return s.includes('nano') || s.includes('banana') || s.includes('omni') || s.includes('veo') ||
-                       s.includes('lyria') || s.includes('music') || s.includes('tts') || s.includes('transcribe') ||
-                       s.includes('生圖') || s.includes('視頻') || s.includes('音樂') || s.includes('配音') || s.includes('轉寫') ||
-                       s.includes('生图') || s.includes('视频') || s.includes('音乐') || s.includes('转写')
-              }
-              const isPaidModel = (m) => {
-                if (m.paid) return true
-                const s = ((m.id || '') + ' ' + (m.name || '')).toLowerCase()
-                return s.includes('paid') || s.includes('carbon') || s.includes('antigravity-preview')
-              }
-
-              let textGroup = []
-              let mediaGroup = []
-              let paidGroup = []
-
-              if (availableModels.length > 0) {
-                textGroup = availableModels.filter(m => !isMediaModel(m.id, m.name) && !isPaidModel(m))
-                mediaGroup = availableModels.filter(m => isMediaModel(m.id, m.name) && !isPaidModel(m))
-                paidGroup = availableModels.filter(m => isPaidModel(m))
-              }
-
-              return h('div', { className: 'gw-setting-row' }, [
-                h('div', { className: 'gw-setting-info' }, [
-                  h('div', { style: { fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' } }, [
-                    h('span', null, t('default_model_title')),
-                    h('button', {
-                      className: 'gw-btn',
-                      style: { padding: '2px 6px', fontSize: 10, background: '#4f46e5' },
-                      onClick: syncModels,
-                      disabled: syncingModels
-                    }, syncingModels ? t('syncing') : t('sync_models_btn'))
-                  ]),
-                  h('div', { style: { fontSize: 11, opacity: 0.6 } },
-                    availableModels.length > 0
-                      ? t('models_classified', { count: availableModels.length })
-                      : t('models_default_note'))
+            // 设定 2: 预设调度模型 (Default Model) - 即选即写死永久保存
+            h('div', { className: 'gw-setting-row' }, [
+              h('div', { className: 'gw-setting-info' }, [
+                h('div', { style: { fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' } }, [
+                  h('span', null, t('default_model_title')),
+                  h('button', {
+                    className: 'gw-btn',
+                    style: { padding: '2px 6px', fontSize: 10, background: '#4f46e5' },
+                    onClick: syncModels,
+                    disabled: syncingModels
+                  }, syncingModels ? t('syncing') : t('sync_models_btn'))
                 ]),
-                h('div', { className: 'gw-setting-ctrl' }, [
-                  h('select', {
-                    className: 'gw-select',
-                    style: { width: '100%', minWidth: 170, maxWidth: 220 },
-                    value: config.defaultModel || 'gemini-3.5-flash-lite',
-                    onChange: (e) => updateConfig({ defaultModel: e.target.value })
-                  }, availableModels.length > 0 ? [
-                    h('optgroup', { label: t('group_text') },
-                      textGroup.map((m) =>
-                        h('option', { key: m.id, value: m.id }, `${m.name} ${m.new ? '🌟' : ''}`)
-                      )
-                    ),
-                    mediaGroup.length > 0 && h('optgroup', { label: t('group_media') },
-                      mediaGroup.map((m) =>
-                        h('option', { key: m.id, value: m.id, disabled: true }, `🔒 ${m.name} ${t('tag_media')}`)
-                      )
-                    ),
-                    paidGroup.length > 0 && h('optgroup', { label: t('group_paid') },
-                      paidGroup.map((m) =>
-                        h('option', { key: m.id, value: m.id, disabled: true }, `💰 ${m.name} ${t('tag_paid')}`)
-                      )
-                    ),
-                  ] : [
-                    h('optgroup', { label: t('group_text') }, [
-                      h('option', { key: 'fl', value: 'gemini-3.5-flash-lite' }, '⚡ 3.5 Flash Lite'),
-                      h('option', { key: 'f', value: 'gemini-3.8-flash' }, '🚀 3.8 Flash'),
-                      h('option', { key: 'h', value: 'gemini-4-hydrogen' }, '🧠 4 Hydrogen (1M)'),
-                      h('option', { key: 'a', value: 'gemini-4-argon' }, '🏗️ 4 Argon'),
-                    ]),
-                    h('optgroup', { label: t('group_media') }, [
-                      h('option', { key: 'nano', value: 'gemini-nano-banana-2.1', disabled: true }, `🔒 Nano Banana 2.1 ${t('tag_media')}`),
-                      h('option', { key: 'omni', value: 'gemini-omni-1.2-flash', disabled: true }, `🔒 Gemini Omni 1.2 Flash ${t('tag_media')}`),
-                      h('option', { key: 'lyria', value: 'lyria-3.5', disabled: true }, `🔒 Lyria 3.5 ${t('tag_media')}`),
-                      h('option', { key: 'tts', value: 'gemini-3.8-flash-tts', disabled: true }, `🔒 3.8 Flash TTS ${t('tag_media')}`),
-                    ]),
-                    h('optgroup', { label: t('group_paid') }, [
-                      h('option', { key: 'carbon', value: 'gemini-4-carbon', disabled: true }, `💰 Gemini 4 Carbon ${t('tag_paid')}`),
-                    ])
+                h('div', { style: { fontSize: 11, opacity: 0.6 } },
+                  availableModels.length > 0
+                    ? t('models_classified', { count: availableModels.length })
+                    : t('models_default_note'))
+              ]),
+              h('div', { className: 'gw-setting-ctrl' }, [
+                h('select', {
+                  className: 'gw-select',
+                  style: { width: '100%', minWidth: 170, maxWidth: 220 },
+                  value: config.defaultModel || 'gemini-3.5-flash-lite',
+                  onChange: (e) => updateConfig({ defaultModel: e.target.value })
+                }, availableModels.length > 0 ? [
+                  h('optgroup', { label: t('group_text') },
+                    textGroup.map((m) =>
+                      h('option', { key: m.id, value: m.id }, `${m.name} ${m.new ? '🌟' : ''}`)
+                    )
+                  ),
+                  mediaGroup.length > 0 && h('optgroup', { label: t('group_media') },
+                    mediaGroup.map((m) =>
+                      h('option', { key: m.id, value: m.id, disabled: true }, `🔒 ${m.name} ${t('tag_media')}`)
+                    )
+                  ),
+                  paidGroup.length > 0 && h('optgroup', { label: t('group_paid') },
+                    paidGroup.map((m) =>
+                      h('option', { key: m.id, value: m.id, disabled: true }, `💰 ${m.name} ${t('tag_paid')}`)
+                    )
+                  ),
+                ] : [
+                  h('optgroup', { label: t('group_text') }, [
+                    h('option', { key: 'fl', value: 'gemini-3.5-flash-lite' }, '⚡ 3.5 Flash Lite'),
+                    h('option', { key: 'f', value: 'gemini-3.8-flash' }, '🚀 3.8 Flash'),
+                    h('option', { key: 'h', value: 'gemini-4-hydrogen' }, '🧠 4 Hydrogen (1M)'),
+                    h('option', { key: 'a', value: 'gemini-4-argon' }, '🏗️ 4 Argon'),
+                  ]),
+                  h('optgroup', { label: t('group_media') }, [
+                    h('option', { key: 'nano', value: 'gemini-nano-banana-2.1', disabled: true }, `🔒 Nano Banana 2.1 ${t('tag_media')}`),
+                    h('option', { key: 'omni', value: 'gemini-omni-1.2-flash', disabled: true }, `🔒 Gemini Omni 1.2 Flash ${t('tag_media')}`),
+                    h('option', { key: 'lyria', value: 'lyria-3.5', disabled: true }, `🔒 Lyria 3.5 ${t('tag_media')}`),
+                    h('option', { key: 'tts', value: 'gemini-3.8-flash-tts', disabled: true }, `🔒 3.8 Flash TTS ${t('tag_media')}`),
+                  ]),
+                  h('optgroup', { label: t('group_paid') }, [
+                    h('option', { key: 'carbon', value: 'gemini-4-carbon', disabled: true }, `💰 Gemini 4 Carbon ${t('tag_paid')}`),
                   ])
                 ])
               ])
-            })(),
+            ]),
 
             // 設定 3: 思考閾值與降級策略 (Thinking Policy)
             h('div', { className: 'gw-setting-row' }, [
@@ -1574,6 +1417,118 @@ window.__ModuleLoader__.load({
                 }),
                 h('span', { style: { fontSize: 12, opacity: 0.7 } }, t('sec_unit'))
               ])
+            ]) : null,
+
+            // 设定 3.2: 降级阶梯序列 (Fallback Ladder) — 仅在智能自适应模式下展开
+            (config.thinkingPolicy === 'adaptive' || !config.thinkingPolicy) ? h('div', {
+              className: 'gw-setting-row',
+              style: {
+                background: 'rgba(99, 102, 241, 0.08)',
+                borderLeft: '3px solid #6366f1',
+                padding: '12px 14px',
+                borderRadius: '6px',
+                marginTop: '-4px',
+                marginBottom: '6px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'stretch',
+                gap: '10px'
+              }
+            }, [
+              h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' } }, [
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+                  h('span', { style: { fontWeight: 500, fontSize: 13 } }, t('fallback_ladder_title')),
+                  h('span', {
+                    style: {
+                      fontSize: 10,
+                      background: '#6366f1',
+                      color: '#fff',
+                      padding: '1px 6px',
+                      borderRadius: 4,
+                      fontWeight: 600
+                    }
+                  }, `${(config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder).length} / 5`)
+                ]),
+                h('div', { style: { display: 'flex', gap: '6px' } }, [
+                  (config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder).length < 5 && h('button', {
+                    className: 'gw-btn',
+                    style: { padding: '2px 8px', fontSize: 11, background: '#10b981', color: '#fff' },
+                    onClick: () => {
+                      const current = config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder
+                      if (current.length < 5) {
+                        const candidate = selectableLadderModels.find(m => !current.includes(m.id))?.id || 'gemini.google.com'
+                        updateConfig({ fallbackLadder: [...current, candidate] })
+                      }
+                    }
+                  }, t('fallback_ladder_add_btn')),
+                  h('button', {
+                    className: 'gw-btn gw-btn-secondary',
+                    style: { padding: '2px 8px', fontSize: 11 },
+                    onClick: () => {
+                      updateConfig({ fallbackLadder: [...DEFAULT_LOCAL_CONFIG.fallbackLadder] })
+                    }
+                  }, t('fallback_ladder_reset_btn')),
+                ])
+              ]),
+              h('div', { style: { fontSize: 11, opacity: 0.65, lineHeight: 1.4 } }, t('fallback_ladder_desc')),
+              h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' } },
+                (config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder).map((modelId, index) => {
+                  return h('div', {
+                    key: index,
+                    style: {
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '8px',
+                      background: 'rgba(0, 0, 0, 0.12)',
+                      padding: '5px 10px',
+                      borderRadius: '5px',
+                    }
+                  }, [
+                    h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: 12 } }, [
+                      h('span', { style: { opacity: 0.5, fontWeight: 700, minWidth: 24 } }, `#${index + 1}`),
+                      h('span', { style: { fontSize: 11, color: '#818cf8', fontWeight: 500 } },
+                        t('ladder_tier_label', { level: index + 1 })
+                      )
+                    ]),
+                    h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+                      h('select', {
+                        className: 'gw-select',
+                        style: { minWidth: 170, maxWidth: 210, fontSize: 12, padding: '3px 8px' },
+                        value: modelId,
+                        onChange: (e) => {
+                          const newLadder = [...(config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder)]
+                          newLadder[index] = e.target.value
+                          updateConfig({ fallbackLadder: newLadder })
+                        }
+                      }, selectableLadderModels.map(m =>
+                        h('option', { key: m.id, value: m.id }, m.name)
+                      )),
+                      h('button', {
+                        className: 'gw-btn',
+                        style: {
+                          padding: '2px 7px',
+                          fontSize: 12,
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          cursor: (config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder).length <= 1 ? 'not-allowed' : 'pointer',
+                          opacity: (config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder).length <= 1 ? 0.4 : 1
+                        },
+                        disabled: (config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder).length <= 1,
+                        title: t('ladder_remove_tip'),
+                        onClick: () => {
+                          const current = config.fallbackLadder || DEFAULT_LOCAL_CONFIG.fallbackLadder
+                          if (current.length > 1) {
+                            const newLadder = current.filter((_, i) => i !== index)
+                            updateConfig({ fallbackLadder: newLadder })
+                          }
+                        }
+                      }, '✕')
+                    ])
+                  ])
+                })
+              )
             ]) : null,
 
             // 設定 4: 思考等級 (Thinking Level)
@@ -1666,7 +1621,7 @@ window.__ModuleLoader__.load({
           if (ctx.locale && typeof ctx.locale.register === 'function') {
             return ctx.locale.register(NS, {
               'zh-CN': I18N['zh-CN'],
-              'zh-TW': I18N['zh-TW'],
+              'zh-TW': I18N['zh-CN'],
               'zh': I18N['zh-CN'],
               'en': I18N['en-US'],
               'en-US': I18N['en-US']

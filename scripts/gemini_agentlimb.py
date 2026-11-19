@@ -196,7 +196,7 @@ def _run_gemini_web_task(
     keep_tab: bool = False,
     entry: str = "chat",
 ) -> dict:
-    """在外部浏览器的 gemini.google.com/app 中執行对话（支援 TrustedHTML、零彈窗、模型切換與多輪隔離）"""
+    """在外部浏览器的 gemini.google.com/app 中执行对话（支援 TrustedHTML、零彈窗、模型切換與多輪隔離）"""
     t0 = time.time()
     tabs = agentlimb_client.get_tabs()
     target_tab = None
@@ -222,7 +222,7 @@ def _run_gemini_web_task(
     def _execute():
         ready = wait_for_selector(tab_id, 'div[role="textbox"]', timeout=15.0)
         if not ready:
-            return {"ok": False, "error": "Gemini 官網頁面加载超时（未找到输入框）"}
+            return {"ok": False, "error": "Gemini 官网页面加载超时（未找到输入框）"}
 
         # 0. 未雨綢繆：動態能級探測與全自動解鎖選模 (完全適應未來 Gemini 5、各類會員階層與無菜单模式)
         ml = (model or "").lower()
@@ -307,7 +307,7 @@ def _run_gemini_web_task(
             const bestModelName = (lines.length > 1 ? lines[1] : lines[0]).trim();
             const coreName = bestModelName.replace(/^\d+\s*/, '').toLowerCase();
 
-            // 若目前選中的模型即為最佳可用模型，關閉菜单退出
+            // 若目前選中的模型即為最佳可用模型，关闭菜单退出
             if (currentPickerLabel.toLowerCase().includes(coreName)) {
                 if (picker.getAttribute('aria-expanded') === 'true') picker.click();
                 return { ok: true, switched: false, activeModel: bestModelName, score: score(best, intent) };
@@ -527,7 +527,7 @@ def _run_flow_task(
         })()"""
         before_urls = set(agentlimb_client.eval_js(collect_js, tab_id=tab_id).get("result", {}).get("result", []))
 
-        # 填寫提示詞 (TrustedHTML 兼容)
+        # 填寫提示词 (TrustedHTML 兼容)
         fill_js = f"""(() => {{
           const tb = document.querySelector('div.ProseMirror, div[role="textbox"]');
           if (!tb) return false;
@@ -614,6 +614,7 @@ def run_agent_task(
     thinking_policy: str = "adaptive",
     thinking_timeout: int = 0,
     auto_fallback: bool = True,
+    fallback_ladder: list[str] | None = None,
     timeout_sec: int = 180,
     new_chat: bool = False,
     download_dir: str = "",
@@ -669,12 +670,12 @@ def run_agent_task(
         tab_id = target_tab.get("id")
         agentlimb_client.call_tool("tab_activate", {"tabId": tab_id})
         current_tab_url = target_tab.get("url", "")
-        # 若要求開新对话，或當前标签页不在 /prompts/，導航至新聊天室
+        # 若要求开启新对话，或當前标签页不在 /prompts/，導航至新聊天室
         if new_chat or "/prompts/" not in current_tab_url:
             agentlimb_client.call_tool("navigate", {"tabId": tab_id, "url": target_url})
 
     def _attempt_run(current_model_id: str) -> tuple[bool, str, list[str], str]:
-        # 1. 填寫任務提示詞
+        # 1. 填寫任務提示词
         agentlimb_client.call_tool(
             "form_input",
             {
@@ -703,7 +704,7 @@ def run_agent_task(
                 const opts = Array.from(document.querySelectorAll('.cdk-overlay-pane mat-option')).filter(
                   o => o.getAttribute('aria-disabled') !== 'true' && !/\\bpaid\\b/i.test(o.innerText || '')
                 );
-                // 嚴格封印 Extra High：優先選擇 High，其次 Medium，絕不選 Extra High
+                // 严格封印 Extra High：優先選擇 High，其次 Medium，絕不選 Extra High
                 let target = null;
                 if (desiredLevel === 'medium') {{
                   target = opts.find(o => /medium/i.test(o.innerText || ''));
@@ -724,7 +725,7 @@ def run_agent_task(
                 }}
               }}
             }}
-            // 自動關閉任何干擾彈窗（如 Link a paid API key）
+            // 自動关闭任何干擾彈窗（如 Link a paid API key）
             const dismissBtn = Array.from(document.querySelectorAll('button')).find(b => 
               /dismiss|close/i.test(b.innerText || '') || /close/i.test(b.getAttribute('aria-label') || '')
             );
@@ -757,7 +758,7 @@ def run_agent_task(
         # 3. 监控輸出與完成狀態
         has_started_generating = False
 
-        # 智慧思考閾值與任務量級研判 (三大策略：adaptive, custom, strict)
+        # 智能思考閾值與任務量級研判 (三大策略：adaptive, custom, strict)
         is_deep_reasoning = any(k in current_model_id.lower() for k in ["argon", "hydrogen", "decision"])
         heavy_keywords = [
             "c++", "cpp", "rust", "红黑树", "red-black", "算法", "演算法", "架構",
@@ -768,13 +769,13 @@ def run_agent_task(
         is_heavy_task = len(task) > 150 or any(kw in task_lower for kw in heavy_keywords)
 
         # 思考時間上限設定 (三大選項)：
-        # 1. adaptive (智慧自適應 - 預設)：
+        # 1. adaptive (智能自适应 - 預設)：
         #    - 深度推理模型 (Hydrogen/Argon) + 複雜架構任務：給滿 150 秒（給予模型充足空間推演 500 行邏輯）
         #    - 深度推理模型 + 一般日常任務：80 秒
         #    - 輕量模型 (Flash/Flash-Lite)：35 秒
         #    - 總超时自動寬限至至少 300 秒 (5分鐘)
-        # 2. custom (自定義超时)：嚴格遵循指定秒數 (thinking_timeout 或 timeout_sec)
-        # 3. strict (嚴格模式)：堅守模型絕不降級，深度模型給滿 150 秒（或自定義秒數），超时直接中斷提醒
+        # 2. custom (自定义超时)：严格遵循指定秒数 (thinking_timeout 或 timeout_sec)
+        # 3. strict (严格模式)：堅守模型絕不降级，深度模型給滿 150 秒（或自定义秒数），超时直接中斷提醒
         if thinking_policy == "custom":
             thinking_limit = float(thinking_timeout if thinking_timeout > 0 else timeout_sec)
             actual_timeout = timeout_sec
@@ -831,7 +832,7 @@ def run_agent_task(
 
               for (const mt of modelTurns) {{
                 totalTextLen += (mt.textContent || '').trim().length;
-                // 嚴格過濾：僅將非代碼塊的折疊面板視為思考（避免誤將嵌套在代碼塊內的 mat-expansion-panel 算作思考）
+                // 严格過濾：僅將非代碼塊的折疊面板視為思考（避免誤將嵌套在代碼塊內的 mat-expansion-panel 算作思考）
                 const rawThoughtPanels = Array.from(mt.querySelectorAll('mat-expansion-panel')).filter(
                   el => !el.closest('ms-code-block') && !el.querySelector('ms-code-block, pre, code')
                 );
@@ -864,7 +865,7 @@ def run_agent_task(
                 }}
               }}
 
-              // 檢查頁面整體 Run 按鈕是否有 Stop/Cancel 標記
+              // 檢查页面整體 Run 按鈕是否有 Stop/Cancel 標記
               const runBtn = document.querySelector('button.ctrl-enter-submits');
               const runBtnTxt = (runBtn?.innerText || '').trim();
               const runBtnAria = (runBtn?.getAttribute('aria-label') || '').trim();
@@ -928,13 +929,13 @@ def run_agent_task(
                 elapsed = int(now - t0)
                 policy_tag = f"策略: {thinking_policy}/{int(thinking_limit)}s"
                 if is_thinking and thought_text_len > 0:
-                    sys.stderr.write(f"🧠 [Gemini Web Agent] 深度思考中... (已耗時 {elapsed}s, {policy_tag}, 思考字數 {thought_text_len})\n")
+                    sys.stderr.write(f"🧠 [Gemini Web Agent] 深度思考中... (已耗时 {elapsed}s, {policy_tag}, 思考字数 {thought_text_len})\n")
                 elif is_thinking:
-                    sys.stderr.write(f"🧠 [Gemini Web Agent] 深度思考中... (已耗時 {elapsed}s, {policy_tag})\n")
+                    sys.stderr.write(f"🧠 [Gemini Web Agent] 深度思考中... (已耗时 {elapsed}s, {policy_tag})\n")
                 elif total_text_len > 0:
-                    sys.stderr.write(f"⏳ [Gemini Web Agent] 内容生成中... (已耗時 {elapsed}s, 累計字數 {total_text_len})\n")
+                    sys.stderr.write(f"⏳ [Gemini Web Agent] 内容生成中... (已耗时 {elapsed}s, 累计字数 {total_text_len})\n")
                 else:
-                    sys.stderr.write(f"⏳ [Gemini Web Agent] 排队等待回应中... (已耗時 {elapsed}s, {policy_tag})\n")
+                    sys.stderr.write(f"⏳ [Gemini Web Agent] 排队等待回应中... (已耗时 {elapsed}s, {policy_tag})\n")
                 sys.stderr.flush()
 
             # 檢測伺服器錯誤、配額耗盡或權限拒絕（立即終止退出，絕不乾等）
@@ -948,7 +949,7 @@ def run_agent_task(
                 ("rate limit", "达到请求频率限制 (Rate limit)"),
                 ("resource has been exhausted", "免费池资源耗尽 (Resource exhausted)"),
                 ("thinking level is unsupported", "该模型不支持所选思考等级"),
-                ("model error", "模型執行錯誤"),
+                ("model error", "模型执行錯誤"),
                 ("failed to generate", "生成失敗"),
                 ("safety blocks", "内容触发 Google 安全策略拦截"),
                 ("blocked by safety", "内容触发安全审查拦截"),
@@ -979,7 +980,7 @@ def run_agent_task(
                 stable_ticks = 0
 
         if not completed:
-            return False, "", [], f"執行超时 ({actual_timeout} 秒，思考閾值 {int(thinking_limit)} 秒)"
+            return False, "", [], f"执行超时 ({actual_timeout} 秒，思考閾值 {int(thinking_limit)} 秒)"
 
         # 4. 提取生成結果（強制滾動以喚醒 Angular 虛擬滾動 Virtual Scrolling）
         extract_js = f"""(() => {{
@@ -1098,7 +1099,7 @@ def run_agent_task(
                     saved = _save_data_url(data_url, out_path, f"gemini_audio_{idx}")
                     if saved:
                         saved_files.append(saved)
-            # 處理視頻
+            # 處理视频
             for idx, video_src in enumerate(res_data.get("videos", []), 1):
                 data_url = video_src
                 if video_src.startswith("blob:"):
@@ -1111,15 +1112,15 @@ def run_agent_task(
         if final_text or saved_files:
             return True, final_text, saved_files, ""
 
-        return False, "", [], f"執行超时 ({timeout_sec} 秒)"
+        return False, "", [], f"执行超时 ({timeout_sec} 秒)"
 
     try:
         # 等待输入框就緒
         ready = wait_for_selector(tab_id, 'textarea[aria-label="Enter a prompt"]', timeout=15.0)
         if not ready:
-            return {"ok": False, "error": "AI Studio 頁面加载超时（未找到输入框）"}
+            return {"ok": False, "error": "AI Studio 页面加载超时（未找到输入框）"}
 
-        # 初次嘗試
+        # 初次尝试
         success, output, files, err = _attempt_run(initial_model_id)
         active_model = initial_model_id
         fell_back = False
@@ -1128,47 +1129,58 @@ def run_agent_task(
         # 若失败且启用了自动降级 (Auto-Fallback)
         # 注意：若 thinking_policy == "strict"，auto_fallback 必定为 False，绝不走入以下降级
         if not success and auto_fallback and thinking_policy != "strict":
-            # 依次使用 AI Studio 阶梯备援模型（支持未来模型动态推导）
-            ladder = get_fallback_ladder(initial_model_id)
-            fallback_targets = [c for c in ladder if c != initial_model_id]
+            # 依次使用阶梯备援（支持用户自定义阶梯配置与未来模型动态推导）
+            if fallback_ladder and len(fallback_ladder) > 0:
+                raw_ladder = fallback_ladder
+            else:
+                raw_ladder = get_fallback_ladder(initial_model_id) + ["gemini.google.com"]
+
+            fallback_targets = [c for c in raw_ladder if c != initial_model_id]
 
             for target in fallback_targets:
-                fallback_chain.append(target)
-                fb_url = f"https://aistudio.google.com/prompts/new_chat?model={target}"
-                agentlimb_client.call_tool("navigate", {"tabId": tab_id, "url": fb_url})
-                wait_for_selector(tab_id, 'textarea[aria-label="Enter a prompt"]', timeout=15.0)
+                target_clean = (target or "").strip()
+                if not target_clean:
+                    continue
 
-                fb_success, fb_output, fb_files, fb_err = _attempt_run(target)
-                if fb_success:
-                    success = True
-                    output = fb_output
-                    files = fb_files
-                    err = ""
-                    active_model = target
-                    fell_back = True
-                    break
+                if target_clean.lower() in ("gemini", "gemini.google.com", "gemini_web", "gemini-web"):
+                    web_res = _run_gemini_web_task(
+                        task=task,
+                        model=initial_model_id,
+                        timeout_sec=timeout_sec,
+                        new_chat=True,
+                        download_dir=download_dir,
+                        keep_tab=keep_tab,
+                        entry=entry,
+                    )
+                    if web_res.get("ok"):
+                        success = True
+                        output = web_res.get("output", "")
+                        files = web_res.get("files", [])
+                        err = ""
+                        active_model = "gemini.google.com"
+                        fallback_chain.append(active_model)
+                        fell_back = True
+                        break
+                    else:
+                        fallback_chain.append("gemini.google.com (拥塞)")
+                else:
+                    fallback_chain.append(target_clean)
+                    fb_url = f"https://aistudio.google.com/prompts/new_chat?model={target_clean}"
+                    agentlimb_client.call_tool("navigate", {"tabId": tab_id, "url": fb_url})
+                    wait_for_selector(tab_id, 'textarea[aria-label="Enter a prompt"]', timeout=15.0)
+
+                    fb_success, fb_output, fb_files, fb_err = _attempt_run(target_clean)
+                    if fb_success:
+                        success = True
+                        output = fb_output
+                        files = fb_files
+                        err = ""
+                        active_model = target_clean
+                        fell_back = True
+                        break
 
             if not success:
-                # 终极备援：AI Studio 均不可用时，跨站点无缝降级至 gemini.google.com 官网通道
-                web_res = _run_gemini_web_task(
-                    task=task,
-                    model=initial_model_id,
-                    timeout_sec=timeout_sec,
-                    new_chat=True,
-                    download_dir=download_dir,
-                    keep_tab=keep_tab,
-                    entry=entry,
-                )
-                if web_res.get("ok"):
-                    success = True
-                    output = web_res.get("output", "")
-                    files = web_res.get("files", [])
-                    err = ""
-                    active_model = web_res.get("model", "gemini.google.com (官网通道)")
-                    fallback_chain.append(active_model)
-                    fell_back = True
-                else:
-                    err = "CONGESTION_HALT: Google AI Studio 与 Gemini 官网免费池全数高负载排队拥塞。"
+                err = "CONGESTION_HALT: 降级阶梯序列所有备援渠道全数高负载排队拥塞。"
 
         # 自动代码检测与保存落地（AI Studio 通道防吞噬）
         if success and output:
@@ -1185,7 +1197,7 @@ def run_agent_task(
         try:
             agentlimb_client.call_tool(
                 "say",
-                {"text": f"✅ Gemini Web Agent 已完成調度 (模型: {active_model})" if success else f"❌ Gemini Web Agent 執行失敗: {err}"},
+                {"text": f"✅ Gemini Web Agent 已完成调度 (模型: {active_model})" if success else f"❌ Gemini Web Agent 执行失敗: {err}"},
             )
         except Exception:
             pass
@@ -1269,18 +1281,18 @@ def check_gemini_usage(include_flow: bool = True) -> dict:
     """後台靜默開啟 https://gemini.google.com/usage 抓取用量，並依需求讀取 Google Flow，依原作者鐵律讀取後立刻 tab_close"""
     st = agentlimb_client.get_status()
     if not st or not st.get("ok"):
-        return {"status": "error", "error": "AgentLimb 未連線"}
+        return {"status": "error", "error": "AgentLimb 未连接"}
 
     nav_res = agentlimb_client.call_tool("tab_new", {"url": "https://gemini.google.com/usage", "active": False})
     tab_id = nav_res.get("result", {}).get("tab", {}).get("id") or nav_res.get("id") or nav_res.get("tabId")
     if not tab_id:
-        return {"status": "error", "error": "無法開啟用量偵測標籤頁"}
+        return {"status": "error", "error": "無法開啟用量偵測标签页"}
 
     gemini_result = {}
     try:
         ready = wait_for_selector(tab_id, '[data-testid="current-usage"], [data-usage-island-root]', timeout=15.0)
         if not ready:
-            gemini_result = {"status": "error", "error": "用量頁面加载超时"}
+            gemini_result = {"status": "error", "error": "用量页面加载超时"}
         else:
             eval_res = agentlimb_client.eval_js(
                 """(() => {
@@ -1324,7 +1336,7 @@ def check_gemini_usage(include_flow: bool = True) -> dict:
         except Exception:
             pass
 
-    # 循序執行：Gemini 标签页關閉後，再開啟 Flow 标签页探測，避免雙标签页競爭
+    # 循序执行：Gemini 标签页关闭後，再開啟 Flow 标签页探測，避免雙标签页競爭
     flow_info = {"credits": None, "reset_time": None}
     if include_flow:
         flow_info = check_flow_usage()
@@ -1338,7 +1350,7 @@ def discover_available_models() -> dict:
     """動態探索 AI Studio 當前帳號所有可用模型（自動識別 New / Paid 標記）"""
     st = agentlimb_client.get_status()
     if not st or not st.get("ok"):
-        return {"status": "error", "error": "AgentLimb 未連線"}
+        return {"status": "error", "error": "AgentLimb 未连接"}
 
     tabs = agentlimb_client.get_tabs()
     target_tab = None
@@ -1386,7 +1398,7 @@ def discover_available_models() -> dict:
         eval_res = agentlimb_client.eval_js(js, tab_id=tab_id)
         models = eval_res.get("result", {}).get("result", [])
 
-        # 關閉彈窗
+        # 关闭彈窗
         agentlimb_client.eval_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))", tab_id=tab_id)
 
         return {
@@ -1394,7 +1406,7 @@ def discover_available_models() -> dict:
             "models": models,
         }
     finally:
-        # 如果是臨時建立的标签页，讀取完畢立刻關閉，不留垃圾标签页
+        # 如果是臨時建立的标签页，讀取完畢立刻关闭，不留垃圾标签页
         if created_tab and tab_id:
             try:
                 agentlimb_client.call_tool("tab_close", {"tabId": tab_id})
@@ -1415,20 +1427,21 @@ if __name__ == "__main__":
 
     p_models = subparsers.add_parser("models", help="動態探索可用模型")
 
-    p_task = subparsers.add_parser("task", help="執行 Agent 任務")
-    p_task.add_argument("task_prompt", nargs="*", help="任務提示詞")
-    p_task.add_argument("--prompt", default="", help="任務提示詞 (可選，或直接傳入 positional 參數)")
+    p_task = subparsers.add_parser("task", help="执行 Agent 任務")
+    p_task.add_argument("task_prompt", nargs="*", help="任務提示词")
+    p_task.add_argument("--prompt", default="", help="任務提示词 (可選，或直接傳入 positional 參數)")
     p_task.add_argument("--model", default="gemini-3.8-flash")
     p_task.add_argument("--site", default="aistudio")
     p_task.add_argument("--entry", default="chat", help="入口模式：chat 或 task")
     p_task.add_argument("--thinking-level", default="high")
-    p_task.add_argument("--thinking-policy", choices=["adaptive", "custom", "strict"], default="adaptive", help="思考閾值策略：adaptive(智慧自適應), custom(自定義超时), strict(嚴格模式不降級)")
-    p_task.add_argument("--thinking-timeout", type=int, default=0, help="自定義思考超时秒數 (0 表示由 policy 決定)")
+    p_task.add_argument("--thinking-policy", choices=["adaptive", "custom", "strict"], default="adaptive", help="思考閾值策略：adaptive(智能自适应), custom(自定义超时), strict(严格模式不降级)")
+    p_task.add_argument("--thinking-timeout", type=int, default=0, help="自定义思考超时秒数 (0 表示由 policy 決定)")
     p_task.add_argument("--timeout", type=int, default=180)
-    p_task.add_argument("--new-chat", action="store_true", help="開新对话")
-    p_task.add_argument("--no-fallback", action="store_true", help="關閉階梯降級 (嚴格模式)")
+    p_task.add_argument("--new-chat", action="store_true", help="开启新对话")
+    p_task.add_argument("--no-fallback", action="store_true", help="关闭阶梯降级 (严格模式)")
+    p_task.add_argument("--fallback-ladder", default="", help="自定义降级阶梯序列 (逗號分隔或JSON列表，最多5級)")
     p_task.add_argument("--download-dir", default="", help="多模態下載目錄")
-    p_task.add_argument("--keep-tab", action="store_true", help="執行完畢後保留浏览器标签页不關閉")
+    p_task.add_argument("--keep-tab", action="store_true", help="执行完畢後保留浏览器标签页不关闭")
 
     # 如果傳入了 usage 子命令
     if len(sys.argv) > 1 and sys.argv[1] == "usage":
@@ -1446,14 +1459,24 @@ if __name__ == "__main__":
         print(json.dumps(res, ensure_ascii=False))
         sys.exit(0)
 
-    # 彈性相容：如果使用者直接傳入參數或旗標 (如 --model 或直接寫提示詞) 而未帶 task，自動補上 task
+    # 彈性相容：如果使用者直接傳入參數或旗標 (如 --model 或直接寫提示词) 而未帶 task，自動補上 task
     if len(sys.argv) > 1 and sys.argv[1] not in ("usage", "models", "task", "-h", "--help"):
         sys.argv.insert(1, "task")
 
-    # 執行 task 子命令
+    # 执行 task 子命令
     if len(sys.argv) > 1 and sys.argv[1] == "task":
         args = parser.parse_args()
         prompt = args.prompt or (" ".join(args.task_prompt) if args.task_prompt else "請用简体中文用一句話介紹你自己")
+        fallback_ladder = None
+        if getattr(args, "fallback_ladder", ""):
+            fl_raw = args.fallback_ladder.strip()
+            if fl_raw.startswith("["):
+                try:
+                    fallback_ladder = json.loads(fl_raw)
+                except Exception:
+                    fallback_ladder = [x.strip() for x in fl_raw.strip("[]").split(",") if x.strip()]
+            else:
+                fallback_ladder = [x.strip() for x in fl_raw.split(",") if x.strip()]
         res = run_agent_task(
             prompt,
             model=args.model,
@@ -1463,6 +1486,7 @@ if __name__ == "__main__":
             thinking_policy=args.thinking_policy,
             thinking_timeout=args.thinking_timeout,
             auto_fallback=not args.no_fallback and args.thinking_policy != "strict",
+            fallback_ladder=fallback_ladder,
             timeout_sec=args.timeout,
             new_chat=args.new_chat,
             download_dir=args.download_dir,
@@ -1471,7 +1495,7 @@ if __name__ == "__main__":
         print(json.dumps(res, ensure_ascii=False))
         sys.exit(0)
 
-    # 預設：直接把所有參數當作任務提示詞
+    # 預設：直接把所有參數當作任務提示词
     task_input = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "請用简体中文用一句話介紹你自己"
     res = run_agent_task(task_input)
     print(json.dumps(res, ensure_ascii=False))

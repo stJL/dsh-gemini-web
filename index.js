@@ -428,6 +428,12 @@ var DEFAULT_CONFIG = {
   defaultModel: "gemini-3.5-flash-lite",
   autoFallback: true,
   fallbackMode: "ladder",
+  fallbackLadder: [
+    "gemini-4-hydrogen",
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+    "gemini.google.com"
+  ],
   thinkingPolicy: "adaptive",
   thinkingLevel: "high",
   timeoutSec: 180,
@@ -577,7 +583,7 @@ async function executeAgentTask(options) {
     return {
       ok: false,
       channel: "none",
-      error: "雙通道皆未連線：請確認 Brave 已打開並啟用 AgentLimb 擴充功能，或已開啟 CDP 偵錯模式。"
+      error: "雙通道皆未连接：请确认 Brave 已打開並啟用 AgentLimb 扩展功能，或已開啟 CDP 偵錯模式。"
     };
   }
   const venv = status.pythonVenv;
@@ -585,7 +591,7 @@ async function executeAgentTask(options) {
     return {
       ok: false,
       channel: status.activeChannel,
-      error: "未找到 Python 虛擬環境 (.venv)，請先執行一鍵初始化"
+      error: "未找到 Python 虛擬環境 (.venv)，請先执行一鍵初始化"
     };
   }
   const agentlimbScript = findAgentLimbScript();
@@ -593,7 +599,10 @@ async function executeAgentTask(options) {
   const thinkingPolicy = options.thinkingPolicy || cfg.thinkingPolicy || (cfg.fallbackMode === "strict" ? "strict" : "adaptive");
   const isStrict = thinkingPolicy === "strict" || cfg.fallbackMode === "strict" || cfg.autoFallback === false || options.noFallback;
   const targetModel = options.model || cfg.defaultModel || "gemini-3.5-flash-lite";
-  const targetSite = options.site || "aistudio";
+  let targetSite = options.site || "aistudio";
+  if (targetModel === "gemini.google.com" || targetModel === "gemini") {
+    targetSite = "gemini";
+  }
   let baseTimeout = options.timeoutSec || cfg.timeoutSec || 180;
   const isHeavyTask = options.task.length > 150 || /(?:c\+\+|cpp|rust|紅黑樹|red-black|算法|演算法|架構|從零|完整實作|生產級|完整代碼|重構)/i.test(options.task);
   if (thinkingPolicy === "adaptive" && isHeavyTask) {
@@ -646,6 +655,11 @@ async function executeAgentTask(options) {
         args.push("--entry", options.entry);
       if (isStrict) {
         args.push("--no-fallback");
+      } else {
+        const ladder = options.fallbackLadder || cfg.fallbackLadder;
+        if (Array.isArray(ladder) && ladder.length > 0) {
+          args.push("--fallback-ladder", ladder.join(","));
+        }
       }
       const nodeExecTimeout = (timeoutSec + 30) * 1000;
       const { stdout } = await execFileAsync2(venv, args, {
@@ -724,7 +738,7 @@ async function executeAgentTask(options) {
       return { ok: false, channel: "cdp", error: err.message || String(err) };
     }
   }
-  return { ok: false, channel: status.activeChannel, error: "未找到執行腳本" };
+  return { ok: false, channel: status.activeChannel, error: "未找到执行脚本" };
 }
 
 // src/transport/router.ts
@@ -786,7 +800,7 @@ function createApiRouter() {
       if (routePath === "/test-agentlimb" && method === "POST") {
         const al = await detectAgentLimb();
         if (!al.ready) {
-          return send(400, { ok: false, error: "AgentLimb 未在線，請確認 Brave 中 AgentLimb 擴充功能與 Bridge 已啟動。" });
+          return send(400, { ok: false, error: "AgentLimb 未在线，请确认 Brave 中 AgentLimb 扩展功能與 Bridge 已啟動。" });
         }
         try {
           const resp = await fetch(`http://127.0.0.1:${al.port}/api/tool`, {
@@ -794,7 +808,7 @@ function createApiRouter() {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               tool: "say",
-              arguments: { text: "\uD83C\uDF89 來自 DeepSeek Harness 雙通道面板測試：AgentLimb 連線正常！零彈窗調度就緒。" },
+              arguments: { text: "\uD83C\uDF89 來自 DeepSeek Harness 雙通道面板測試：AgentLimb 连接正常！零弹窗调度就緒。" },
               timeoutMs: 5000
             })
           });
@@ -807,7 +821,7 @@ function createApiRouter() {
       if (routePath === "/clear-cache" && method === "POST") {
         cachedUsage = null;
         lastUsageTime = 0;
-        return send(200, { ok: true, message: "快取已清除" });
+        return send(200, { ok: true, message: "缓存已清除" });
       }
       if (routePath === "/open-url" && method === "POST") {
         const body = await readBody(req);
@@ -837,6 +851,7 @@ function createApiRouter() {
       if (routePath === "/models" && method === "GET") {
         const venv = findPythonVenv();
         const alScript = findAgentLimbScript();
+        let discovered = [];
         if (venv && alScript) {
           try {
             const { stdout } = await execFileAsync3(venv, [alScript, "models"], {
@@ -845,21 +860,24 @@ function createApiRouter() {
             });
             const parsed = JSON.parse(stdout.trim());
             if (parsed.status === "ok" && Array.isArray(parsed.models) && parsed.models.length > 0) {
-              return send(200, { ok: true, models: parsed.models });
+              discovered = parsed.models;
             }
           } catch {}
         }
-        return send(200, {
-          ok: true,
-          models: [
+        if (discovered.length === 0) {
+          discovered = [
             { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash Lite", new: false, paid: false },
             { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", new: false, paid: false },
             { id: "gemini-4-hydrogen", name: "Gemini 4 Hydrogen", new: true, paid: false },
             { id: "gemini-4-argon", name: "Gemini 4 Argon", new: false, paid: false },
-            { id: "gemini-nano-banana-2.1", name: "Nano Banana 2.1 (生圖)", new: true, paid: false },
-            { id: "gemini-omni-1.2-flash", name: "Gemini Omni 1.2 Flash (視頻)", new: true, paid: false }
-          ]
-        });
+            { id: "gemini-nano-banana-2.1", name: "Nano Banana 2.1", new: true, paid: false },
+            { id: "gemini-omni-1.2-flash", name: "Gemini Omni 1.2 Flash", new: true, paid: false }
+          ];
+        }
+        if (!discovered.some((m) => m.id === "gemini.google.com")) {
+          discovered.push({ id: "gemini.google.com", name: "gemini.google.com", new: false, paid: false });
+        }
+        return send(200, { ok: true, models: discovered });
       }
       if (routePath === "/execute" && method === "POST") {
         const body = await readBody(req);

@@ -8,6 +8,7 @@ export interface PluginConfig {
   defaultModel: string
   autoFallback: boolean
   fallbackMode: 'ladder' | 'strict'
+  fallbackLadder: string[]
   thinkingPolicy: 'adaptive' | 'custom' | 'strict'
   thinkingLevel: string
   timeoutSec: number
@@ -22,6 +23,12 @@ export const DEFAULT_CONFIG: PluginConfig = {
   defaultModel: 'gemini-3.5-flash-lite',
   autoFallback: true,
   fallbackMode: 'ladder',
+  fallbackLadder: [
+    'gemini-4-hydrogen',
+    'gemini-3.8-flash',
+    'gemini-3.5-flash-lite',
+    'gemini.google.com',
+  ],
   thinkingPolicy: 'adaptive',
   thinkingLevel: 'high',
   timeoutSec: 180,
@@ -32,8 +39,8 @@ export const DEFAULT_CONFIG: PluginConfig = {
 }
 
 export function getConfigPath(): string {
-  // 優先使用用戶家目錄下的全局持久化路徑 (~/.dsh/gemini-web-config.json)
-  // 杜絕因工作區切換、npm/bun 打包目錄變化或 symlink 導致配置遺失
+  // 優先使用用戶家目录下的全局持久化路徑 (~/.dsh/gemini-web-config.json)
+  // 杜絕因工作區切換、npm/bun 打包目录變化或 symlink 導致配置遺失
   try {
     const dshDir = path.join(os.homedir(), '.dsh')
     if (!fs.existsSync(dshDir)) fs.mkdirSync(dshDir, { recursive: true })

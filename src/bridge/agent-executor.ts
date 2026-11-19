@@ -16,6 +16,7 @@ export interface AgentTaskOptions {
   thinkingLevel?: string
   thinkingPolicy?: 'adaptive' | 'custom' | 'strict'
   thinkingTimeout?: number
+  fallbackLadder?: string[]
   noFallback?: boolean
   timeoutSec?: number
   sessionId?: string
@@ -63,7 +64,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
     return {
       ok: false,
       channel: 'none',
-      error: '雙通道皆未連線：請確認 Brave 已打開並啟用 AgentLimb 擴充功能，或已開啟 CDP 偵錯模式。',
+      error: '雙通道皆未连接：请确认 Brave 已打開並啟用 AgentLimb 扩展功能，或已開啟 CDP 偵錯模式。',
     }
   }
 
@@ -72,7 +73,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
     return {
       ok: false,
       channel: status.activeChannel,
-      error: '未找到 Python 虛擬環境 (.venv)，請先執行一鍵初始化',
+      error: '未找到 Python 虛擬環境 (.venv)，請先执行一鍵初始化',
     }
   }
 
@@ -83,9 +84,12 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
   const isStrict = thinkingPolicy === 'strict' || cfg.fallbackMode === 'strict' || cfg.autoFallback === false || options.noFallback
 
   const targetModel = options.model || cfg.defaultModel || 'gemini-3.5-flash-lite'
-  const targetSite = options.site || 'aistudio'
+  let targetSite = options.site || 'aistudio'
+  if (targetModel === 'gemini.google.com' || targetModel === 'gemini') {
+    targetSite = 'gemini'
+  }
 
-  // 任務量級與超時研判 (自適應模式下複雜任務自動放寬至至少 300 秒)
+  // 任務量級與超时研判 (自适应模式下複雜任務自動放寬至至少 300 秒)
   let baseTimeout = options.timeoutSec || cfg.timeoutSec || 180
   const isHeavyTask = options.task.length > 150 || /(?:c\+\+|cpp|rust|紅黑樹|red-black|算法|演算法|架構|從零|完整實作|生產級|完整代碼|重構)/i.test(options.task)
   if (thinkingPolicy === 'adaptive' && isHeavyTask) {
@@ -93,7 +97,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
   }
   const timeoutSec = baseTimeout
 
-  // 1. 判斷會話生命週期（同一 DSH 對話無感延續，全新話題開新聊天室）
+  // 1. 判斷会话生命週期（同一 DSH 对话無感延續，全新话题开启新聊天室）
   let isNewChat = false
   if (options.newChat !== undefined) {
     isNewChat = options.newChat
@@ -104,7 +108,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
     lastSessionId = options.sessionId
   }
 
-  // 2. 確保工作區 downloads 目錄存在
+  // 2. 確保工作區 downloads 目录存在
   const downloadDir = options.downloadDir || getWorkspaceDownloadDir()
   try {
     if (!fs.existsSync(downloadDir)) {
@@ -112,7 +116,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
     }
   } catch {}
 
-  // 3. 通道 A: AgentLimb (零彈窗 / 免 Allow)
+  // 3. 通道 A: AgentLimb (零弹窗 / 免 Allow)
   if (status.activeChannel === 'agentlimb' && agentlimbScript && fs.existsSync(agentlimbScript)) {
     try {
       const args = [
@@ -128,7 +132,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
       if (options.thinkingTimeout) {
         args.push('--thinking-timeout', String(options.thinkingTimeout))
       }
-      // 封印 Extra High：免費池強制安全降級至 high，避免 Permission Denied 與死迴圈
+      // 封印 Extra High：免費池強制安全降级至 high，避免 Permission Denied 與死迴圈
       let safeThinking = options.thinkingLevel || cfg.thinkingLevel || 'high'
       if (safeThinking.includes('extra') || safeThinking === 'xhigh' || safeThinking === 'max') {
         safeThinking = 'high'
@@ -139,9 +143,14 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
       if (options.entry) args.push('--entry', options.entry)
       if (isStrict) {
         args.push('--no-fallback')
+      } else {
+        const ladder = options.fallbackLadder || cfg.fallbackLadder
+        if (Array.isArray(ladder) && ladder.length > 0) {
+          args.push('--fallback-ladder', ladder.join(','))
+        }
       }
 
-      // 保障 Node.js 執行超時寬限（多給 30 秒，防止提早中斷 Python 自適應思考進程）
+      // 保障 Node.js 执行超时寬限（多給 30 秒，防止提早中斷 Python 自适应思考進程）
       const nodeExecTimeout = (timeoutSec + 30) * 1000
       const { stdout } = await execFileAsync(venv, args, {
         timeout: nodeExecTimeout,
@@ -168,7 +177,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
       }
       return { ok: true, channel: 'agentlimb', model: targetModel, output: stdout.trim() }
     } catch (err: any) {
-      // 若 AgentLimb 偶發報錯且為 auto 模式，向下嘗試 CDP 備用通道
+      // 若 AgentLimb 偶發報錯且為 auto 模式，向下尝试 CDP 備用通道
       if (cfg.connectionMode !== 'auto') {
         return { ok: false, channel: 'agentlimb', error: err.message || String(err) }
       }
@@ -212,5 +221,5 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
     }
   }
 
-  return { ok: false, channel: status.activeChannel, error: '未找到執行腳本' }
+  return { ok: false, channel: status.activeChannel, error: '未找到执行脚本' }
 }
