@@ -45,7 +45,7 @@ Built on top of [@582835293/gemini-web-agent](https://github.com/582835293/gemin
 > [!IMPORTANT]
 > **You MUST prepend your prompt with the `/gemini-web-agent` slash command!**
 > 
-> DSH host models (e.g., DeepSeek V3, Claude, GPT-4o) inherently possess general coding and writing capabilities. **Without the `/gemini-web-agent` prefix, the host AI will naturally attempt to answer locally, bypassing external web tools.**
+> DSH host models (e.g., DeepSeek, Claude, GPT-4o) inherently possess general coding and writing capabilities. **Without the `/gemini-web-agent` prefix, the host AI will naturally attempt to answer locally, bypassing external web tools.**
 > 
 > Including `/gemini-web-agent` immediately activates the external dispatch protocol, ensuring the model delegates heavy workloads to Google's external web endpoints without consuming local token budgets!
 
