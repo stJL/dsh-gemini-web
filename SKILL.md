@@ -6,14 +6,14 @@ description: >-
   (2) flow.google.com 独立点数池（Nano Banana 2.1 生图 0 点数 + 2K 高清重塑、Omni 1.2 Flash / Veo 3.1 - Lite 生视频）；
   (3) gemini.google.com 对话模式、异步任务模式 (Task)、制作音乐/图片/视频、Canvas 与 Deep Research（已支持 4 Hydrogen / 4 Neon）。
   激活后遵循原作者「先问后用」规范：先确认渠道、模型与配置提案，待用户授权后调用 gemini_web_agent 委派外部 Chrome；若用户明确指定直接发包（如带 /gw、[免确认] 或直通要求）则直接执行。严禁擅自调用 subagent 或本地代劳。
-  当用户提到“网页端 Gemini”、“Google Flow”、“Flow”、“AI Studio”、“Playground”、“Build模式”、“Lyria”、“TTS配音”、“生图”、“生视频”、“生音乐”、“利用网页版额度”、“省额度”、“任务模式”、“异步 agent”或指定 Hydrogen/Argon/Neon/Nano Banana/Omni 时激活。
+  当用户提到“网页端 Gemini”、“Google Flow”、“Flow”、“AI Studio”、“Playground”、“Build模式”、“Lyria”、“TTS配音”、“生图”、“生视频”、“生音乐”、“利用网页版额度”、“省额度”、“任务模式”、“异步 agent”、指定 Hydrogen/Argon/Neon/Nano Banana/Omni，或提出高算力架构、C++/Rust/Python 高效能并发算法（无锁队列、线程池等）深度编程任务时激活。
 ---
 
 # Gemini Web-Agent（三站点全模态与额度调度）
 
 > [!IMPORTANT]
 > **🚨 最高命令铁律：明令禁止本地模型擅自代劳与 Subagent 劫持**  
-> 当使用者在对话中显式指定调用 **`gemini-web-agent`**、**`gemini_web_agent`**、**`/gw`**、**“Gemini 网页端”**、**“Google 网页”**、**“AI Studio”**、**“Google Flow”**，或指定使用 **`Hydrogen` / `Argon` / `Neon` / `Nano Banana` / `Omni` / `Lyria`** 等模型时：  
+> 当使用者在对话中显式指定调用 **`gemini-web-agent`**、**`gemini_web_agent`**、**`/gw`**、**“Gemini 网页端”**、**“Google 网页”**、**“AI Studio”**、**“Google Flow”**，指定使用 **`Hydrogen` / `Argon` / `Neon` / `Nano Banana` / `Omni` / `Lyria`** 等模型，或提出高算力架构推演、C++/Rust/Python 高效能并发算法（如无锁队列、线程池、内存模型）等复杂编程任务时：  
 > 1. **【绝对禁令】**：本地宿主 AI（DeepSeek / Claude / GPT 等）**严禁自行在本地编写答案或擅自代劳作答**！  
 > 2. **【严禁 Subagent 劫持】**：**严禁调用 `subagent` 或 `list_subagent_models` 打付费 Google API 路由**！使用者的核心诉求是使用外部浏览器的【零 Token 免费池 (key_off)】，严禁偷开 subagent 消耗用户本地付费配额！
 > 3. **【先问后用提案工作流 (原作者规范)】**：

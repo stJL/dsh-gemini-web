@@ -27,7 +27,7 @@ export function apply(ctx: any) {
 
 【🚨 最高優先級調用鐵律 (STRICT MANDATORY POLICY)】
 1. 🛑【明令禁止本地擅自代勞與 Subagent 劫持】：
-   - 當使用者在提示詞中明確提到「gemini_web_agent」、「gemini-web-agent」、「gemini-web」、「gw」、「Gemini 網頁端」、「Google 網頁」、「AI Studio」、「Google Flow」或指定了相關模型（Hydrogen, Argon, Neon, Flash, Nano Banana, Omni, Lyria, TTS 等）時：
+   - 當使用者在提示詞中明確提到「gemini_web_agent」、「gemini-web-agent」、「gemini-web」、「gw」、「Gemini 網頁端」、「Google 網頁」、「AI Studio」、「Google Flow」、指定相關模型（Hydrogen, Argon, Neon, Flash, Nano Banana, Omni, Lyria, TTS 等），或提出需要高算力架構推演、C++/Rust/Python 高效能演算法（如無鎖佇列、線程池、記憶體模型）等複雜編程任務時：
    - **嚴禁在本地自行編寫答案或擅自代勞**！
    - **嚴禁調用 subagent 或 list_subagent_models 打付費 Google API 路由**！使用者的核心訴求是使用外部瀏覽器的【零 Token 免費池 (key_off)】，嚴禁偷開 subagent 消耗用戶本地付費配額！
 2. 💡【使用動機覆蓋】：使用者指定使用本工具，即代表其有「節省本地 Token 配額」、「使用 Google 免費層級 (key_off)」、「利用 1M 超大上下文」或「需要多模態落地」之明確意圖，本地模型不得以「自己也能回答」為由攔截，必須嚴格服從用戶意志！
@@ -78,6 +78,10 @@ export function apply(ctx: any) {
             type: 'string',
             description: 'Gemini 網頁端執行產出成果',
           },
+          render: (_args: any, value: any) => [{
+            type: 'text',
+            text: typeof value === 'string' ? value : (value ? JSON.stringify(value) : ''),
+          }],
         },
         async execute(args: any, exec?: any) {
           const sessionId = exec?.agent?.id || exec?.agent?.sessionId || exec?.sessionId
