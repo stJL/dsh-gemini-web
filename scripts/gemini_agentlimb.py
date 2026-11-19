@@ -76,6 +76,18 @@ FALLBACK_LADDER = {
 }
 
 
+def get_fallback_ladder(model_id: str) -> list[str]:
+    """根据模型能级动态推导阶梯备援，未雨绸缪自适应未来新模型（Gemini 5 / Pro / Flash 等）"""
+    mid = (model_id or "").lower()
+    if mid in FALLBACK_LADDER:
+        return FALLBACK_LADDER[mid]
+    if any(k in mid for k in ("pro", "ultra", "neon", "argon", "max", "reason")):
+        return ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"]
+    elif any(k in mid for k in ("hydrogen", "plus", "standard", "flash")):
+        return ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
+    return ["gemini-3.5-flash-lite"]
+
+
 def _save_data_url(data_url: str, out_dir: Path, prefix: str) -> str:
     """将 data:<mime>;base64,... 解码保存到本地文件"""
     m = re.match(r"^data:([^;]+);base64,(.+)$", data_url, re.DOTALL)
@@ -1116,8 +1128,8 @@ def run_agent_task(
         # 若失败且启用了自动降级 (Auto-Fallback)
         # 注意：若 thinking_policy == "strict"，auto_fallback 必定为 False，绝不走入以下降级
         if not success and auto_fallback and thinking_policy != "strict":
-            # 依次使用 AI Studio 阶梯备援模型
-            ladder = FALLBACK_LADDER.get(initial_model_id, ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"])
+            # 依次使用 AI Studio 阶梯备援模型（支持未来模型动态推导）
+            ladder = get_fallback_ladder(initial_model_id)
             fallback_targets = [c for c in ladder if c != initial_model_id]
 
             for target in fallback_targets:
