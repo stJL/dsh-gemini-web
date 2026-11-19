@@ -66,7 +66,7 @@
 
 ### 6. DSH 會話生命週期無感綁定與自動分頁清理
 * **同一話題無感延續**：自動綁定 DSH 會話 ID，連續追問時複用瀏覽器上下文，不重複開新分頁。
-* **全新話題乾淨重置**：當用戶開啟新話題或輸入斜槓命令 `/gw --new` 時，自動開啟乾淨會話。
+* **全新話題乾淨重置**：當用戶開啟新對話時，自動開啟乾淨會話。
 * **分頁生命週期自動關閉**：任務執行完畢後，後台自動執行 `tab_close` 關閉任務分頁，保持用戶瀏覽器視窗乾淨清爽；若需手動除錯可傳入 `--keep-tab`。
 
 ---
@@ -95,27 +95,16 @@
 
 ---
 
-### ⚡ 斜槓指令快速直達 (Slash Commands)
+### 💬 聊天室主調用窗口 (Primary Conversational Gateway)
 
-> [!NOTE] **關於 DSH 選單中的 `/gw` 與 `/gemini-web-agent`**
-> 當您在 DSH 輸入框按下 `/` 時，會看到兩個相關項目：
-> * 🚀 **`/gw`（指令 / Command）**：這是本外掛提供的**快速直達通道**！日常使用時，**請直接使用 `/gw`**，後台會自動嗅探關鍵字與參數並執行任務。
-> * 📖 **`/gemini-web-agent`（技能 / Skill）**：這是 DSH / Antigravity 自動探測工作區與系統技能目錄發現的**技能手冊**。它的主要用途是為底層 AI Agent 提供調度規則，一般用戶日常對話時**無需手動點選**。
-> *(註：為避免選單過度擁擠，外掛已移除重複的全名 `/gemini-web` 指令，統一以極簡清爽的 `/gw` 提供服務)*
+本外掛全面回歸並統一採用 **聊天室自然語言直通**。無需輸入任何斜槓指令，只需在 DSH 一般對話框中自然發送需求，宿主 AI 會自動調用 `gemini-web-agent` 工具，將即時思考推演、高亮程式碼與落地檔案完整呈現在對話視窗內：
 
-若不想在對話中打長句子，推薦直接使用外掛內建的 `/gw` 斜槓指令：
-* **全新對話打招呼**：
-  ```bash
-  /gw --new 請用繁體中文一句話打招呼
-  ```
 * **調用 Hydrogen 極限代碼生成**：
-  ```bash
-  /gw 請用 Gemini 4 Hydrogen 實作高效能紅黑樹並附帶完整繁中註釋
-  ```
+  > *「請用 Gemini 4 Hydrogen 實作高效能紅黑樹並附帶完整繁中註釋」*
 * **直達 Google Flow 畫布生圖**：
-  ```bash
-  /gw --site flow 請用 Nano Banana 2.1 生一張極簡日式庭園桌布
-  ```
+  > *「請用 Google Flow Nano Banana 2.1 生一張極簡日式庭園桌布」*
+* **日常架構規劃與諮詢**：
+  > *「請調用 gemini-web-agent 分析微服務架構中 Saga 模式與 TCC 模式的優缺點」*
 
 ---
 
@@ -125,8 +114,8 @@
    將本外掛軟連結或放置於 `~/.dsh/profiles/desktop/node_modules/dsh-gemini-web`。
 2. **連線檢查**：
    啟動 DSH 桌面端，進入「設定 ➔ ✨ Gemini 網頁端 (Agent 調度中心)」完成連線檢查。
-3. **人類極速直達 (Slash Commands)**：
-   在任何對話框直接輸入 `/gw <任務>`，外掛已註冊獨立頂級指令，並支援自然語言模型意圖自動解析（如提到 Hydrogen 自動切換 Gemini 4 Hydrogen，提到 Flow 自動切換 Google Flow）。
+3. **日常交談直達**：
+   在任何對話框直接以自然語言發問，宿主模型會依據意圖自動調用 `gemini-web-agent`，並自動解析模型意圖（如提到 Hydrogen 自動切換 Gemini 4 Hydrogen，提到 Flow 自動切換 Google Flow）。
 4. **Antigravity CLI / Agent 調用整合**：
    * **Skill 穿透多帳號隔離**：執行 `python scripts/setup_skill.py --auto`，腳本會自動將技能軟連結至工作區根目錄的 `.agents/skills/gemini-web-agent`，確保無論 DSH 切換至哪個隔離帳號皆能 100% 探索到本技能。
    * **Tool 原生橋接**：若希望 Antigravity CLI 直接調用 DSH 註冊的 `gemini_web_agent` 工具，只需在 `cordis.patch.yml` 中將 `dsh-agy-link` 的 `mcpBridge` 設為 `true`。
