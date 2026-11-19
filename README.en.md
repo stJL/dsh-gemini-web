@@ -288,8 +288,6 @@ The sync script:
 * 💡 **Have suggestions or feature requests?** Whether it's dispatch heuristics, card formatting, or GUI dashboard improvements, feel free to start a Discussion or open an Issue!
 * 🛠️ **Want to contribute code?** We enthusiastically welcome [Pull Requests](https://github.com/stJL/dsh-gemini-web/pulls)! From fixing typos and improving path resolution tolerance to refining DOM selectors and adding cross-platform test cases, every PR makes a difference.
 
-Let's work together to make DSH the most reliable, elegant zero-token Google Web AI bridge! 🌟
-
 ---
 
 ## ⚠️ Disclaimer
