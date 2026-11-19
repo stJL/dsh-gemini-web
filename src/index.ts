@@ -24,8 +24,7 @@ export function buildDynamicCardGuidance(): string {
 【当前系统生效之确认卡配置】：
 - 🎯 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
 - 🚪 入口模式：chat
-- 🧠 执行模型：${policyLabel}
-  ${ladderStr}
+- 🧠 执行模型：${policyLabel}<br>${ladderStr}
 - ⚙️ 推演配置：Thinking 设为 ${thinkingVal}
 - 🔄 话题隔离：new_chat: true（预设开启全新独立对话）
 
@@ -35,8 +34,8 @@ export function buildDynamicCardGuidance(): string {
 - 回复 「取消」：中止外部调度，改由本地作答
 
 【核心判断铁律】：
-1. 智能/定时模式（默认）：执行模型必须完整展示备援阶梯序列「${ladderStr}」，换行呈现，严禁擅自缩水只输出单个模型（如严禁只写 gemini-4-hydrogen）！
-2. 严格模式：仅当用户配置或指定严格模式时，执行模型才显示单个模型（如「- 🧠 执行模型：（严格模式）\\n  ${cfg.defaultModel || 'gemini-4-hydrogen'}」）。
+1. 智能/定时模式（默认）：模式标签与阶梯之间必须使用 <br> 换行展示（即「- 🧠 执行模型：${policyLabel}<br>${ladderStr}」），严禁挤在同一行，严禁擅自缩水只输出单个模型！
+2. 严格模式：仅当用户配置或指定严格模式时，执行模型才显示单个模型（如「- 🧠 执行模型：（严格模式）<br>${cfg.defaultModel || 'gemini-4-hydrogen'}」）。
 3. 渠道变化：若为多媒体生图/视频任务，渠道设为 Google Flow（flow），模型设为 gemini-nano-banana-2.1；若用户指定官网渠道，渠道设为 gemini.google.com，模型设为 Auto。
 4. 用户指定模型绝对优先：若用户输入明确指定了模型（如「用 Flash Lite」），执行模型必须 100% 原样采用用户指定的模型，严禁擅自升级！`
 }

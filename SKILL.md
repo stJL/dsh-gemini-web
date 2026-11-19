@@ -73,9 +73,9 @@ description: >-
    - 标题统一为 `### 🌐 Gemini Web Agent`（无括号与额外后缀）
    - 第二行保留具体任务描述反馈（例如：`检测到您欲调用外部 Google 网页端实现并发任务，相关配置如下：`）
    - **【防塌陷排版铁律】**：各项必须严格以 Markdown 无序列表符号 `- ` 开头（如 `- 🎯 ...`），严禁省略 `- ` 导致 Markdown 引擎将多行折叠合并为单行！
-   - **【执行模型展示铁律】**：
-     - 在「智能/定时模式」（默认模式）下，执行模型必须输出为两行：`- 🧠 执行模型：（智能/定时模式）`并在下一行完整输出阶梯序列（如 `gemini-4-hydrogen -> gemini-3.8-flash -> ...`），**绝对严禁擅自缩水只写单个模型**！
-     - 仅在明确处于「严格模式」时，才输出单个锁定模型（`- 🧠 执行模型：（严格模式）\n  <单模型>`）。
+   - **【执行模型换行展示铁律】**：
+     - 在「智能/定时模式」（默认模式）下，模式标签与阶梯模型之间**必须使用 `<br>` 换行**（即 `- 🧠 执行模型：（智能/定时模式）<br>gemini-4-hydrogen -> gemini-3.8-flash -> ...`），严禁合并在同一行，且**绝对严禁擅自缩水只写单个模型**！
+     - 仅在明确处于「严格模式」时，才输出单个锁定模型（`- 🧠 执行模型：（严格模式）<br>gemini-4-hydrogen`）。
    - `- 🚪 入口模式：chat`（保持极简，无额外括号）
    - `- ⚙️ 推演配置：Thinking 设为 high`（按设定动态显示 high/medium，无多余冗余解释）
    - `- 🔄 话题隔离：new_chat: true（预设开启全新独立对话）`
@@ -91,8 +91,7 @@ description: >-
 
      - 🎯 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
      - 🚪 入口模式：chat
-     - 🧠 执行模型：（智能/定时模式）
-       gemini-4-neon -> gemini-4-hydrogen -> gemini-3.8-flash -> gemini-3.5-flash-lite
+     - 🧠 执行模型：（智能/定时模式）<br>gemini-4-neon -> gemini-4-hydrogen -> gemini-3.8-flash -> gemini-3.5-flash-lite
      - ⚙️ 推演配置：Thinking 设为 high
      - 🔄 话题隔离：new_chat: true（预设开启全新独立对话）
 
@@ -110,14 +109,15 @@ description: >-
 
      - 🎯 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
      - 🚪 入口模式：chat
-     - 🧠 执行模型：（严格模式）
-       gemini-4-hydrogen
+     - 🧠 执行模型：（严格模式）<br>gemini-4-hydrogen
      - ⚙️ 推演配置：Thinking 设为 high
      - 🔄 话题隔离：new_chat: true（预设开启全新独立对话）
 
      👉 请确认是否发包执行？
      - 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行
      - 回复 调整参数（如「改用 Flash Lite」、「改用 Argon」等）：按您的要求调整后直接发包
+     - 回复 「取消」：中止外部调度，改由本地作答
+     ```
      - 回复 「取消」：中止外部调度，改由本地作答
      ```
 
