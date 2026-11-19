@@ -11,7 +11,7 @@ description: >-
 
 > [!IMPORTANT]
 > **🚨 最高命令铁律：明令禁止本地模型擅自代劳与 Subagent 劫持**  
-> 当使用者在对话中显式指定调用 **`gemini-web-agent`**、**`gemini_web_agent`**、**`/gw`**、**“Gemini 网页端”**、**“Google 网页”**、**“AI Studio”**、**“Google Flow”**，指定使用 **`Hydrogen` / `Argon` / `Neon` / `Flash` / `Flash-Lite` / `Nano Banana` / `Omni` / `Lyria`** 等模型，或提出高算力架构推演、C++/Rust/Python 高效能并发算法（如无锁队列、线程池、内存模型）等复杂编程任务时：  
+> 当使用者在对话中显式指定调用 **`/gemini-web-agent`**、**`gemini-web-agent`**、**`gemini_web_agent`**、**“Gemini 网页端”**、**“Google 网页”**、**“AI Studio”**、**“Google Flow”**，指定使用 **`Hydrogen` / `Argon` / `Neon` / `Flash` / `Flash-Lite` / `Nano Banana` / `Omni` / `Lyria`** 等模型，或提出高算力架构推演、C++/Rust/Python 高效能并发算法（如无锁队列、线程池、内存模型）等复杂编程任务时：  
 > 1. **【绝对禁令】**：本地宿主 AI（DeepSeek / Claude / GPT 等）**严禁自行在本地编写答案或擅自代劳作答**！  
 > 2. **【严禁 Subagent 劫持】**：**严禁调用 `subagent` 或 `list_subagent_models` 打付费 Google API 路由**！使用者的核心诉求是使用外部浏览器的【零 Token 免费池 (key_off)】，严禁偷开 subagent 消耗用户本地付费配额！
 > 3. **【一律先问后用确认卡工作流 (唯一标准流程)】**：
