@@ -118,10 +118,6 @@ flowchart TD
   - **🎨 Canvas 0-Credit Image Generation Privilege (Crucial!)**: Generating 2K images with Nano Banana 2.1 / Pro inside the bottom canvas prompt box **consumes 0 credits (`Generating will use 0 credits`)**, enabling virtually unlimited high-res image generation!
   - **⚠️ Paid Credit Pitfalls**: Opening the right-side Conversational Agent panel or requesting video generation (Omni / Veo) consumes credits. Stick to the bottom canvas prompt box for free image creation.
 
-<!-- [Image 4 - Google Flow Canvas 0-Credit Highlight] -->
-<!-- Screenshot hint: Close-up of Google Flow bottom canvas input displaying "Generating will use 0 credits", or DSH preview displaying the received image -->
-![Google Flow Canvas 0-Credit Highlight](docs/images/flow_zero_credits.png)
-
 * **Gemini Web Portal (`gemini.google.com`)**:
   - Features an independent 5-hour rolling free conversation pool supporting general chat and web-connected task research. Tabs are automatically closed upon completion.
 
@@ -150,10 +146,6 @@ To guarantee transparency, predictability, and complete control, the plugin enfo
    - Replying with parameter adjustments: Updates settings and dispatches directly.
    - Replying `Cancel`: Halts external calls and answers locally.
 
-<!-- [Image 2 - Ask-Before-Dispatch Proposal Card Demo] -->
-<!-- Screenshot hint: DSH chat screenshot: Turn 1 user prompt with /gemini-web-agent -> AI returns proposal card and stops; Turn 2 user replies 1 -> AI executes and delivers results -->
-![Ask-Before-Dispatch Proposal Card Demo](docs/images/proposal_card_demo.png)
-
 ### 5. Sequential Fallback Ladder
 * **Adaptive Mode**: When AI Studio encounters peak queue congestion, rate limits, or timeouts, execution cascades smoothly through backup tiers:
   $$\text{Tier 1 (Hydrogen)} \longrightarrow \text{Tier 2 (Flash)} \longrightarrow \text{Tier 3 (Flash Lite)} \longrightarrow \text{Gemini Web Portal}$$
@@ -169,18 +161,10 @@ To guarantee transparency, predictability, and complete control, the plugin enfo
   ```
 * Prevents small host models from encountering Server-Sent Event (SSE) stream interruptions (`Incomplete JSON segment`) when copying long code outputs.
 
-<!-- [Image 5 - Automated File Landing Delivery & Clickable Links] -->
-<!-- Screenshot hint: Screenshot showing DSH chat ending with "Output files successfully saved to workspace" and clickable file:/// links -->
-![Automated File Landing Delivery & Clickable Links](docs/images/file_delivery_links.png)
-
 ### 7. Multi-modal File, Log & Paper PDF Attachment (1M Context)
 * **1M Token Zero-Overhead Throughput**: Injects local `.txt`, `.log`, `.pdf`, `.py`, `.cpp`, or image files directly into Google AI Studio via `DataTransfer` (Channel A) or Chromium `DOM.setFileInputFiles` (Channel B) without any modal dialogs.
 * **Eliminates Local Context Window Overflow**: Local models no longer need to ingest hundreds of thousands of lines of logs. Simply pass file paths, and Google AI Studio's 1M-token free tier performs deep cross-modal reasoning.
 * **Concurrent Multi-File Mounting**: Supports attaching multiple reference files simultaneously.
-
-<!-- [Image 6 - Local File Attachment & 1M Context Analysis] -->
-<!-- Screenshot hint: DSH chat showing proposal card marked with "📁 Mounted Files" followed by AI Studio successfully parsing and answering based on file contents -->
-![Local File Attachment & 1M Context Analysis](docs/images/file_upload_analysis.png)
 
 ---
 

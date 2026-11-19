@@ -118,10 +118,6 @@ flowchart TD
   - **🎨 畫布 0 點數生圖特權（重要！）**：在底部標準畫布（Canvas）提示詞框使用 Nano Banana 2.1 / Pro 生成 2K 高清圖片時，**完全不扣除點數（Generating will use 0 credits）**，等同無限免費生圖！
   - **⚠️ 扣點避坑提醒**：點開右側 Conversational Agent 對話面板（Agent 模式）或點選生成影片（Omni / Veo）時會扣除點數，日常純生圖請認準底欄畫布生成。
 
-<!-- [圖片 4 - Google Flow 畫布 0 點數特權特寫] -->
-<!-- 截圖提示：截取 Google Flow 底部畫布輸入框中顯示「Generating will use 0 credits」的特寫，或 DSH 中成功接收生圖的預覽畫面 -->
-![Google Flow 畫布 0 點數特權特寫](docs/images/flow_zero_credits.png)
-
 * **Gemini 官網 (`gemini.google.com`)**：
   - 獨立 5 小時滾動免費對話池，支援日常對話與 Task 聯網任務，任務完成自動關閉分頁。
 
@@ -150,10 +146,6 @@ flowchart TD
    - 回覆 調整參數：AI 立即按最新參數直接發包。
    - 回覆 `取消`：中止外部調度，改由本地直接回答。
 
-<!-- [圖片 2 - 先問後用確認卡互動演示] -->
-<!-- 截圖提示：DSH 對話框截圖：第 1 輪用戶發出 /gemini-web-agent 需求 -> AI 回覆提案卡並停止；第 2 輪用戶回覆 1 -> AI 調用發包 -->
-![先問後用確認卡互動演示](docs/images/proposal_card_demo.png)
-
 ### 5. 階梯備援降級機制 (Sequential Fallback Ladder)
 * **智能模式**：在 AI Studio 遭遇尖峰壅塞、限流或超時時，自動沿著梯隊平滑降級：
   $$\text{Tier 1 (Hydrogen)} \longrightarrow \text{Tier 2 (Flash)} \longrightarrow \text{Tier 3 (Flash Lite)} \longrightarrow \text{Gemini 官網}$$
@@ -169,18 +161,10 @@ flowchart TD
   ```
 * 避免全量長代碼在聊天視窗大量重抄導致小模型 SSE 串流截斷（Incomplete JSON segment）。
 
-<!-- [圖片 5 - 成果文件落地與可點擊超連結] -->
-<!-- 截圖提示：截取 DSH 聊天室末尾輸出的「成果文件已落地存檔至本地工作區」與 file:/// 超連結展示 -->
-![成果文件落地與可點擊超連結](docs/images/file_delivery_links.png)
-
 ### 7. 本機檔案、日誌與論文 PDF 無彈窗掛載分析 (Multi-modal File Attachment)
 * **1M Token 零開銷吞吐**：透過底層 `DataTransfer`（通道 A）與 Chromium 原生 `DOM.setFileInputFiles`（通道 B），直接將本機的 `.txt`、`.log`、`.pdf`、`.py`、`.cpp` 或圖片無彈窗上傳至 Google AI Studio 進行端到端多模態解析。
 * **徹底規避本機 Context 溢出**：本機宿主模型無需在聊天對話框中重抄或吞吐十萬行日誌文本，只需傳入檔案路徑，由 Google AI Studio 免費層級（100 萬 Token 窗口）全權推演分析並回傳結論！
 * **多檔案並行掛載**：支援一次性掛載多份參考文檔或對比文件。
-
-<!-- [圖片 6 - 本機檔案掛載與巨型上下文分析] -->
-<!-- 截圖提示：截取 DSH 提案卡中標記「📁 掛載檔案」並成功於 AI Studio 讀取分析檔案內容的回顯畫面 -->
-![本機檔案掛載與巨型上下文分析](docs/images/file_upload_analysis.png)
 
 ---
 
