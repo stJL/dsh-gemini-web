@@ -262,10 +262,65 @@ def _run_gemini_web_task(
                     if saved:
                         saved_files.append(saved)
 
+        # 自動代碼檢測與保存落地（官網通道防吞噬）
+        if final_text:
+            code_text = ""
+            lang = ""
+            code_block_match = re.search(r'```([a-zA-Z0-9_\-\+\#]+)?\s*\n(.*?)```', final_text, re.DOTALL)
+            if code_block_match:
+                lang = (code_block_match.group(1) or "").lower().strip()
+                code_text = code_block_match.group(2)
+            else:
+                # 檢測 gemini.google.com 網頁端特有的代碼標題格式 (例如 "Rust\nuse ...", "C++\n#include ...", "Python\nimport ...")
+                alt_match = re.search(r'(?:^|\n)(Rust|C\+\+|Python|Go|TypeScript|JavaScript|HTML|CSS|TOML|JSON)\s*\n(.*?)(?=\n[A-Z][a-z]+|\Z)', final_text, re.DOTALL)
+                if alt_match:
+                    lang = alt_match.group(1).lower().strip()
+                    code_text = alt_match.group(2)
+
+            if code_text:
+                ext_map = {
+                    "cpp": ".cpp", "c++": ".cpp", "cxx": ".cpp", "c": ".c", "h": ".h", "hpp": ".hpp",
+                    "python": ".py", "py": ".py",
+                    "rust": ".rs", "rs": ".rs",
+                    "go": ".go", "golang": ".go",
+                    "javascript": ".js", "js": ".js", "typescript": ".ts", "ts": ".ts",
+                    "html": ".html", "css": ".css", "sh": ".sh", "bash": ".sh",
+                    "json": ".json", "yaml": ".yaml", "yml": ".yml", "toml": ".toml"
+                }
+                ext = ext_map.get(lang, ".txt")
+                stem = "gemini_generated_code"
+                tl = task.lower()
+                if "thread" in tl or "線程池" in task or "线程池" in task:
+                    stem = "thread_pool"
+                elif "actor" in tl or "akka" in tl or "rust" in tl:
+                    stem = "actor_system"
+                elif "queue" in tl or "無鎖" in task or "佇列" in task or "队列" in task:
+                    stem = "lock_free_queue"
+                elif "crawler" in tl or "爬蟲" in task or "爬虫" in task:
+                    stem = "async_crawler"
+                elif "tree" in tl or "紅黑樹" in task or "红黑树" in task:
+                    stem = "red_black_tree"
+
+                out_p = Path(download_dir).resolve() if download_dir else (Path.cwd() / "downloads").resolve()
+                out_p.mkdir(parents=True, exist_ok=True)
+                code_file_path = out_p / f"{stem}{ext}"
+                try:
+                    with open(code_file_path, "w", encoding="utf-8") as cf:
+                        cf.write(code_text)
+                    if str(code_file_path) not in saved_files:
+                        saved_files.append(str(code_file_path))
+                except Exception as e:
+                    print(f"[code_save_error] {e}", file=sys.stderr)
+
+        if saved_files:
+            links = "\n".join([f"- [{Path(f).name}](file://{f})" for f in saved_files])
+            final_text += f"\n\n🎉 生成成果已同步落地存檔至本地工作區：\n{links}"
+
         success = bool(final_text or saved_files)
         return {
             "ok": success,
-            "model": "gemini-web",
+            "site": "gemini",
+            "model": "gemini.google.com (官網通道)",
             "fell_back": False,
             "output": final_text,
             "files": saved_files,
@@ -966,7 +1021,25 @@ def run_agent_task(
                     break
 
             if not success:
-                err = "CONGESTION_HALT: Google AI Studio 免費池全數高負載壅塞，階梯降級備援模型皆不可用。"
+                # 終極備援：跨站點無縫降級至 gemini.google.com 官網免費通道
+                fallback_chain.append("gemini.google.com (官網備援通道)")
+                web_res = _run_gemini_web_task(
+                    task=task,
+                    timeout_sec=timeout_sec,
+                    new_chat=True,
+                    download_dir=download_dir,
+                    keep_tab=keep_tab,
+                    entry=entry,
+                )
+                if web_res.get("ok"):
+                    success = True
+                    output = web_res.get("output", "")
+                    files = web_res.get("files", [])
+                    err = ""
+                    active_model = "gemini.google.com (官網通道)"
+                    fell_back = True
+                else:
+                    err = "CONGESTION_HALT: Google AI Studio 與 Gemini 官網免費池全數高負載壅塞。"
 
         # 自動代碼檢測與保存落地（防吞噬雙重保險）
         if success and output:

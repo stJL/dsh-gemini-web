@@ -26,6 +26,7 @@ export interface AgentTaskOptions {
 export interface AgentTaskResult {
   ok: boolean
   channel: 'agentlimb' | 'cdp' | 'none'
+  site?: string
   model?: string
   initialModel?: string
   output?: string
@@ -153,6 +154,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
         return {
           ok: parsed.ok,
           channel: 'agentlimb',
+          site: parsed.site || targetSite,
           model: parsed.model || targetModel,
           initialModel: parsed.initial_model || targetModel,
           output: parsed.output || '',

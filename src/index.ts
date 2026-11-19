@@ -92,7 +92,9 @@ export function apply(ctx: any) {
             const initial = res.initialModel || '初始模型'
             const current = res.model || '備援模型'
             const pathDisplay = res.fallbackHistory || `\`${initial}\` ➔ 尖峰塞車 ➔ \`${current}\``
-            notice = `> 🔄 **【模型降級調度流程通知】**\n> - 原選模型：\`${initial}\`（遭遇 Google AI Studio 免費池尖峰塞車）\n> - 階梯調度路徑：${pathDisplay}\n> - 最終交付模型：\`${current}\`（推演與代碼生成成功）\n\n`
+            notice = `> 🔄 **【模型與渠道降級調度流程通知】**\n> - 原選模型/渠道：\`${initial}\`（遭遇 Google AI Studio 免費池尖峰塞車）\n> - 階梯調度路徑：${pathDisplay}\n> - 最終交付渠道與模型：\`${current}\`（推演與代碼生成成功）\n\n`
+          } else if (res.site === 'gemini' || args.site === 'gemini') {
+            notice = `> 🌐 **【執行渠道通知】**：本次任務已由 **Gemini 官網通道 (gemini.google.com)** 順利執行完成。\n\n`
           }
           let fileLinks = ''
           if (res.files && res.files.length > 0) {
