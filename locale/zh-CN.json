@@ -46,6 +46,12 @@
     },
     "config": {
       "title": "⚙️ Agent 调度与浏览器通道设置",
+      "dispatchMode": "Agent 调度执行模式",
+      "dispatchModeDesc": "设定接收到 Gemini 网页端任务时的执行策略（原作者推荐：先问后用）",
+      "dispatchAskFirst": "🛡️ 先问后用模式（原作者推荐・安全控费）",
+      "dispatchFastTrack": "⚡ 极速直通模式（Fast-Track・免二次确认）",
+      "dispatchAskFirstHint": "🛡️ 先问后用：发包前先向用户呈现调度提案（渠道、模型、配置与 0 成本），待用户确认后执行；支持「例外直通」（带 /gw 或明确要求直接发包时直通）。",
+      "dispatchFastTrackHint": "⚡ 极速直通：收到任务后第一步直接调用 gemini_web_agent 委派执行，跳过前置确认卡。",
       "connMode": "浏览器连接通道策略",
       "defaultModel": "Agent 默认首选模型",
       "fallbackMode": "免费池塞车阶梯降级切换",

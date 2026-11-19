@@ -14,6 +14,7 @@ export interface PluginConfig {
   port: number
   preferredBrowser: string
   flowCount: number
+  dispatchMode: 'ask_first' | 'fast_track'
 }
 
 export const DEFAULT_CONFIG: PluginConfig = {
@@ -27,6 +28,7 @@ export const DEFAULT_CONFIG: PluginConfig = {
   port: 9222,
   preferredBrowser: 'auto',
   flowCount: 1,
+  dispatchMode: 'ask_first',
 }
 
 export function getConfigPath(): string {

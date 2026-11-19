@@ -46,6 +46,12 @@
     },
     "config": {
       "title": "⚙️ Agent Orchestration & Channel Settings",
+      "dispatchMode": "Agent Dispatch Mode",
+      "dispatchModeDesc": "Execution policy when receiving Gemini Web tasks (Author Recommended: Ask-Before-Dispatch)",
+      "dispatchAskFirst": "🛡️ Ask-Before-Dispatch (Author Recommended · Safe Quota)",
+      "dispatchFastTrack": "⚡ Fast-Track Mode (Zero-Confirmation · Direct)",
+      "dispatchAskFirstHint": "🛡️ Ask-Before-Dispatch: Presents a proposal card (site, model, config & 0-cost) for confirmation before dispatching; supports bypass on explicit direct request.",
+      "dispatchFastTrackHint": "⚡ Fast-Track: Directly calls gemini_web_agent on task arrival without confirmation.",
       "connMode": "Browser Connection Strategy",
       "defaultModel": "Agent Default Preferred Model",
       "fallbackMode": "Free Pool Congestion Fallback Strategy",

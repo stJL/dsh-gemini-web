@@ -433,7 +433,8 @@ var DEFAULT_CONFIG = {
   timeoutSec: 180,
   port: 9222,
   preferredBrowser: "auto",
-  flowCount: 1
+  flowCount: 1,
+  dispatchMode: "ask_first"
 };
 function getConfigPath() {
   try {
@@ -891,9 +892,14 @@ function apply(ctx) {
 - 即時聯網檢索、結構化圖表與行程畫布規劃（Gemini 官網 Task / Canvas 模式）
 
 【\uD83D\uDEA8 最高優先級調用鐵律 (STRICT MANDATORY POLICY)】
-1. \uD83D\uDED1【明令禁止本地擅自代勞】：當使用者在提示詞中明確提到「gemini_web_agent」、「gemini-web-agent」、「gemini-web」、「gw」、「Gemini 網頁端」、「Google 網頁」、「AI Studio」、「Google Flow」或指定了相關模型（Hydrogen, Argon, Neon, Flash, Nano Banana, Omni, Lyria, TTS 等）時，本地 AI 模型（DeepSeek / Claude / GPT）**絕對嚴格禁止在本地自行編寫答案或擅自代勞！必須 100% 無條件立刻調用本工具委派給 Google 網頁端執行**！
-2. \uD83D\uDCA1【使用動機覆蓋】：使用者指定使用本工具，即代表其有「節省本地 Token 配額」、「使用 Google 免費層級 (key_off)」、「利用 1M 超大上下文」或「需要多模態落地」之明確意圖，本地模型不得以「自己也能回答」為由攔截，必須嚴格服從用戶意志調用本工具！
-3. ⚡【極速直通，嚴禁前置思考與環境探測】：底層瀏覽器連線、AgentLimb 轉發與進程狀態已由外掛背景 Daemon 100% 全自動託管。本地模型在收到任務後，**嚴禁在調用前執行端口掃描、進程檢查、環境排錯、額度巡檢或長篇推理**，第一步直接呼叫本工具，0 思考開銷立刻交差！
+1. \uD83D\uDED1【明令禁止本地擅自代勞與 Subagent 劫持】：
+   - 當使用者在提示詞中明確提到「gemini_web_agent」、「gemini-web-agent」、「gemini-web」、「gw」、「Gemini 網頁端」、「Google 網頁」、「AI Studio」、「Google Flow」或指定了相關模型（Hydrogen, Argon, Neon, Flash, Nano Banana, Omni, Lyria, TTS 等）時：
+   - **嚴禁在本地自行編寫答案或擅自代勞**！
+   - **嚴禁調用 subagent 或 list_subagent_models 打付費 Google API 路由**！使用者的核心訴求是使用外部瀏覽器的【零 Token 免費池 (key_off)】，嚴禁偷開 subagent 消耗用戶本地付費配額！
+2. \uD83D\uDCA1【使用動機覆蓋】：使用者指定使用本工具，即代表其有「節省本地 Token 配額」、「使用 Google 免費層級 (key_off)」、「利用 1M 超大上下文」或「需要多模態落地」之明確意圖，本地模型不得以「自己也能回答」為由攔截，必須嚴格服從用戶意志！
+3. \uD83D\uDEE1️【先問後用提案工作流 (原作者規範)】：
+   - 當處於「先問後用模式」且用戶未附帶直通標籤時，宿主 AI 可先輸出調度提案（包含推薦渠道 site、入口 entry、模型 model、思考等級 thinking_level、話題隔離 new_chat 與 0 成本預算），待用戶確認後（回覆「確認」、「1」或調整參數）立即發包調用本工具；
+   - ⚡【例外直通（原作者規定：明確指定則直接跑）】：若用戶指令中包含「/gw」、「[免確認]」、「直接發包」、「立即執行」等直通意圖，或設定為極速直通模式時，無需二次確認，第一時間直接呼叫本工具！
 4. \uD83D\uDCE6【結果如實傳遞】：調用完成後，將網頁端回傳之成果（含代碼與落地檔案超連結）完整呈現給使用者，嚴禁擅自吞噬或覆蓋。`,
         parameters: {
           type: "object",

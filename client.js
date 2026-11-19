@@ -403,6 +403,11 @@ window.__ModuleLoader__.load({
         routing_paid_title: '🔒 付费模型防扣款锁',
         routing_paid_desc: '➔ 强制过滤并锁定 Paid 标记条目（如 Carbon），默认完全避开，保护钱包！',
         settings_section_title: '⚙️ Agent 调度与浏览器通道设置',
+        dispatch_mode_title: 'Agent 调度执行模式：',
+        dispatch_mode_ask_first_desc: '🛡️ 先问后用（原作者推荐）：发包前呈现渠道与参数提案，待确认后执行；支持「例外直通」（指定直接发包直接跑）',
+        dispatch_mode_fast_track_desc: '⚡ 极速直通：收到任务后第一步直接调用 gemini_web_agent 委派执行，跳过前置确认卡',
+        dispatch_mode_ask_first: '🛡️ 先问后用模式 (原作者推荐・安全控费)',
+        dispatch_mode_fast_track: '⚡ 极速直通模式 (Fast-Track・免确认)',
         lang_label: '界面语言 (Language)：',
         lang_desc: '默认自动跟随 DSH 系统语言，亦可在此手动指定',
         lang_auto: '🌐 自动 (跟随 DSH 系统)',
@@ -548,6 +553,11 @@ window.__ModuleLoader__.load({
         routing_paid_title: '🔒 付費模型防扣款鎖',
         routing_paid_desc: '➔ 強制過濾並鎖定 Paid 標記條目（如 Carbon），預設完全避開，保護錢包！',
         settings_section_title: '⚙️ Agent 調度與瀏覽器通道設定',
+        dispatch_mode_title: 'Agent 調度執行模式：',
+        dispatch_mode_ask_first_desc: '🛡️ 先問後用（原作者推薦）：發包前呈現渠道與參數提案，待確認後執行；支援「例外直通」（指定直接發包直接跑）',
+        dispatch_mode_fast_track_desc: '⚡ 極速直通：收到任務後第一步直接調用 gemini_web_agent 委派執行，跳過前置確認卡',
+        dispatch_mode_ask_first: '🛡️ 先問後用模式 (原作者推薦・安全控費)',
+        dispatch_mode_fast_track: '⚡ 極速直通模式 (Fast-Track・免確認)',
         lang_label: '介面語言 (UI Language)：',
         lang_desc: '預設自動跟隨 DSH 系統語言，亦可在此手動指定',
         lang_auto: '🌐 自動 (跟隨 DSH 系統)',
@@ -693,6 +703,11 @@ window.__ModuleLoader__.load({
         routing_paid_title: '🔒 Paid Model Safety Lock',
         routing_paid_desc: '➔ Automatically filters and locks Paid-tagged models (e.g. Carbon) to protect your wallet!',
         settings_section_title: '⚙️ Agent Orchestration & Channel Settings',
+        dispatch_mode_title: 'Agent Dispatch Mode:',
+        dispatch_mode_ask_first_desc: '🛡️ Ask-Before-Dispatch (Author Recommended): Presents proposal before execution; bypasses on explicit direct request',
+        dispatch_mode_fast_track_desc: '⚡ Fast-Track: Directly calls gemini_web_agent upon task arrival without confirmation card',
+        dispatch_mode_ask_first: '🛡️ Ask-Before-Dispatch (Author Recommended)',
+        dispatch_mode_fast_track: '⚡ Fast-Track Mode (Direct Execution)',
         lang_label: 'Interface Language (Language):',
         lang_desc: 'Default follows DSH system language, or choose manually here',
         lang_auto: '🌐 Auto (Follow DSH System)',
@@ -1368,6 +1383,28 @@ window.__ModuleLoader__.load({
                   h('option', { value: 'zh-CN' }, t('lang_zhcn')),
                   h('option', { value: 'zh-TW' }, t('lang_zhtw')),
                   h('option', { value: 'en-US' }, t('lang_en')),
+                ])
+              ])
+            ]),
+
+            // 設定 0: 調度執行模式 (Dispatch Mode: 先問後用 vs 極速直通)
+            h('div', { className: 'gw-setting-row' }, [
+              h('div', { className: 'gw-setting-info' }, [
+                h('div', { style: { fontWeight: 500 } }, t('dispatch_mode_title')),
+                h('div', { style: { fontSize: 11, opacity: 0.6 } },
+                  (config.dispatchMode === 'fast_track')
+                    ? t('dispatch_mode_fast_track_desc')
+                    : t('dispatch_mode_ask_first_desc'))
+              ]),
+              h('div', { className: 'gw-setting-ctrl' }, [
+                h('select', {
+                  className: 'gw-select',
+                  style: { minWidth: 160 },
+                  value: config.dispatchMode || 'ask_first',
+                  onChange: (e) => updateConfig({ dispatchMode: e.target.value })
+                }, [
+                  h('option', { value: 'ask_first' }, t('dispatch_mode_ask_first')),
+                  h('option', { value: 'fast_track' }, t('dispatch_mode_fast_track')),
                 ])
               ])
             ]),

@@ -46,6 +46,12 @@
     },
     "config": {
       "title": "⚙️ Agent 調度與瀏覽器通道設定",
+      "dispatchMode": "Agent 調度執行模式",
+      "dispatchModeDesc": "設定接收到 Gemini 網頁端任務時的執行策略（原作者推薦：先問後用）",
+      "dispatchAskFirst": "🛡️ 先問後用模式（原作者推薦・安全控費）",
+      "dispatchFastTrack": "⚡ 極速直通模式（Fast-Track・免二次確認）",
+      "dispatchAskFirstHint": "🛡️ 先問後用：發包前先向使用者呈現調度提案（渠道、模型、配置與 0 成本），待使用者確認後執行；支援「例外直通」（帶 /gw 或明確要求直接發包時直通）。",
+      "dispatchFastTrackHint": "⚡ 極速直通：收到任務後第一步直接調用 gemini_web_agent 委派執行，跳過前置確認卡。",
       "connMode": "瀏覽器連線通道策略",
       "defaultModel": "Agent 預設首選模型",
       "fallbackMode": "免費池塞車階梯降級切換",

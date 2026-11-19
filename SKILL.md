@@ -5,29 +5,37 @@ description: >-
   (1) aistudio.google.com 全模型免 Key 免费额度（key_off）：覆盖文本推理/1M长输出（4 Neon/4 Hydrogen/4 Argon）、生图改图（Nano Banana 2.1）、生视频（Omni 1.2 Flash/1.1 Flash）、完整歌曲（Lyria 3.5）、语音配音与剧本对话（Gemini 3.8 Flash TTS）、录音转写（3.5 Transcribe）、Live 实时对话同传（3.8 Live/3.5 Live Translate）、Deep Research 与 Build 整站应用导出；
   (2) flow.google.com 独立点数池（Nano Banana 2.1 生图 0 点数 + 2K 高清重塑、Omni 1.2 Flash / Veo 3.1 - Lite 生视频）；
   (3) gemini.google.com 对话模式、异步任务模式 (Task)、制作音乐/图片/视频、Canvas 与 Deep Research（已支持 4 Hydrogen / 4 Neon）。
-  激活后先检测各端额度并按需对比本地额度，询问用户要使用的站点、模式与模型后，再优先通过 AgentLimb MCP（或备用 gemini_web.py）调度外部 Chrome。
-  当用户提到“网页端 Gemini”、“Google Flow”、“Flow”、“AI Studio”、“Playground”、“Build模式”、“Lyria”、“TTS配音”、“生图”、“生视频”、“生音乐”、“利用网页版额度”、“省额度”、“任务模式”、“异步 agent”时激活。
+  激活后遵循原作者「先问后用」规范：先确认渠道、模型与配置提案，待用户授权后调用 gemini_web_agent 委派外部 Chrome；若用户明确指定直接发包（如带 /gw、[免确认] 或直通要求）则直接执行。严禁擅自调用 subagent 或本地代劳。
+  当用户提到“网页端 Gemini”、“Google Flow”、“Flow”、“AI Studio”、“Playground”、“Build模式”、“Lyria”、“TTS配音”、“生图”、“生视频”、“生音乐”、“利用网页版额度”、“省额度”、“任务模式”、“异步 agent”或指定 Hydrogen/Argon/Neon/Nano Banana/Omni 时激活。
 ---
 
 # Gemini Web-Agent（三站点全模态与额度调度）
 
 > [!IMPORTANT]
-> **🚨 最高命令铁律：明令禁止本地模型擅自代劳**  
+> **🚨 最高命令铁律：明令禁止本地模型擅自代劳与 Subagent 劫持**  
 > 当使用者在对话中显式指定调用 **`gemini-web-agent`**、**`gemini_web_agent`**、**`/gw`**、**“Gemini 网页端”**、**“Google 网页”**、**“AI Studio”**、**“Google Flow”**，或指定使用 **`Hydrogen` / `Argon` / `Neon` / `Nano Banana` / `Omni` / `Lyria`** 等模型时：  
 > 1. **【绝对禁令】**：本地宿主 AI（DeepSeek / Claude / GPT 等）**严禁自行在本地编写答案或擅自代劳作答**！  
-> 2. **【强制委派】**：必须 100% 无条件立刻调用 `gemini_web_agent` 工具（或执行对应调度脚本），将任务完整委托给外部 Google 网页端执行！  
-> 3. **【尊重意志】**：使用者之所以显式指定外部网页端，是为了利用 Google 免费额度（key_off）、1M 超大上下文或多模态能力，本地模型不得以“自己也能写代码”为由截胡！
-> 4. **【⚡ 极速直通禁思令 (0 Token 消耗)】**：底层 Chrome 与 AgentLimb 桥接已由外挂 Daemon 背景完全托管。**严禁在任务执行前进行任何端口扫描、进程检查、代码逆向、环境探测或额度巡检**！第 1 步直接调用工具委派，0 思考开销立刻交付！
+> 2. **【严禁 Subagent 劫持】**：**严禁调用 `subagent` 或 `list_subagent_models` 打付费 Google API 路由**！使用者的核心诉求是使用外部浏览器的【零 Token 免费池 (key_off)】，严禁偷开 subagent 消耗用户本地付费配额！
+> 3. **【先问后用提案工作流 (原作者规范)】**：
+>    - 常规情况下（先问后用模式）：宿主 AI 先向用户呈现调度提案（目标渠道 `site`、入口模式 `entry`、推荐模型 `model`、思考等级 `thinking_level`、预估成本 0 Token 免费），待用户确认后（回复「确认」、「1」或调整参数）立即调用 `gemini_web_agent` 发包；
+>    - **⚡【例外直通（原作者规定：明确指定则直接跑）】**：若用户指令中包含「/gw」、「[免确认]」、「直接发包」、「立即执行」等直通意图，或外挂设定已切为「极速直通模式」时，无需二次确认，第一步直接调用 `gemini_web_agent`！
+> 4. **【尊重意志】**：使用者之所以显式指定外部网页端，是为了利用 Google 免费额度（key_off）、1M 超大上下文或多模态能力，本地模型不得以“自己也能写代码”为由截胡！
+> 5. **【0 探测开销】**：底层 Chrome 与 AgentLimb 桥接已由外挂 Daemon 背景完全托管。**发包前严禁进行任何端口扫描、进程检查、代码逆向或环境探测**！直接发包执行！
 
 优先通过 **AgentLimb MCP**（永久免弹窗操控已登录外部 Chrome），或备用 [gemini_web.py](scripts/gemini_web.py)，统筹调度 **`aistudio.google.com`**、**`flow.google.com`** 与 **`gemini.google.com`**。
 
 ---
 
-## 0. 极速直通模式（Fast-Track Direct Execution）
+## 0. 双执行模式：原作者「先问后用」与「例外直通」
 
 > [!TIP]
-> ⚡ **0 前置开销原则**：当用户给出具体任务（如写代码、分析长文、生图、生视频等）时，**禁止执行任何前置诊断**。直接在第 1 步调用 `gemini_web_agent`。
-> 只有当遇到明确连线错误，或用户显式要求“检查环境/诊断”时，才查阅以下应急项。
+> 🎯 **高度尊重原作者调度范式**：
+> 1. **🛡️ 先问后用模式（原作者规范・默认安全控费）**：
+>    当用户提出需要调用外部资源的任务时，宿主 AI 先输出「Gemini Web Agent 调度提案」，将底层的真实参数（渠道、入口、模型、思考等级、话题策略与 0 成本）透明化呈现给用户审阅。待用户确认（回复「确认」、「1」或调整参数）后立即调用 `gemini_web_agent` 真实发包执行。
+> 2. **⚡ 例外直通（原作者白名单规则：明确指定则直接跑）**：
+>    若用户的指令中包含直通标记（如 `/gw`、`[免确认]`、`直接发包`、`立即执行`、`--fast`），或外挂设置已切换为「极速直通模式」，则自动跳过前置确认卡，第 1 步直接调用 `gemini_web_agent`，0 延迟秒级交付！
+> 3. **【🚨 严禁使用 Subagent 劫持】**：
+>    任何情况下严禁调用 `subagent` 或 `list_subagent_models` 呼叫付费 Google API 路由！使用者的核心诉求是使用外部浏览器的【零 Token 免费池 (key_off)】，绝不偷跑消耗本地付费配额！
 
 - 账号安全红线：**严禁 `taskkill` / 强杀日常 Chrome**，严禁擅自改动用户 Chrome `--user-data-dir`。
 - 通道优先级：首选 **AgentLimb**（`127.0.0.1:8765`），备用 **CLI 自动化**（`scripts/gemini_web.py`）。
@@ -50,18 +58,44 @@ description: >-
 
 ---
 
-## 二、 额度巡检（仅在用户明确询问配额时触发）
+## 二、 额度巡检与「先问后用」提案规范
 
-> **⚡ 省本地 Token 原则（极速直通）**：
-> 1. **严禁在常规任务前做巡检**：当用户给出具体任务（如编程、问答、生图等），**严禁先去查各端额度或反复向用户确认**，必须在第 1 步直接执行委派！
-> 2. **仅在用户显式询问时巡检**：只有当用户明确要求「查询额度」、「看点数」或「巡检配额」时，才执行以下检测。
-> 3. 产出长代码/报告优先用 `--out-file <路径>` 落盘，严禁回传几万字给本地 AI 重抄。
+> **省本地 Input Token 原则**：本 Skill 脚本默认输出 1~3 行极简摘要并屏蔽思考链；长代码/报告优先用 `--out-file <路径>` 或网页单包 Blob 下载 + `harvest`，严禁回传几万字给本地 AI 重抄。
 
 1. **多端额度检测（按需执行）**：
    - **网页端 `/usage`**：通道 A 后台开 `tab_new("https://gemini.google.com/usage", active=false)` 等 `[data-testid="current-usage"]`，读取 `[data-usage-island-root] header span`、`[data-testid="current-usage"]`、`[data-testid="weekly-usage"]` 后 `tab_close`（遇 `[role="alert"]` 限流提示即切 AI Studio `key_off`）；通道 B 运行 `gemini_web.py usage --include-flow`。
    - **Google Flow 点数**：开 `https://flow.google.com/` 点 `[aria-label="账号详情"]`，读 `[role="dialog"]` 内 `X 个 Google Flow 点数` 与重置时间后关页；通道 B 运行 `flow-usage`。
    - **本地 Antigravity 对比（仅 Antigravity 环境，Claude Code/Codex 跳过）**：使用 `setup_skill.py` 输出的 `inspect=` 路径执行 `python "<inspect路径>"`（已内置增量缓存与轻量探测；默认 3 行极简摘要，可选 `--live-only` 仅查配额、`--all-history` 扫全部历史、`--markdown` 看详表）。
-2. **先问后用**：先汇报各端余额，通过提问工具（`ask_question` / `AskUserQuestion`）确认**入口与模型**（高优推荐 Gemini `任务 Task 4 Hydrogen`、Playground、多模态、Flow 或 Build）及**是否同意执行**，未获授权禁止发包（用户明确指定则直接跑）。
+
+2. **先问后用调度提案（Proposal Before Execution）标准范式**：
+   在「先问后用」模式下（用户未明确指定直接发包时），宿主 AI 扮演专业架构师，先向用户呈现如下结构化提案（或在支持 `ask_question` / `AskUserQuestion` 的宿主环境中弹出交互式卡片）：
+
+   ```markdown
+   ### 🌐 Gemini Web Agent 调度提案（先问后用）
+
+   检测到您欲调用外部 Google 资源完成任务：
+   - 🎯 **推荐渠道**：Google AI Studio（`aistudio`，代码/推理）/ Google Flow（`flow`，生图/视频）/ Gemini 官网（`gemini`，任务/画布）
+   - 🚪 **入口模式**：`chat`（工作台对话）/ `task`（官网 Task 模式）
+   - 🧠 **推荐模型**：`gemini-4-hydrogen`（1M 上下文）/ `gemini-4-neon` / `gemini-nano-banana-2.1`
+   - ⚙️ **推演配置**：Thinking 设为 `high`（封印 Extra High 确保免费池稳定流畅）
+   - 🔄 **话题隔离**：`new_chat: false`（延续对话）或 `true`（全新独立对话）
+   - 💰 **预估成本**：`key_off` 完全免费（0 本地 Token 消耗，0 API 扣款）
+
+   👉 **请确认是否发包执行？**
+   - 回复 **「确认」** 或 **「1」**：立即调用外部 Chrome 执行发包
+   - 回复 **调整参数**（如「改用 Neon」、「开新对话」或「Medium 思考」）：按新参数直接发包
+   - 回复 **「取消」**：中止外部调度，改由本地模型作答
+   ```
+
+3. **提案参数与底层工具映射表**：
+   提案里的每一项均与底层 `gemini_web_agent` 的真实参数严格一一对应：
+   - **目标渠道** ➔ `site` (`aistudio` / `flow` / `gemini`)
+   - **入口模式** ➔ `entry` (`chat` / `task`)
+   - **目标模型** ➔ `model` (`hydrogen` / `neon` / `argon` / `nano2.1` / `omni1.2` / `lyria` 等)
+   - **思考等级** ➔ `thinking_level` (`high` / `medium` / `low`)
+   - **思考策略** ➔ `thinking_policy` (`adaptive` / `strict` / `custom`)
+   - **话题隔离** ➔ `new_chat` (`false` / `true`)
+   - **实质任务** ➔ `task` (用户的具体代码编写、分析或素材生成需求)
 
 ---
 
