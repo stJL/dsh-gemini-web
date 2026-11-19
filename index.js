@@ -422,6 +422,7 @@ import { promisify } from "node:util";
 // src/config.ts
 import fs2 from "node:fs";
 import path2 from "node:path";
+import os2 from "node:os";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var DEFAULT_CONFIG = {
   connectionMode: "auto",
@@ -436,17 +437,25 @@ var DEFAULT_CONFIG = {
   flowCount: 1
 };
 function getConfigPath() {
+  try {
+    const dshDir = path2.join(os2.homedir(), ".dsh");
+    if (!fs2.existsSync(dshDir))
+      fs2.mkdirSync(dshDir, { recursive: true });
+    return path2.join(dshDir, "gemini-web-config.json");
+  } catch {}
   const __dirname2 = path2.dirname(fileURLToPath2(import.meta.url));
-  if (fs2.existsSync(path2.resolve(__dirname2, "package.json"))) {
-    return path2.resolve(__dirname2, "config.json");
-  }
-  return path2.resolve(__dirname2, "../../config.json");
+  return path2.resolve(__dirname2, "config.json");
 }
 function loadConfig() {
   try {
     const p = getConfigPath();
     if (fs2.existsSync(p)) {
       return { ...DEFAULT_CONFIG, ...JSON.parse(fs2.readFileSync(p, "utf-8")) };
+    }
+    const legacyPath = path2.resolve(os2.homedir(), "Documents/deepseek-harness/default-workspace/config.json");
+    if (fs2.existsSync(legacyPath)) {
+      const data = JSON.parse(fs2.readFileSync(legacyPath, "utf-8"));
+      return { ...DEFAULT_CONFIG, ...data };
     }
   } catch {}
   return { ...DEFAULT_CONFIG };
@@ -456,7 +465,9 @@ function saveConfig(cfg) {
   try {
     const p = getConfigPath();
     fs2.writeFileSync(p, JSON.stringify(merged, null, 2), "utf-8");
-  } catch {}
+  } catch (err) {
+    console.error("Failed to save config:", err);
+  }
   return merged;
 }
 
@@ -542,11 +553,11 @@ import { execFile as execFile2 } from "node:child_process";
 import { promisify as promisify2 } from "node:util";
 import path3 from "node:path";
 import fs3 from "node:fs";
-import os2 from "node:os";
+import os3 from "node:os";
 var execFileAsync2 = promisify2(execFile2);
 function getWorkspaceDownloadDir() {
   try {
-    const wsFile = path3.join(os2.homedir(), ".dsh", "storages", "workspace.json");
+    const wsFile = path3.join(os3.homedir(), ".dsh", "storages", "workspace.json");
     if (fs3.existsSync(wsFile)) {
       const data = JSON.parse(fs3.readFileSync(wsFile, "utf-8"));
       const defId = data?.global?.defaultWorkspaceId;

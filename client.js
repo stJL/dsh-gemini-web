@@ -441,7 +441,15 @@ window.__ModuleLoader__.load({
         thinking_extra_high: 'Extra High (🔒 已上锁 - 免费池防 403)',
         thinking_medium: 'Medium (折衷)',
         thinking_low: 'Low (低思考速回)',
-        timeout_title: '单次任务最大超时限制 (秒)：',
+        timeout_title: '任务超时限制：',
+        timeout_active_badge: '⏱️ 自定义模式生效中',
+        timeout_adaptive_badge: '🌟 智能自适应基准',
+        timeout_strict_badge: '🛑 严格模式基准',
+        timeout_custom_hint: '⏱️ 自定义模式：思考与总任务超时严格遵循此设定值，不进行自适应放宽。',
+        timeout_adaptive_hint: '🌟 基准为 180 秒；遇复杂架构/算法 (C++、红黑树等) 自动放宽至 300 秒。',
+        timeout_strict_hint: '🛑 坚守所选模型，深度思考上限 150 秒，超时直接中止提醒。',
+        sec_unit: '秒',
+        auto_saved_tip: '✅ 已自动永久保存',
         cdp_port_title: 'CDP 调试端口 (仅 CDP 模式生效)：',
         save_btn: '💾 保存并应用设置',
         saving: '保存中...',
@@ -578,7 +586,15 @@ window.__ModuleLoader__.load({
         thinking_extra_high: 'Extra High (🔒 已上鎖 - 免費池防 403)',
         thinking_medium: 'Medium (折衷)',
         thinking_low: 'Low (低思考速回)',
-        timeout_title: '單次任務最大超時限制 (秒)：',
+        timeout_title: '任務超時限制：',
+        timeout_active_badge: '⏱️ 自定義模式生效中',
+        timeout_adaptive_badge: '🌟 智慧自適應基準',
+        timeout_strict_badge: '🛑 嚴格模式基準',
+        timeout_custom_hint: '⏱️ 自定義模式：思考與總任務超時嚴格遵循此設定值，不進行自適應放寬。',
+        timeout_adaptive_hint: '🌟 基準為 180 秒；遇複雜架構/演算法 (C++、紅黑樹等) 自動放寬至 300 秒。',
+        timeout_strict_hint: '🛑 堅守所選模型，深度思考上限 150 秒，逾時直接中止提醒。',
+        sec_unit: '秒',
+        auto_saved_tip: '✅ 已自動永久保存',
         cdp_port_title: 'CDP 偵錯連接埠 (僅 CDP 模式生效)：',
         save_btn: '💾 儲存並套用設定',
         saving: '儲存中...',
@@ -715,7 +731,15 @@ window.__ModuleLoader__.load({
         thinking_extra_high: 'Extra High (🔒 Locked - Free Tier Safe)',
         thinking_medium: 'Medium (Balanced)',
         thinking_low: 'Low (Fast Response)',
-        timeout_title: 'Task Max Timeout (Seconds):',
+        timeout_title: 'Task Timeout Limit:',
+        timeout_active_badge: '⏱️ Custom Mode Active',
+        timeout_adaptive_badge: '🌟 Adaptive Base',
+        timeout_strict_badge: '🛑 Strict Base',
+        timeout_custom_hint: '⏱️ Custom mode: Thinking and total task timeout will strictly obey this value without scaling.',
+        timeout_adaptive_hint: '🌟 Base is 180s; automatically relaxed to 300s for complex architecture/algorithms.',
+        timeout_strict_hint: '🛑 Maintains target model; thinking cap 150s, aborts immediately on timeout.',
+        sec_unit: 'sec',
+        auto_saved_tip: '✅ Auto-saved permanently',
         cdp_port_title: 'CDP Debug Port (CDP Mode Only):',
         save_btn: '💾 Save & Apply Settings',
         saving: 'Saving...',
@@ -759,16 +783,31 @@ window.__ModuleLoader__.load({
     function SettingsPanel({ isModal, onClose }) {
       const [status, setStatus] = useState(null)
       const [usage, setUsage] = useState(null)
-      const [config, setConfig] = useState({
+
+      const DEFAULT_LOCAL_CONFIG = {
         connectionMode: 'auto',
         defaultModel: 'gemini-3.5-flash-lite',
         autoFallback: true,
+        fallbackMode: 'ladder',
+        thinkingPolicy: 'adaptive',
         thinkingLevel: 'high',
         timeoutSec: 180,
         port: 9222,
         preferredBrowser: 'auto',
         flowCount: 1,
+      }
+
+      // 優先從 localStorage 讀取已保存設定，首幀即載入用戶選擇，杜絕刷新倒退回 flash lite
+      const [config, setConfig] = useState(() => {
+        try {
+          const cached = localStorage.getItem('dsh_gemini_web_config')
+          if (cached) {
+            return { ...DEFAULT_LOCAL_CONFIG, ...JSON.parse(cached) }
+          }
+        } catch {}
+        return DEFAULT_LOCAL_CONFIG
       })
+
       const [loading, setLoading] = useState(false)
       const [saving, setSaving] = useState(false)
       const [testResult, setTestResult] = useState(null)
@@ -776,6 +815,25 @@ window.__ModuleLoader__.load({
       const [saveNotice, setSaveNotice] = useState('')
       const [availableModels, setAvailableModels] = useState([])
       const [syncingModels, setSyncingModels] = useState(false)
+
+      // 即時設定寫死器：更新 React State 同步寫入 localStorage 並背景 POST 後端永久保存
+      const updateConfig = (patch) => {
+        setConfig((prev) => {
+          const next = { ...prev, ...patch }
+          try {
+            localStorage.setItem('dsh_gemini_web_config', JSON.stringify(next))
+          } catch {}
+          api('/config', { method: 'POST', body: next })
+            .then((res) => {
+              if (res?.ok) {
+                setSaveNotice(t('auto_saved_tip'))
+                setTimeout(() => setSaveNotice(''), 2500)
+              }
+            })
+            .catch(() => {})
+          return next
+        })
+      }
 
       // 語言狀態管理 (支援 auto, zh-CN, zh-TW, en-US)
       const [langChoice, setLangChoice] = useState(() => {
@@ -829,7 +887,21 @@ window.__ModuleLoader__.load({
         try {
           const s = await api('/status')
           setStatus(s)
-          if (s?.config) setConfig(s.config)
+          let localCfg = {}
+          try {
+            const cached = localStorage.getItem('dsh_gemini_web_config')
+            if (cached) localCfg = JSON.parse(cached)
+          } catch {}
+          if (s?.config) {
+            // 用戶本地主動選取的配置優先於後端未設定之預設值，杜絕刷新回落
+            const merged = { ...s.config, ...localCfg }
+            setConfig(merged)
+            if (JSON.stringify(merged) !== JSON.stringify(s.config)) {
+              api('/config', { method: 'POST', body: merged }).catch(() => {})
+            }
+          } else if (Object.keys(localCfg).length > 0) {
+            setConfig(prev => ({ ...prev, ...localCfg }))
+          }
           const u = await api('/usage?force=1', { timeout: 25000 })
           setUsage(u)
           const m = await api('/models')
@@ -847,6 +919,9 @@ window.__ModuleLoader__.load({
         setSaving(true)
         setSaveNotice('')
         try {
+          try {
+            localStorage.setItem('dsh_gemini_web_config', JSON.stringify(config))
+          } catch {}
           const res = await api('/config', { method: 'POST', body: config })
           if (res?.ok) {
             setSaveNotice(t('save_success'))
@@ -1308,7 +1383,7 @@ window.__ModuleLoader__.load({
                   className: 'gw-select',
                   style: { minWidth: 160 },
                   value: config.connectionMode || 'auto',
-                  onChange: (e) => setConfig({ ...config, connectionMode: e.target.value })
+                  onChange: (e) => updateConfig({ connectionMode: e.target.value })
                 }, [
                   h('option', { value: 'auto' }, t('conn_auto')),
                   h('option', { value: 'agentlimb' }, t('conn_al')),
@@ -1317,7 +1392,7 @@ window.__ModuleLoader__.load({
               ])
             ]),
 
-            // 設定 2: 預設調度模型 (Default Model) - 分類並鎖定非對話模型
+            // 設定 2: 預設調度模型 (Default Model) - 即選即寫死永久保存
             (() => {
               const isMediaModel = (id = '', name = '') => {
                 const s = (id + ' ' + name).toLowerCase()
@@ -1362,44 +1437,44 @@ window.__ModuleLoader__.load({
                   h('select', {
                     className: 'gw-select',
                     style: { width: '100%', minWidth: 170, maxWidth: 220 },
-                  value: config.defaultModel || 'gemini-3.5-flash-lite',
-                  onChange: (e) => setConfig({ ...config, defaultModel: e.target.value })
-                }, availableModels.length > 0 ? [
-                  h('optgroup', { label: t('group_text') },
-                    textGroup.map((m) =>
-                      h('option', { key: m.id, value: m.id }, `${m.name} ${m.new ? '🌟' : ''}`)
-                    )
-                  ),
-                  mediaGroup.length > 0 && h('optgroup', { label: t('group_media') },
-                    mediaGroup.map((m) =>
-                      h('option', { key: m.id, value: m.id, disabled: true }, `🔒 ${m.name} ${t('tag_media')}`)
-                    )
-                  ),
-                  paidGroup.length > 0 && h('optgroup', { label: t('group_paid') },
-                    paidGroup.map((m) =>
-                      h('option', { key: m.id, value: m.id, disabled: true }, `💰 ${m.name} ${t('tag_paid')}`)
-                    )
-                  ),
-                ] : [
-                  h('optgroup', { label: t('group_text') }, [
-                    h('option', { key: 'fl', value: 'gemini-3.5-flash-lite' }, '⚡ 3.5 Flash Lite'),
-                    h('option', { key: 'f', value: 'gemini-3.8-flash' }, '🚀 3.8 Flash'),
-                    h('option', { key: 'h', value: 'gemini-4-hydrogen' }, '🧠 4 Hydrogen (1M)'),
-                    h('option', { key: 'a', value: 'gemini-4-argon' }, '🏗️ 4 Argon'),
-                  ]),
-                  h('optgroup', { label: t('group_media') }, [
-                    h('option', { key: 'nano', value: 'gemini-nano-banana-2.1', disabled: true }, `🔒 Nano Banana 2.1 ${t('tag_media')}`),
-                    h('option', { key: 'omni', value: 'gemini-omni-1.2-flash', disabled: true }, `🔒 Gemini Omni 1.2 Flash ${t('tag_media')}`),
-                    h('option', { key: 'lyria', value: 'lyria-3.5', disabled: true }, `🔒 Lyria 3.5 ${t('tag_media')}`),
-                    h('option', { key: 'tts', value: 'gemini-3.8-flash-tts', disabled: true }, `🔒 3.8 Flash TTS ${t('tag_media')}`),
-                  ]),
-                  h('optgroup', { label: t('group_paid') }, [
-                    h('option', { key: 'carbon', value: 'gemini-4-carbon', disabled: true }, `💰 Gemini 4 Carbon ${t('tag_paid')}`),
+                    value: config.defaultModel || 'gemini-3.5-flash-lite',
+                    onChange: (e) => updateConfig({ defaultModel: e.target.value })
+                  }, availableModels.length > 0 ? [
+                    h('optgroup', { label: t('group_text') },
+                      textGroup.map((m) =>
+                        h('option', { key: m.id, value: m.id }, `${m.name} ${m.new ? '🌟' : ''}`)
+                      )
+                    ),
+                    mediaGroup.length > 0 && h('optgroup', { label: t('group_media') },
+                      mediaGroup.map((m) =>
+                        h('option', { key: m.id, value: m.id, disabled: true }, `🔒 ${m.name} ${t('tag_media')}`)
+                      )
+                    ),
+                    paidGroup.length > 0 && h('optgroup', { label: t('group_paid') },
+                      paidGroup.map((m) =>
+                        h('option', { key: m.id, value: m.id, disabled: true }, `💰 ${m.name} ${t('tag_paid')}`)
+                      )
+                    ),
+                  ] : [
+                    h('optgroup', { label: t('group_text') }, [
+                      h('option', { key: 'fl', value: 'gemini-3.5-flash-lite' }, '⚡ 3.5 Flash Lite'),
+                      h('option', { key: 'f', value: 'gemini-3.8-flash' }, '🚀 3.8 Flash'),
+                      h('option', { key: 'h', value: 'gemini-4-hydrogen' }, '🧠 4 Hydrogen (1M)'),
+                      h('option', { key: 'a', value: 'gemini-4-argon' }, '🏗️ 4 Argon'),
+                    ]),
+                    h('optgroup', { label: t('group_media') }, [
+                      h('option', { key: 'nano', value: 'gemini-nano-banana-2.1', disabled: true }, `🔒 Nano Banana 2.1 ${t('tag_media')}`),
+                      h('option', { key: 'omni', value: 'gemini-omni-1.2-flash', disabled: true }, `🔒 Gemini Omni 1.2 Flash ${t('tag_media')}`),
+                      h('option', { key: 'lyria', value: 'lyria-3.5', disabled: true }, `🔒 Lyria 3.5 ${t('tag_media')}`),
+                      h('option', { key: 'tts', value: 'gemini-3.8-flash-tts', disabled: true }, `🔒 3.8 Flash TTS ${t('tag_media')}`),
+                    ]),
+                    h('optgroup', { label: t('group_paid') }, [
+                      h('option', { key: 'carbon', value: 'gemini-4-carbon', disabled: true }, `💰 Gemini 4 Carbon ${t('tag_paid')}`),
+                    ])
                   ])
                 ])
               ])
-            ])
-          })(),
+            })(),
 
             // 設定 3: 思考閾值與降級策略 (Thinking Policy)
             h('div', { className: 'gw-setting-row' }, [
@@ -1419,8 +1494,7 @@ window.__ModuleLoader__.load({
                   value: config.thinkingPolicy || (config.fallbackMode === 'strict' ? 'strict' : 'adaptive'),
                   onChange: (e) => {
                     const policy = e.target.value;
-                    setConfig({
-                      ...config,
+                    updateConfig({
                       thinkingPolicy: policy,
                       fallbackMode: policy === 'strict' ? 'strict' : 'ladder',
                       autoFallback: policy !== 'strict'
@@ -1434,6 +1508,48 @@ window.__ModuleLoader__.load({
               ])
             ]),
 
+            // 設定 3.1: 任務超時時間調整框（直接跟在策略下方，自定義模式顯式高亮聚焦）
+            h('div', {
+              className: 'gw-setting-row',
+              style: config.thinkingPolicy === 'custom'
+                ? {
+                    background: 'rgba(99, 102, 241, 0.08)',
+                    borderLeft: '3px solid #6366f1',
+                    paddingLeft: '12px',
+                    borderRadius: '4px',
+                    marginTop: '-4px',
+                    marginBottom: '4px'
+                  }
+                : { marginTop: '-4px' }
+            }, [
+              h('div', { className: 'gw-setting-info' }, [
+                h('div', { style: { fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' } }, [
+                  h('span', null, t('timeout_title')),
+                  config.thinkingPolicy === 'custom'
+                    ? h('span', { style: { fontSize: 10, background: '#6366f1', color: '#fff', padding: '1px 6px', borderRadius: 4 } }, t('timeout_active_badge'))
+                    : (config.thinkingPolicy === 'strict'
+                        ? h('span', { style: { fontSize: 10, background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', padding: '1px 6px', borderRadius: 4 } }, t('timeout_strict_badge'))
+                        : h('span', { style: { fontSize: 10, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '1px 6px', borderRadius: 4 } }, t('timeout_adaptive_badge')))
+                ]),
+                h('div', { style: { fontSize: 11, opacity: 0.6 } },
+                  config.thinkingPolicy === 'custom'
+                    ? t('timeout_custom_hint')
+                    : (config.thinkingPolicy === 'strict'
+                        ? t('timeout_strict_hint')
+                        : t('timeout_adaptive_hint')))
+              ]),
+              h('div', { className: 'gw-setting-ctrl', style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
+                h('input', {
+                  type: 'number',
+                  className: 'gw-input',
+                  style: { width: 85, borderColor: config.thinkingPolicy === 'custom' ? '#6366f1' : undefined },
+                  value: config.timeoutSec || 180,
+                  onChange: (e) => updateConfig({ timeoutSec: parseInt(e.target.value, 10) || 180 })
+                }),
+                h('span', { style: { fontSize: 12, opacity: 0.7 } }, t('sec_unit'))
+              ])
+            ]),
+
             // 設定 4: 思考等級 (Thinking Level)
             h('div', { className: 'gw-setting-row' }, [
               h('div', { className: 'gw-setting-info' }, [
@@ -1444,7 +1560,7 @@ window.__ModuleLoader__.load({
                   className: 'gw-select',
                   style: { minWidth: 160 },
                   value: config.thinkingLevel || 'high',
-                  onChange: (e) => setConfig({ ...config, thinkingLevel: e.target.value })
+                  onChange: (e) => updateConfig({ thinkingLevel: e.target.value })
                 }, [
                   h('option', { value: 'high' }, t('thinking_high')),
                   h('option', { value: 'medium' }, t('thinking_medium')),
@@ -1453,23 +1569,7 @@ window.__ModuleLoader__.load({
               ])
             ]),
 
-            // 設定 5: 任務超時時間 (Timeout)
-            h('div', { className: 'gw-setting-row' }, [
-              h('div', { className: 'gw-setting-info' }, [
-                h('div', { style: { fontWeight: 500 } }, t('timeout_title'))
-              ]),
-              h('div', { className: 'gw-setting-ctrl' }, [
-                h('input', {
-                  type: 'number',
-                  className: 'gw-input',
-                  style: { width: 90 },
-                  value: config.timeoutSec || 180,
-                  onChange: (e) => setConfig({ ...config, timeoutSec: parseInt(e.target.value, 10) || 180 })
-                })
-              ])
-            ]),
-
-            // 設定 6: CDP 端口 (CDP Port)
+            // 設定 5: CDP 端口 (CDP Port)
             h('div', { className: 'gw-setting-row' }, [
               h('div', { className: 'gw-setting-info' }, [
                 h('div', { style: { fontWeight: 500 } }, t('cdp_port_title'))
@@ -1480,7 +1580,7 @@ window.__ModuleLoader__.load({
                   className: 'gw-input',
                   style: { width: 90 },
                   value: config.port || 9222,
-                  onChange: (e) => setConfig({ ...config, port: parseInt(e.target.value, 10) || 9222 })
+                  onChange: (e) => updateConfig({ port: parseInt(e.target.value, 10) || 9222 })
                 })
               ])
             ]),

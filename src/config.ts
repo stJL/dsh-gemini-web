@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 export interface PluginConfig {
@@ -29,11 +30,16 @@ export const DEFAULT_CONFIG: PluginConfig = {
 }
 
 export function getConfigPath(): string {
+  // 優先使用用戶家目錄下的全局持久化路徑 (~/.dsh/gemini-web-config.json)
+  // 杜絕因工作區切換、npm/bun 打包目錄變化或 symlink 導致配置遺失
+  try {
+    const dshDir = path.join(os.homedir(), '.dsh')
+    if (!fs.existsSync(dshDir)) fs.mkdirSync(dshDir, { recursive: true })
+    return path.join(dshDir, 'gemini-web-config.json')
+  } catch {}
+
   const __dirname = path.dirname(fileURLToPath(import.meta.url))
-  if (fs.existsSync(path.resolve(__dirname, 'package.json'))) {
-    return path.resolve(__dirname, 'config.json')
-  }
-  return path.resolve(__dirname, '../../config.json')
+  return path.resolve(__dirname, 'config.json')
 }
 
 export function loadConfig(): PluginConfig {
@@ -41,6 +47,12 @@ export function loadConfig(): PluginConfig {
     const p = getConfigPath()
     if (fs.existsSync(p)) {
       return { ...DEFAULT_CONFIG, ...JSON.parse(fs.readFileSync(p, 'utf-8')) }
+    }
+    // 遷移檢查：若舊位置 default-workspace/config.json 存在，讀取舊配置
+    const legacyPath = path.resolve(os.homedir(), 'Documents/deepseek-harness/default-workspace/config.json')
+    if (fs.existsSync(legacyPath)) {
+      const data = JSON.parse(fs.readFileSync(legacyPath, 'utf-8'))
+      return { ...DEFAULT_CONFIG, ...data }
     }
   } catch {}
   return { ...DEFAULT_CONFIG }
@@ -51,6 +63,8 @@ export function saveConfig(cfg: Partial<PluginConfig>): PluginConfig {
   try {
     const p = getConfigPath()
     fs.writeFileSync(p, JSON.stringify(merged, null, 2), 'utf-8')
-  } catch {}
+  } catch (err) {
+    console.error('Failed to save config:', err)
+  }
   return merged
 }
