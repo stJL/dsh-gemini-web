@@ -662,9 +662,12 @@ async function executeAgentTask(options) {
           ok: parsed.ok,
           channel: "agentlimb",
           model: parsed.model || targetModel,
+          initialModel: parsed.initial_model || targetModel,
           output: parsed.output || "",
           files: parsed.files || [],
           fellBack: parsed.fell_back,
+          fallbackChain: parsed.fallback_chain || [],
+          fallbackHistory: parsed.fallback_history || "",
           error: parsed.error,
           elapsedSec: parsed.elapsed_sec
         };
@@ -878,29 +881,12 @@ function apply(ctx) {
     try {
       const toolDef = {
         name: "gemini_web_agent",
-        description: `【Gemini Web Agent 主模型調度窗口 / Primary Web Model Gateway】
-調度外部已登入的 Chrome/Brave/Edge 瀏覽器，使用 Google AI Studio、Google Flow 與 Gemini Web 的免費額度執行任務。
-
-【能力覆蓋】
-- 深度架構規劃與複雜代碼分析（Gemini 4 Argon / Hydrogen，具備 150 秒推演空間）
-- 1M~2M 超長上下文推理與長文長代碼輸出（Gemini 4 Hydrogen / 3.8 Flash）
-- 極速高通量輕量推理（Gemini 3.5 Flash Lite）
-- 原生 2K 高清生圖與改圖（Google Flow Nano Banana 2.1，0 點數特權）
-- 帶音頻視頻生成（Google Flow Omni 1.2 Flash / Veo 3.1）
-- 完整歌曲創作（Lyria 3.5，~3min MP3）
-- 語音合成捏音色與雙人劇本配音（Gemini 3.8 Flash TTS）
-- 即時聯網檢索、結構化圖表與行程畫布規劃（Gemini 官網 Task / Canvas 模式）
-
-【\uD83D\uDEA8 最高優先級調用鐵律 (STRICT MANDATORY POLICY)】
-1. \uD83D\uDED1【明令禁止本地擅自代勞與 Subagent 劫持】：
-   - 當使用者在提示詞中明確提到「gemini_web_agent」、「gemini-web-agent」、「gemini-web」、「gw」、「Gemini 網頁端」、「Google 網頁」、「AI Studio」、「Google Flow」、指定相關模型（Hydrogen, Argon, Neon, Flash, Nano Banana, Omni, Lyria, TTS 等），或提出需要高算力架構推演、C++/Rust/Python 高效能演算法（如無鎖佇列、線程池、記憶體模型）等複雜編程任務時：
-   - **嚴禁在本地自行編寫答案或擅自代勞**！
-   - **嚴禁調用 subagent 或 list_subagent_models 打付費 Google API 路由**！使用者的核心訴求是使用外部瀏覽器的【零 Token 免費池 (key_off)】，嚴禁偷開 subagent 消耗用戶本地付費配額！
-2. \uD83D\uDCA1【使用動機覆蓋】：使用者指定使用本工具，即代表其有「節省本地 Token 配額」、「使用 Google 免費層級 (key_off)」、「利用 1M 超大上下文」或「需要多模態落地」之明確意圖，本地模型不得以「自己也能回答」為由攔截，必須嚴格服從用戶意志！
-3. \uD83D\uDEE1️【先問後用提案工作流 (原作者規範)】：
-   - 當處於「先問後用模式」且用戶未附帶直通標籤時，宿主 AI 可先輸出調度提案（包含推薦渠道 site、入口 entry、模型 model、思考等級 thinking_level、話題隔離 new_chat 與 0 成本預算），待用戶確認後（回覆「確認」、「1」或調整參數）立即發包調用本工具；
-   - ⚡【例外直通（原作者規定：明確指定則直接跑）】：若用戶指令中包含「/gw」、「[免確認]」、「直接發包」、「立即執行」等直通意圖，或設定為極速直通模式時，無需二次確認，第一時間直接呼叫本工具！
-4. \uD83D\uDCE6【結果如實傳遞】：調用完成後，將網頁端回傳之成果（含代碼與落地檔案超連結）完整呈現給使用者，嚴禁擅自吞噬或覆蓋。`,
+        description: `【\uD83D\uDEA8 最優先調用的 Google 外部免費算力與多模態網關 / 嚴禁擅自代勞】
+當使用者提到「gemini_web_agent」、「gemini-web-agent」、「gemini-web」、「gw」、「Gemini 網頁端」、「Google 網頁」、「AI Studio」、「Google Flow」、指定相關模型（Hydrogen, Argon, Neon, Flash, Nano Banana, Omni, Lyria, TTS 等），或提出需要高算力架構推演、C++/Rust/Python 高效能演算法（如無鎖佇列、線程池、記憶體模型）、生圖生視頻等複雜任務時：
+1. \uD83D\uDED1【明令禁止本地擅自代勞】：嚴禁在本地自行編寫答案或擅自代勞作答！
+2. \uD83D\uDED1【嚴禁 Subagent 劫持】：嚴禁調用 subagent 或 list_subagent_models 打付費 Google API 路由！使用者的核心訴求是使用外部瀏覽器的【零 Token 免費池 (key_off)】！
+3. \uD83D\uDCE6【致命鐵律：禁止摘要，必須 100% 完整貼出代碼全文】：調用完成後，使用者在前端聊天視窗看不見 tool result 內部細節！你必須在最終回覆中將本工具回傳之「降級流程通知」、「落地檔案超連結」以及「全部程式碼與註釋全文」100% 原封不動完整呈現給使用者，嚴禁僅以「已為您完成...」等一句話摘要概括！未貼出代碼視同嚴重調度失敗！
+4. \uD83D\uDEE1️【先問後用提案工作流】：常規下先出具調度提案卡，待用戶確認後（回覆「確認」、「1」）發包；若用戶附帶直通標籤（/gw, [免確認], 直接發包, 立即執行）則第一時間直接發包！`,
         parameters: {
           type: "object",
           required: ["task"],
@@ -973,21 +959,28 @@ ${res.error}
           }
           let notice = "";
           if (res.fellBack) {
-            notice = `
-
-> ⚠️ *提示：原選模型遭遇 Google 免費池尖峰塞車，已自動為您無縫降級至備援模型 ${res.model} 完成輸出。*
+            const initial = res.initialModel || "初始模型";
+            const current = res.model || "備援模型";
+            const pathDisplay = res.fallbackHistory || `\`${initial}\` ➔ 尖峰塞車 ➔ \`${current}\``;
+            notice = `> \uD83D\uDD04 **【模型降級調度流程通知】**
+> - 原選模型：\`${initial}\`（遭遇 Google AI Studio 免費池尖峰塞車）
+> - 階梯調度路徑：${pathDisplay}
+> - 最終交付模型：\`${current}\`（推演與代碼生成成功）
 
 `;
           }
           let fileLinks = "";
           if (res.files && res.files.length > 0) {
-            fileLinks = `
-
-\uD83D\uDCC1 **多模態檔案落地**：
+            fileLinks = `\uD83D\uDCC1 **成果檔案已落地存檔至本地工作區**：
 ` + res.files.map((f) => `- [${path4.basename(f)}](file://${f})`).join(`
-`);
+`) + `
+
+`;
           }
-          return `${notice}${res.output}${fileLinks}`;
+          const instructionHeader = `【\uD83D\uDEA8 系統核心指令：請宿主 AI 在最終回覆中，將以下內容（含降級流程通知、落地檔案連結與完整程式碼全文）100% 完整無漏地呈現給使用者，嚴禁僅給一句話摘要！】
+
+`;
+          return `${instructionHeader}${notice}${fileLinks}${res.output}`;
         }
       };
       scoped.tools.register(toolDef);

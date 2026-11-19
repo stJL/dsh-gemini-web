@@ -27,9 +27,12 @@ export interface AgentTaskResult {
   ok: boolean
   channel: 'agentlimb' | 'cdp' | 'none'
   model?: string
+  initialModel?: string
   output?: string
   files?: string[]
   fellBack?: boolean
+  fallbackChain?: string[]
+  fallbackHistory?: string
   error?: string
   elapsedSec?: number
 }
@@ -151,9 +154,12 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
           ok: parsed.ok,
           channel: 'agentlimb',
           model: parsed.model || targetModel,
+          initialModel: parsed.initial_model || targetModel,
           output: parsed.output || '',
           files: parsed.files || [],
           fellBack: parsed.fell_back,
+          fallbackChain: parsed.fallback_chain || [],
+          fallbackHistory: parsed.fallback_history || '',
           error: parsed.error,
           elapsedSec: parsed.elapsed_sec,
         }

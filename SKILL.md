@@ -1,12 +1,7 @@
 ---
 name: gemini-web-agent
 description: >-
-  利用外部 Chrome 调度三大网页站点全模态渠道分担任务、最大化节省本地 Antigravity 配额：
-  (1) aistudio.google.com 全模型免 Key 免费额度（key_off）：覆盖文本推理/1M长输出（4 Neon/4 Hydrogen/4 Argon）、生图改图（Nano Banana 2.1）、生视频（Omni 1.2 Flash/1.1 Flash）、完整歌曲（Lyria 3.5）、语音配音与剧本对话（Gemini 3.8 Flash TTS）、录音转写（3.5 Transcribe）、Live 实时对话同传（3.8 Live/3.5 Live Translate）、Deep Research 与 Build 整站应用导出；
-  (2) flow.google.com 独立点数池（Nano Banana 2.1 生图 0 点数 + 2K 高清重塑、Omni 1.2 Flash / Veo 3.1 - Lite 生视频）；
-  (3) gemini.google.com 对话模式、异步任务模式 (Task)、制作音乐/图片/视频、Canvas 与 Deep Research（已支持 4 Hydrogen / 4 Neon）。
-  激活后遵循原作者「先问后用」规范：先确认渠道、模型与配置提案，待用户授权后调用 gemini_web_agent 委派外部 Chrome；若用户明确指定直接发包（如带 /gw、[免确认] 或直通要求）则直接执行。严禁擅自调用 subagent 或本地代劳。
-  当用户提到“网页端 Gemini”、“Google Flow”、“Flow”、“AI Studio”、“Playground”、“Build模式”、“Lyria”、“TTS配音”、“生图”、“生视频”、“生音乐”、“利用网页版额度”、“省额度”、“任务模式”、“异步 agent”、指定 Hydrogen/Argon/Neon/Nano Banana/Omni，或提出高算力架构、C++/Rust/Python 高效能并发算法（无锁队列、线程池等）深度编程任务时激活。
+  【必须最优先加载】当用户提到 AI Studio, Google Flow, Gemini 网页端, 或指定 Hydrogen, Argon, Neon, Nano Banana, Omni, Lyria, TTS, 或要求高难度 C++/Rust/Python 并发算法（无锁队列/线程池）、生图/生视频/长文本时，必须第一步调用本 skill！调度外部 Chrome 免 Key 零 Token 白嫖 Google 算力。遵循「先问后用」提案规范，严禁本地擅自代劳，严禁调用 subagent，生成结果必须 100% 完整原样呈现给用户。
 ---
 
 # Gemini Web-Agent（三站点全模态与额度调度）
@@ -21,6 +16,7 @@ description: >-
 >    - **⚡【例外直通（原作者规定：明确指定则直接跑）】**：若用户指令中包含「/gw」、「[免确认]」、「直接发包」、「立即执行」等直通意图，或外挂设定已切为「极速直通模式」时，无需二次确认，第一步直接调用 `gemini_web_agent`！
 > 4. **【尊重意志】**：使用者之所以显式指定外部网页端，是为了利用 Google 免费额度（key_off）、1M 超大上下文或多模态能力，本地模型不得以“自己也能写代码”为由截胡！
 > 5. **【0 探测开销】**：底层 Chrome 与 AgentLimb 桥接已由外挂 Daemon 背景完全托管。**发包前严禁进行任何端口扫描、进程检查、代码逆向或环境探测**！直接发包执行！
+> 6. **【📦 致命铁律：严禁摘要，必须 100% 完整贴出代码全文与降级通知】**：调用 `gemini_web_agent` 完成后，使用者在前端聊天窗口看不见 tool result 内部细节！你必须在最终回复中，将工具回传之「降级流程通知」、「落地文件超链接」以及「全部源代码与注释全文」100% 原封不动完整呈现给使用者，严禁仅以「已为您完成...」等一句话摘要概括！未贴出代码全文视同严重调度失败！
 
 优先通过 **AgentLimb MCP**（永久免弹窗操控已登录外部 Chrome），或备用 [gemini_web.py](scripts/gemini_web.py)，统筹调度 **`aistudio.google.com`**、**`flow.google.com`** 与 **`gemini.google.com`**。
 

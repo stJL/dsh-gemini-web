@@ -32,6 +32,8 @@ MODEL_MAP = {
     "gemini-4-hydrogen": "gemini-4-hydrogen",
     "argon": "gemini-4-argon",
     "gemini-4-argon": "gemini-4-argon",
+    "neon": "gemini-4-neon",
+    "gemini-4-neon": "gemini-4-neon",
     "nano": "gemini-nano-banana-2.1",
     "nano2.1": "gemini-nano-banana-2.1",
     "gemini-nano-banana-2.1": "gemini-nano-banana-2.1",
@@ -65,6 +67,7 @@ def wait_for_selector(tab_id: int, selector: str, timeout: float = 15.0) -> bool
 import base64
 
 FALLBACK_LADDER = {
+    "gemini-4-neon": ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"],
     "gemini-4-argon": ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"],
     "gemini-4-hydrogen": ["gemini-3.8-flash", "gemini-3.5-flash-lite"],
     "gemini-3.8-flash": ["gemini-3.5-flash-lite"],
@@ -935,6 +938,7 @@ def run_agent_task(
         success, output, files, err = _attempt_run(initial_model_id)
         active_model = initial_model_id
         fell_back = False
+        fallback_chain = [initial_model_id]
 
         # 若失敗且啟用了自動降級 (Auto-Fallback)
         # 注意：若 thinking_policy == "strict"，auto_fallback 必定為 False，絕不走入以下階梯
@@ -944,6 +948,7 @@ def run_agent_task(
             fallback_targets = [c for c in ladder if c != initial_model_id]
 
             for target in fallback_targets:
+                fallback_chain.append(target)
                 fb_url = f"https://aistudio.google.com/prompts/new_chat?model={target}"
                 agentlimb_client.call_tool("navigate", {"tabId": tab_id, "url": fb_url})
                 wait_for_selector(tab_id, 'textarea[aria-label="Enter a prompt"]', timeout=15.0)
@@ -961,10 +966,46 @@ def run_agent_task(
             if not success:
                 err = "CONGESTION_HALT: Google AI Studio 免費池全數高負載壅塞，階梯降級備援模型皆不可用。"
 
-        # 若有多模態檔案落地，追加工作區超連結
+        # 自動代碼檢測與保存落地（防吞噬雙重保險）
+        if success and output:
+            code_block_match = re.search(r'```([a-zA-Z0-9_\-\+\#]+)?\s*\n(.*?)```', output, re.DOTALL)
+            if code_block_match:
+                lang = (code_block_match.group(1) or "").lower().strip()
+                code_text = code_block_match.group(2)
+                ext_map = {
+                    "cpp": ".cpp", "c++": ".cpp", "cxx": ".cpp", "c": ".c", "h": ".h", "hpp": ".hpp",
+                    "python": ".py", "py": ".py",
+                    "rust": ".rs", "rs": ".rs",
+                    "go": ".go", "golang": ".go",
+                    "javascript": ".js", "js": ".js", "typescript": ".ts", "ts": ".ts",
+                    "html": ".html", "css": ".css", "sh": ".sh", "bash": ".sh",
+                    "json": ".json", "yaml": ".yaml", "yml": ".yml"
+                }
+                ext = ext_map.get(lang, ".txt")
+                stem = "gemini_generated_code"
+                tl = task.lower()
+                if "queue" in tl or "無鎖" in task or "佇列" in task or "队列" in task:
+                    stem = "lock_free_queue"
+                elif "thread" in tl or "線程池" in task or "线程池" in task:
+                    stem = "thread_pool"
+                elif "crawler" in tl or "爬蟲" in task or "爬虫" in task:
+                    stem = "async_crawler"
+                elif "tree" in tl or "紅黑樹" in task or "红黑树" in task:
+                    stem = "red_black_tree"
+
+                try:
+                    code_file_path = out_path / f"{stem}{ext}"
+                    with open(code_file_path, "w", encoding="utf-8") as cf:
+                        cf.write(code_text)
+                    if str(code_file_path) not in files:
+                        files.append(str(code_file_path))
+                except Exception as e:
+                    print(f"[code_save_error] {e}", file=sys.stderr)
+
+        # 若有多模態檔案或代碼落地，追加工作區超連結
         if files:
             links = "\n".join([f"- [{Path(f).name}](file://{f})" for f in files])
-            output += f"\n\n🎉 多模態媒體生成完成並已保存至本地工作區：\n{links}"
+            output += f"\n\n🎉 生成成果已同步落地存檔至本地工作區：\n{links}"
 
         try:
             agentlimb_client.call_tool(
@@ -977,7 +1018,10 @@ def run_agent_task(
         return {
             "ok": success,
             "model": active_model,
+            "initial_model": initial_model_id,
             "fell_back": fell_back,
+            "fallback_chain": fallback_chain,
+            "fallback_history": " ➔ ".join([f"`{m}`" for m in fallback_chain]) if fell_back else "",
             "output": output,
             "files": files,
             "error": err,
