@@ -431,7 +431,7 @@ window.__ModuleLoader__.load({
         fallback_strict_opt: '🛑 严格模式 (不降级)',
         thinking_level_title: '推理思考等级 (Thinking Level)：',
         thinking_high: 'High (推荐默认)',
-        thinking_extra_high: 'Extra High (深度推导)',
+        thinking_extra_high: 'Extra High (🔒 已上锁 - 免费池防 403)',
         thinking_medium: 'Medium (折衷)',
         thinking_low: 'Low (低思考速回)',
         timeout_title: '单次任务最大超时限制 (秒)：',
@@ -561,7 +561,7 @@ window.__ModuleLoader__.load({
         fallback_strict_opt: '🛑 嚴格模式 (不降級)',
         thinking_level_title: '推理思考等級 (Thinking Level)：',
         thinking_high: 'High (推薦默認)',
-        thinking_extra_high: 'Extra High (深度推導)',
+        thinking_extra_high: 'Extra High (🔒 已上鎖 - 免費池防 403)',
         thinking_medium: 'Medium (折衷)',
         thinking_low: 'Low (低思考速回)',
         timeout_title: '單次任務最大超時限制 (秒)：',
@@ -691,7 +691,7 @@ window.__ModuleLoader__.load({
         fallback_strict_opt: '🛑 Strict Mode (No Fallback)',
         thinking_level_title: 'Reasoning Thinking Level:',
         thinking_high: 'High (Recommended Default)',
-        thinking_extra_high: 'Extra High (Deep Reasoning)',
+        thinking_extra_high: 'Extra High (🔒 Locked - Free Tier Safe)',
         thinking_medium: 'Medium (Balanced)',
         thinking_low: 'Low (Fast Response)',
         timeout_title: 'Task Max Timeout (Seconds):',
@@ -1419,7 +1419,7 @@ window.__ModuleLoader__.load({
                   onChange: (e) => setConfig({ ...config, thinkingLevel: e.target.value })
                 }, [
                   h('option', { value: 'high' }, t('thinking_high')),
-                  h('option', { value: 'extra-high' }, t('thinking_extra_high')),
+                  h('option', { value: 'extra-high', disabled: true }, t('thinking_extra_high')),
                   h('option', { value: 'medium' }, t('thinking_medium')),
                   h('option', { value: 'low' }, t('thinking_low')),
                 ])

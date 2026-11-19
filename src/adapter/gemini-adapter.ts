@@ -38,7 +38,7 @@ export const BUILTIN_MODELS = [
     contextWindow: 1048576,
     maxOutput: 65536,
     inputModalities: ['text'],
-    efforts: ['low', 'medium', 'high', 'xhigh'],
+    efforts: ['low', 'medium', 'high'],
     defaultEffort: 'high',
   },
   {
@@ -355,7 +355,7 @@ export class GeminiWebAdapter {
       contextWindow: 1048576,
       maxOutput: 65536,
       inputModalities: ['text', 'image'],
-      efforts: ['low', 'medium', 'high', 'xhigh'],
+      efforts: ['low', 'medium', 'high'],
       defaultEffort: 'high',
     }
     this.dynamicModels.set(rawId, dynamicEntry)

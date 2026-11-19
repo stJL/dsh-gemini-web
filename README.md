@@ -25,6 +25,10 @@
 * **AI Studio (`aistudio.google.com`)**：
   - 默認工作於 **`key_off` 免費無限輪詢層級**（左上角未綁定付費 API Key），支援 1M Token 超長上下文輸出。
   - **付費防護鐵律**：本外掛與原作者一致，強制過濾並鎖定所有標記為 `Paid` 的付費模型（如 `gemini-4-carbon`），非用戶顯式要求付費時絕不誤調，守護用戶錢包！
+  - **免費池定位與 Extra High 安全上鎖說明**：
+    - 本外掛專為**「100% 免費配額（key_off）」**調度而打造，目標是幫使用者的本機節省 Token 開銷。
+    - Google AI Studio 的 `Extra High` 思考等級屬於高負載算力，免費用戶一旦選用會直接觸發 Google 伺服器的 `403 Permission Denied` 錯誤以及長達數分鐘的排隊假死。因此，本外掛在 GUI 設定介面與底層調度器中**已將 `Extra High` 思考安全上鎖（Disabled）**，確保調用 100% 順暢穩定。
+    - 💡 **付費調用需求**：若您具備 Google Cloud Platform (GCP) 付費專案、綁定了付費 API Key，或有調用頂級 Paid 模型 / Extra High 極限深度思考的進階商業需求，建議下載安裝專門針對 Google 付費 API 設計的其他第三方外掛。
 * **Gemini 官網 (`gemini.google.com`)**：
   - 獨立 5 小時滾動免費/會員對話池，探測完畢立即關閉分頁，零垃圾分頁殘留。
 * **Google Flow (`flow.google.com`)**：
