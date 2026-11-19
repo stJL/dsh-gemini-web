@@ -1,6 +1,5 @@
 // src/index.ts
 import path4 from "node:path";
-import fs4 from "node:fs";
 
 // src/transport/router.ts
 import { spawn as spawn3, execFile as execFile3 } from "node:child_process";
@@ -876,12 +875,13 @@ var inject = ["tools", "commands", "webServer"];
 function apply(ctx) {
   ctx.inject(["tools"], (scoped) => {
     try {
-      scoped.tools.register({
+      const toolDef = {
         name: "gemini_web_agent",
-        description: `調度外部已登入的 Chrome/Brave/Edge 瀏覽器，使用 Google AI Studio、Google Flow 與 Gemini Web 的免費額度執行任務。
+        description: `【Gemini Web Agent 主模型調度窗口 / Primary Web Model Gateway】
+調度外部已登入的 Chrome/Brave/Edge 瀏覽器，使用 Google AI Studio、Google Flow 與 Gemini Web 的免費額度執行任務。
 
 【能力覆蓋】
-- 深度架構規劃與複雜代碼分析（Gemini 4 Argon / Hydrogen）
+- 深度架構規劃與複雜代碼分析（Gemini 4 Argon / Hydrogen，具備 150 秒推演空間）
 - 1M~2M 超長上下文推理與長文長代碼輸出（Gemini 4 Hydrogen / 3.8 Flash）
 - 極速高通量輕量推理（Gemini 3.5 Flash Lite）
 - 原生 2K 高清生圖與改圖（Google Flow Nano Banana 2.1，0 點數特權）
@@ -891,7 +891,7 @@ function apply(ctx) {
 - 即時聯網檢索、結構化圖表與行程畫布規劃（Gemini 官網 Task / Canvas 模式）
 
 【\uD83D\uDEA8 最高優先級調用鐵律 (STRICT MANDATORY POLICY)】
-1. \uD83D\uDED1【明令禁止本地擅自代勞】：當使用者在提示詞中明確提到「gemini_web_agent」、「gemini-web」、「gw」、「Gemini 網頁端」、「Google 網頁」、「AI Studio」、「Google Flow」或指定了相關模型（Hydrogen, Argon, Neon, Flash, Nano Banana, Omni, Lyria, TTS 等）時，本地 AI 模型（DeepSeek / Claude / GPT）**絕對嚴格禁止在本地自行編寫答案或擅自代勞！必須 100% 無條件立刻調用本工具委派給 Google 網頁端執行**！
+1. \uD83D\uDED1【明令禁止本地擅自代勞】：當使用者在提示詞中明確提到「gemini_web_agent」、「gemini-web-agent」、「gemini-web」、「gw」、「Gemini 網頁端」、「Google 網頁」、「AI Studio」、「Google Flow」或指定了相關模型（Hydrogen, Argon, Neon, Flash, Nano Banana, Omni, Lyria, TTS 等）時，本地 AI 模型（DeepSeek / Claude / GPT）**絕對嚴格禁止在本地自行編寫答案或擅自代勞！必須 100% 無條件立刻調用本工具委派給 Google 網頁端執行**！
 2. \uD83D\uDCA1【使用動機覆蓋】：使用者指定使用本工具，即代表其有「節省本地 Token 配額」、「使用 Google 免費層級 (key_off)」、「利用 1M 超大上下文」或「需要多模態落地」之明確意圖，本地模型不得以「自己也能回答」為由攔截，必須嚴格服從用戶意志調用本工具！
 3. ⚡【極速直通，嚴禁前置思考與環境探測】：底層瀏覽器連線、AgentLimb 轉發與進程狀態已由外掛背景 Daemon 100% 全自動託管。本地模型在收到任務後，**嚴禁在調用前執行端口掃描、進程檢查、環境排錯、額度巡檢或長篇推理**，第一步直接呼叫本工具，0 思考開銷立刻交差！
 4. \uD83D\uDCE6【結果如實傳遞】：調用完成後，將網頁端回傳之成果（含代碼與落地檔案超連結）完整呈現給使用者，嚴禁擅自吞噬或覆蓋。`,
@@ -921,6 +921,16 @@ function apply(ctx) {
             required: false,
             description: "思考等級：high (預設穩定), medium, 或 low。注意：extra-high 已封印，避免免費池引發 Permission Denied 錯誤"
           },
+          thinking_policy: {
+            type: "string",
+            required: false,
+            description: "思考閾值策略：adaptive (智慧自適應，預設), custom (自定義超時), strict (嚴格模式不降級)"
+          },
+          timeout_sec: {
+            type: "number",
+            required: false,
+            description: "任務超時限制秒數 (自定義模式下生效，如 240)"
+          },
           new_chat: {
             type: "boolean",
             required: false,
@@ -935,6 +945,8 @@ function apply(ctx) {
             site: args.site,
             entry: args.entry,
             thinkingLevel: args.thinking_level,
+            thinkingPolicy: args.thinking_policy,
+            timeoutSec: args.timeout_sec,
             newChat: args.new_chat,
             sessionId
           });
@@ -965,146 +977,41 @@ ${res.error}
           }
           return `${notice}${res.output}${fileLinks}`;
         }
-      });
+      };
+      scoped.tools.register(toolDef);
+      scoped.tools.register({ ...toolDef, name: "gemini-web-agent" });
     } catch (e) {
       console.error("Failed to register gemini_web_agent tool:", e);
     }
   });
   ctx.inject(["commands"], (scoped) => {
     try {
-      const commandHandler = async (invocation) => {
-        let raw = (invocation.rawInput ?? "").trim();
-        let newChat = false;
-        if (raw.startsWith("--new")) {
-          newChat = true;
-          raw = raw.replace(/^--new\s*/, "").trim();
-        }
-        if (!raw) {
-          return {
-            kind: "error",
-            text: "請輸入任務內容，例如：/gw 幫我用 4 Hydrogen 寫快速排序，或 /gw --new 開新話題"
-          };
-        }
-        let model = undefined;
-        let site = undefined;
-        const modelMatch = raw.match(/--model\s+([^\s]+)/i);
-        if (modelMatch) {
-          model = modelMatch[1];
-          raw = raw.replace(/--model\s+[^\s]+/i, "").trim();
-        }
-        const siteMatch = raw.match(/--site\s+([^\s]+)/i);
-        if (siteMatch) {
-          site = siteMatch[1];
-          raw = raw.replace(/--site\s+[^\s]+/i, "").trim();
-        }
-        let thinkingLevel = undefined;
-        const thinkingMatch = raw.match(/--thinking(?:-level)?\s+([^\s]+)/i);
-        if (thinkingMatch) {
-          thinkingLevel = thinkingMatch[1].toLowerCase();
-          if (thinkingLevel.includes("extra") || thinkingLevel === "xhigh" || thinkingLevel === "max") {
-            thinkingLevel = "high";
-          }
-          raw = raw.replace(/--thinking(?:-level)?\s+[^\s]+/i, "").trim();
-        }
-        let thinkingPolicy = undefined;
-        const policyMatch = raw.match(/--(?:thinking-)?policy\s+([^\s]+)/i);
-        if (policyMatch) {
-          const p = policyMatch[1].toLowerCase();
-          if (p === "adaptive" || p === "custom" || p === "strict")
-            thinkingPolicy = p;
-          raw = raw.replace(/--(?:thinking-)?policy\s+[^\s]+/i, "").trim();
-        }
-        let timeoutSec = undefined;
-        const timeoutMatch = raw.match(/--timeout\s+(\d+)/i);
-        if (timeoutMatch) {
-          timeoutSec = parseInt(timeoutMatch[1], 10);
-          raw = raw.replace(/--timeout\s+\d+/i, "").trim();
-        }
-        let noFallback = false;
-        if (/--(?:no-fallback|strict)\b/i.test(raw)) {
-          noFallback = true;
-          thinkingPolicy = "strict";
-          raw = raw.replace(/--(?:no-fallback|strict)\b/i, "").trim();
-        }
-        if (!model) {
-          if (/hydrogen/i.test(raw))
-            model = "gemini-4-hydrogen";
-          else if (/argon/i.test(raw))
-            model = "gemini-4-argon";
-          else if (/flash-lite|3\.5 flash/i.test(raw))
-            model = "gemini-3.5-flash-lite";
-          else if (/flash/i.test(raw))
-            model = "gemini-3.8-flash";
-          else if (/nano|banana/i.test(raw)) {
-            model = "gemini-nano-banana-2.1";
-            site = site || "flow";
-          } else if (/omni/i.test(raw)) {
-            model = "gemini-omni-1.2-flash";
-            site = site || "flow";
-          } else if (/lyria/i.test(raw))
-            model = "lyria-3.5";
-        }
-        if (!site) {
-          if (/flow\.google|google flow|\bflow\b/i.test(raw))
-            site = "flow";
-          else if (/gemini\.google|gemini 官網/i.test(raw))
-            site = "gemini";
-        }
-        const cleanTask = raw.replace(/(?:請|幫我)?(?:使用|用)\s*(?:Gemini\s*4\s*)?(?:Hydrogen|Argon|Flash|Flash\s*Lite)\s*(?:來|去)?/gi, "請").trim() || raw;
-        const res = await executeAgentTask({
-          task: cleanTask,
-          model,
-          site,
-          thinkingLevel,
-          thinkingPolicy,
-          timeoutSec,
-          noFallback,
-          newChat
-        });
-        if (!res.ok) {
-          return { kind: "error", text: `執行失敗: ${res.error}` };
-        }
-        const timestamp = Math.floor(Date.now() / 1000);
-        let savedFileNote = "";
-        try {
-          const downloadDir = getWorkspaceDownloadDir();
-          if (!fs4.existsSync(downloadDir))
-            fs4.mkdirSync(downloadDir, { recursive: true });
-          const out = res.output || "";
-          const isCpp = out.includes("```cpp") || out.includes("```c++");
-          const isPy = out.includes("```py");
-          const isJs = out.includes("```js") || out.includes("```ts");
-          const ext = isCpp ? "cpp" : isPy ? "py" : isJs ? "ts" : "md";
-          const fileName = `gw_output_${timestamp}.${ext}`;
-          const filePath = path4.join(downloadDir, fileName);
-          fs4.writeFileSync(filePath, out, "utf-8");
-          savedFileNote = `
-
-\uD83D\uDCC1 本地落地檔案：[${fileName}](file://${filePath})`;
-        } catch {}
-        let fallbackNote = "";
-        if (res.fellBack) {
-          fallbackNote = `> ⚠️ *原模型免費池塞車，已自動切換至 ${res.model}*
-
-`;
-        }
-        const modelDisplay = res.model || model || "Gemini";
-        const headerSummary = `✅ [${modelDisplay}] 任務執行成功（點擊卡片展開完整內容${savedFileNote ? "，已落地至工作區 downloads/" : ""}）
-
-`;
+      const sealedHandler = async () => {
         return {
-          kind: "success",
-          text: `${headerSummary}${fallbackNote}${res.output}${savedFileNote}`
+          kind: "info",
+          text: `\uD83D\uDCA1【/gw 斜槓指令已封印・全面統一回歸聊天室對話】
+
+` + "為提供完整的實時思考可視化、代碼高亮與多輪連續追問體驗，原先單向的 `/gw` 斜槓指令已正式封印！\n\n" + `\uD83D\uDC49 **推薦主模型呼叫窗口**：
+` + `請直接在當前（或左側「+ 新對話」）聊天室中，**不要加斜槓**，直接向 AI 發送需求即可，例如：
+` + `• *「請幫我用 Gemini 4 Hydrogen 寫 C++20 紅黑樹」*
+` + `• *「請調用 gemini-web-agent 幫我設計分散式系統」*
+` + `• *「請用 Google Flow 生成一張賽博龐克高科技能量核心圖片」*
+
+` + "宿主 AI 會直接在聊天室內調用 `gemini-web-agent`，並將完整推演過程與程式碼即時打印在對話框中！"
         };
       };
       scoped.commands.register({
         name: "gw",
-        description: "調度 Gemini 網頁端 (AI Studio / Flow / Gemini) 執行高難度推理或多模態任務（支援 --new 開新話題）",
-        input: { hint: "[--new] [--model <model>] [--site <site>] <任務描述>" },
-        handler: commandHandler
+        description: "【已封印】Gemini Web Agent 已統一升級為聊天室自然語言調用窗口",
+        handler: sealedHandler
+      });
+      scoped.commands.register({
+        name: "gemini-web",
+        description: "【已封印】Gemini Web Agent 已統一升級為聊天室自然語言調用窗口",
+        handler: sealedHandler
       });
     } catch (e) {
-      console.error("Failed to register gw command:", e);
+      console.error("Failed to register sealed gw command:", e);
     }
   });
   ctx.inject(["webServer"], (scoped) => {
