@@ -23,6 +23,24 @@ This project is built upon the collaborative spirit and passion of the open-sour
 
 ---
 
+## 📊 Upstream vs. DSH Enhancements Feature Matrix
+
+To provide full transparency on the architectural evolution and division of responsibilities, the following matrix compares the **core browser automation foundations created by upstream author [@582835293](https://github.com/582835293)** against the **deep engineering integrations and exclusive features introduced by [@ngcx](https://github.com/ngcx) for DeepSeek Harness (DSH)**:
+
+| Module / Dimension | Upstream Foundation<br>(`gemini-web-agent` by @582835293) | Exclusive DSH Enhancements<br>(`dsh-gemini-web` by @ngcx) | Core Engineering Impact |
+| :--- | :--- | :--- | :--- |
+| **User Interface** | • Python Command Line (CLI) execution<br>• Terminal-only interaction | • **Native DSH Desktop GUI Dashboard**<br>• Connection badges (AgentLimb / CDP)<br>• Real-time multi-site quota monitors | Elevated from a terminal script into a first-class visual dashboard seamlessly built into DSH |
+| **Browser Communication** | • Chromium CDP via port 9222<br>• Preliminary AgentLimb protocol trials | • **100% Zero-Popup AgentLimb Tunnel**<br>• Multi-browser CDP auto-discovery (Chrome/Edge/Brave/Vivaldi)<br>• Tab-wake & multi-instance collision avoidance | Completely eliminates intrusive CDP "Allow" authorization popups for truly silent background dispatches |
+| **Fallback Ladder** | • Static hardcoded fallback chain | • **Visual 1~5 Model Priority Reordering (`↑`/`↓`)**<br>• Smart Adaptive vs. Strict Single-Model toggles<br>• **Dynamic System Prompt Injection (`systemPrompt`)** | Host AI immediately observes reordered fallback priorities without needing an application reload |
+| **Google AI Studio** | • Basic web-driven chatting and generation<br>• Model aliases (Hydrogen, Neon, Argon) | • **Extra High 403 Freeze Safety Lock**<br>• **Paid-tier anti-charge filter**<br>• Full support for `key_off` 1M-token free tier | Discovered that Extra High triggers Google 403 rate-limit freezes on free tiers; locked it at both GUI and dispatch levels |
+| **Google Flow (Images)** | • Automated web generation support | • **Verified 0-credit infinite generation** (Nano Banana 2.1 on canvas)<br>• **Credit-burn warnings** (avoiding sidebar agent)<br>• Regex-based daily credit reset detection | Proved bottom canvas uses 0 credits, saving user quota and warning against credit traps |
+| **File / PDF Attachment** | • Basic local file input handling | • **Zero-popup multi-modal file/log/PDF attachment**<br>• Native `DataTransfer` & `DOM.setFileInputFiles`<br>• Dynamic `- 📁 Mounted Files` proposal card tagging | Zero token overhead for local host models; uploads 100k-line logs directly to Google's 1M-token web window |
+| **Delivery & Persistence** | • Output directly printed to terminal or overwrites file | • **Automatic file landing to `downloads/`**<br>• **Clickable Markdown local links (`file:///`)**<br>• Eliminates long-code SSE stream disruptions | Solves `Incomplete JSON segment` errors caused by huge code blocks echoing in chat |
+| **Ask-Before-Dispatch** | • Immediate terminal script dispatch | • **Structured proposal confirmation cards**<br>• **KISS orthogonal parameterization matrix**<br>• **Anti-history-inertia negative constraint** | 100% user control before dispatch; tames lightweight 8B models (e.g. flash-lite) from repeating old turns |
+| **Upstream Sync & CI/CD** | — | • **Decoupled architecture (`scripts/` vs DSH core)**<br>• **One-click sync script (`npm run sync:upstream`)**<br>• **Automated weekly GitHub Actions sync PRs** | Upstream selector updates can be pulled in seconds without overwriting DSH enhancements |
+
+---
+
 ## 🚨 Core Calling Protocol (Must-Read)
 
 > [!IMPORTANT]
