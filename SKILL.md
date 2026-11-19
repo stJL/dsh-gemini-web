@@ -17,24 +17,20 @@ description: >-
 > 1. **【绝对禁令】**：本地宿主 AI（DeepSeek / Claude / GPT 等）**严禁自行在本地编写答案或擅自代劳作答**！  
 > 2. **【强制委派】**：必须 100% 无条件立刻调用 `gemini_web_agent` 工具（或执行对应调度脚本），将任务完整委托给外部 Google 网页端执行！  
 > 3. **【尊重意志】**：使用者之所以显式指定外部网页端，是为了利用 Google 免费额度（key_off）、1M 超大上下文或多模态能力，本地模型不得以“自己也能写代码”为由截胡！
+> 4. **【⚡ 极速直通禁思令 (0 Token 消耗)】**：底层 Chrome 与 AgentLimb 桥接已由外挂 Daemon 背景完全托管。**严禁在任务执行前进行任何端口扫描、进程检查、代码逆向、环境探测或额度巡检**！第 1 步直接调用工具委派，0 思考开销立刻交付！
 
-优先通过 **AgentLimb MCP**（永久免弹窗操控已登录外部 Chrome），或备用 [gemini_web.py](scripts/gemini_web.py)，统筹调度 **`aistudio.google.com`**、**`flow.google.com`** 与 **`gemini.google.com`**（含 Jio 会员 / 部分 Pro 账号绕过本地缺 `4 Neon` / `4 Hydrogen` / `4 Argon` 与 5h 限流的“曲线救国”场景）。
+优先通过 **AgentLimb MCP**（永久免弹窗操控已登录外部 Chrome），或备用 [gemini_web.py](scripts/gemini_web.py)，统筹调度 **`aistudio.google.com`**、**`flow.google.com`** 与 **`gemini.google.com`**。
 
 ---
 
-## 0. 自动初始化、更新检查与账号安全红线
+## 0. 极速直通模式（Fast-Track Direct Execution）
 
-1. **未安装或缺少 `.venv` 时立即运行**（默认输出 1 行极简摘要，需完整 JSON 加 `--json`）：
-   ```bash
-   python scripts/setup_skill.py --auto
-   python scripts/setup_skill.py --check-if-stale   # 24h 内命中缓存 10ms 返回；超时查更新；遇 update=available 经同意跑 --update
-   ```
-2. **【绝对红线】严禁 `taskkill` / 强杀用户正在运行的 Chrome，严禁擅自对日常 Chrome 添加 `--user-data-dir` 临时目录、改快捷方式或迁移 `User Data`**（Chrome 136+ 已禁默认目录开 `--remote-debugging-port`，强改会注销多邮箱登录与扩展或触发风控）。
-3. **按 `setup_skill.py` 状态选通道**：
-   - `A=ready`：首选 **`agentlimb` MCP**；
-   - `A=off` 且 `B=http_ready`：用输出中的 `py` 调 `cli`（通道 B）；
-   - `B=chrome_ui_approval_required`：优先装 AgentLimb（`>= v0.8.2`），坚持走 B 则先跑 `gemini_web.py daemon` 并在 Chrome 弹窗点一次允许；
-   - `A=off` 且 `B=inactive`：推荐装 AgentLimb MCP（`references/agentlimb.md`），或在现有 Chrome 地址栏打开 `chrome://inspect/#remote-debugging` 开启调试。
+> [!TIP]
+> ⚡ **0 前置开销原则**：当用户给出具体任务（如写代码、分析长文、生图、生视频等）时，**禁止执行任何前置诊断**。直接在第 1 步调用 `gemini_web_agent`。
+> 只有当遇到明确连线错误，或用户显式要求“检查环境/诊断”时，才查阅以下应急项。
+
+- 账号安全红线：**严禁 `taskkill` / 强杀日常 Chrome**，严禁擅自改动用户 Chrome `--user-data-dir`。
+- 通道优先级：首选 **AgentLimb**（`127.0.0.1:8765`），备用 **CLI 自动化**（`scripts/gemini_web.py`）。
 
 ---
 
@@ -54,11 +50,14 @@ description: >-
 
 ---
 
-## 二、 额度巡检与先问后用工作流
+## 二、 额度巡检（仅在用户明确询问配额时触发）
 
-> **省本地 Input Token 原则**：本 Skill 脚本默认输出 1~3 行极简摘要并屏蔽思考链 `thoughts`（程序解析再加 `--json`）；长代码/报告优先用 `--out-file <路径>` 或网页单包 Blob 下载 + `harvest`，严禁回传几万字给本地 AI 重抄。
+> **⚡ 省本地 Token 原则（极速直通）**：
+> 1. **严禁在常规任务前做巡检**：当用户给出具体任务（如编程、问答、生图等），**严禁先去查各端额度或反复向用户确认**，必须在第 1 步直接执行委派！
+> 2. **仅在用户显式询问时巡检**：只有当用户明确要求「查询额度」、「看点数」或「巡检配额」时，才执行以下检测。
+> 3. 产出长代码/报告优先用 `--out-file <路径>` 落盘，严禁回传几万字给本地 AI 重抄。
 
-1. **多端额度检测**：
+1. **多端额度检测（按需执行）**：
    - **网页端 `/usage`**：通道 A 后台开 `tab_new("https://gemini.google.com/usage", active=false)` 等 `[data-testid="current-usage"]`，读取 `[data-usage-island-root] header span`、`[data-testid="current-usage"]`、`[data-testid="weekly-usage"]` 后 `tab_close`（遇 `[role="alert"]` 限流提示即切 AI Studio `key_off`）；通道 B 运行 `gemini_web.py usage --include-flow`。
    - **Google Flow 点数**：开 `https://flow.google.com/` 点 `[aria-label="账号详情"]`，读 `[role="dialog"]` 内 `X 个 Google Flow 点数` 与重置时间后关页；通道 B 运行 `flow-usage`。
    - **本地 Antigravity 对比（仅 Antigravity 环境，Claude Code/Codex 跳过）**：使用 `setup_skill.py` 输出的 `inspect=` 路径执行 `python "<inspect路径>"`（已内置增量缓存与轻量探测；默认 3 行极简摘要，可选 `--live-only` 仅查配额、`--all-history` 扫全部历史、`--markdown` 看详表）。
