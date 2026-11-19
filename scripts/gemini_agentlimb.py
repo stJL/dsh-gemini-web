@@ -127,13 +127,14 @@ def _fetch_blob_as_data_url(tab_id: int, blob_url: str) -> str:
 
 def _run_gemini_web_task(
     task: str,
+    model: str = "hydrogen",
     timeout_sec: int = 180,
     new_chat: bool = False,
     download_dir: str = "",
     keep_tab: bool = False,
     entry: str = "chat",
 ) -> dict:
-    """在外部瀏覽器的 gemini.google.com/app 中執行對話（支援 TrustedHTML、零彈窗與多輪隔離）"""
+    """在外部瀏覽器的 gemini.google.com/app 中執行對話（支援 TrustedHTML、零彈窗、模型切換與多輪隔離）"""
     t0 = time.time()
     tabs = agentlimb_client.get_tabs()
     target_tab = None
@@ -160,6 +161,39 @@ def _run_gemini_web_task(
         ready = wait_for_selector(tab_id, 'div[role="textbox"]', timeout=15.0)
         if not ready:
             return {"ok": False, "error": "Gemini 官網頁面載入逾時（未找到輸入框）"}
+
+        # 0. 智能模型對齊與切換 (Auto, 4 Hydrogen, 4 Neon)
+        target_mode_keyword = "Hydrogen"
+        ml = (model or "").lower()
+        if "neon" in ml or "argon" in ml:
+            target_mode_keyword = "Neon"
+        elif "flash" in ml or "lite" in ml:
+            target_mode_keyword = "Auto"
+        elif "hydrogen" in ml:
+            target_mode_keyword = "Hydrogen"
+
+        switch_mode_js = f"""(() => {{
+            const picker = Array.from(document.querySelectorAll('button')).find(b => (b.getAttribute('aria-label') || '').includes('Open mode picker'));
+            if (!picker) return false;
+            const current = (picker.getAttribute('aria-label') || '').toLowerCase();
+            if (current.includes({json.dumps(target_mode_keyword.lower())})) return true;
+            picker.click();
+            setTimeout(() => {{
+                const items = Array.from(document.querySelectorAll('[data-mode-id]'));
+                const target = items.find(i => i.innerText.includes({json.dumps(target_mode_keyword)}));
+                if (target && !target.querySelector('[data-mat-icon-name="lock"]')) {{
+                    target.dispatchEvent(new MouseEvent('mousedown', {{ bubbles: true }}));
+                    target.dispatchEvent(new MouseEvent('mouseup', {{ bubbles: true }}));
+                    target.click();
+                }}
+            }}, 200);
+            return true;
+        }})()"""
+        try:
+            agentlimb_client.eval_js(switch_mode_js, tab_id=tab_id)
+            time.sleep(0.4)
+        except Exception:
+            pass
 
         # 1. 記錄既有回應數量
         init_res = agentlimb_client.eval_js("document.querySelectorAll('model-response').length", tab_id=tab_id)
@@ -511,6 +545,7 @@ def run_agent_task(
     if site.lower() in ("gemini", "gemini.google.com", "gemini_web", "gemini-web"):
         return _run_gemini_web_task(
             task=task,
+            model=model,
             timeout_sec=timeout_sec,
             new_chat=new_chat,
             download_dir=download_dir,
@@ -1025,6 +1060,7 @@ def run_agent_task(
                 fallback_chain.append("gemini.google.com (官網備援通道)")
                 web_res = _run_gemini_web_task(
                     task=task,
+                    model=initial_model_id,
                     timeout_sec=timeout_sec,
                     new_chat=True,
                     download_dir=download_dir,
