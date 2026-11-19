@@ -16,28 +16,27 @@ This project is built upon the collaborative spirit and passion of the open-sour
 
 * 🌟 **Core Automation & Architecture Pioneer**: [@582835293](https://github.com/582835293)
   - The underlying browser automation rules, precise DOM selectors, multi-channel dispatch logic, and anti-abuse safeguards **100% originate from and pay tribute to [@582835293](https://github.com/582835293)'s pioneering project [gemini-web-agent](https://github.com/582835293/gemini-web-agent)**. Special thanks to the original author for their remarkable contribution! ❤️
-* 🚀 **DSH Plugin Initiator, Product Definition & Full-Scenario Maintainer**: [@ngcx](https://github.com/ngcx)
-  - Designed the DSH integration architecture, conducted comprehensive end-to-end testing, and identified critical features including the Extra High 403 Safety Lock, automated file landing delivery, and SSE stream truncation prevention. Actively leads project testing and open-source maintenance.
-* 🤖 **AI Pair Programmer & Code Scaffolding**: Google DeepMind Antigravity (Gemini-3.8-flash)
-  - Acted as the AI co-engineer assisting in TypeScript plugin adapter layer development, dual-channel routing encapsulation, GUI settings dashboard, and dynamic documentation scaffolding.
+* 🚀 **DSH Plugin Integration & Maintenance**: [@ngcx](https://github.com/ngcx) (Author)
+  - Proposed DSH integration, conducted end-to-end functionality testing, and handles open-source maintenance.
+* 🤖 **AI Co-Engineer**: Google DeepMind Antigravity (Gemini-3.8-flash)
+  - Assisted in TypeScript adapter implementation, router encapsulation, GUI settings dashboard, and documentation.
 
 ---
 
-## 📊 Upstream vs. DSH Enhancements Feature Matrix
+## 📊 Upstream Foundation & DSH Enhancements Matrix
 
-To provide full transparency on the architectural evolution and division of responsibilities, the following matrix compares the **core browser automation foundations created by upstream author [@582835293](https://github.com/582835293)** against the **deep engineering integrations and exclusive features introduced by [@ngcx](https://github.com/ngcx) for DeepSeek Harness (DSH)**:
+Built on top of [@582835293/gemini-web-agent](https://github.com/582835293/gemini-web-agent)'s browser automation core, this plugin adapts and extends functionality specifically for DeepSeek Harness (DSH):
 
-| Module / Dimension | Upstream Foundation<br>(`gemini-web-agent` by @582835293) | Exclusive DSH Enhancements<br>(`dsh-gemini-web` by @ngcx) | Core Engineering Impact |
-| :--- | :--- | :--- | :--- |
-| **User Interface** | • Python Command Line (CLI) execution<br>• Terminal-only interaction | • **Native DSH Desktop GUI Dashboard**<br>• Connection badges (AgentLimb / CDP)<br>• Real-time multi-site quota monitors | Elevated from a terminal script into a first-class visual dashboard seamlessly built into DSH |
-| **Browser Communication** | • Chromium CDP via port 9222<br>• Preliminary AgentLimb protocol trials | • **100% Zero-Popup AgentLimb Tunnel**<br>• Multi-browser CDP auto-discovery (Chrome/Edge/Brave/Vivaldi)<br>• Tab-wake & multi-instance collision avoidance | Completely eliminates intrusive CDP "Allow" authorization popups for truly silent background dispatches |
-| **Fallback Ladder** | • Static hardcoded fallback chain | • **Visual 1~5 Model Priority Reordering (`↑`/`↓`)**<br>• Smart Adaptive vs. Strict Single-Model toggles<br>• **Dynamic System Prompt Injection (`systemPrompt`)** | Host AI immediately observes reordered fallback priorities without needing an application reload |
-| **Google AI Studio** | • Basic web-driven chatting and generation<br>• Model aliases (Hydrogen, Neon, Argon) | • **Extra High 403 Freeze Safety Lock**<br>• **Paid-tier anti-charge filter**<br>• Full support for `key_off` 1M-token free tier | Discovered that Extra High triggers Google 403 rate-limit freezes on free tiers; locked it at both GUI and dispatch levels |
-| **Google Flow (Images)** | • Automated web generation support | • **Verified 0-credit infinite generation** (Nano Banana 2.1 on canvas)<br>• **Credit-burn warnings** (avoiding sidebar agent)<br>• Regex-based daily credit reset detection | Proved bottom canvas uses 0 credits, saving user quota and warning against credit traps |
-| **File / PDF Attachment** | • Basic local file input handling | • **Zero-popup multi-modal file/log/PDF attachment**<br>• Native `DataTransfer` & `DOM.setFileInputFiles`<br>• Dynamic `- 📁 Mounted Files` proposal card tagging | Zero token overhead for local host models; uploads 100k-line logs directly to Google's 1M-token web window |
-| **Delivery & Persistence** | • Output directly printed to terminal or overwrites file | • **Automatic file landing to `downloads/`**<br>• **Clickable Markdown local links (`file:///`)**<br>• Eliminates long-code SSE stream disruptions | Solves `Incomplete JSON segment` errors caused by huge code blocks echoing in chat |
-| **Ask-Before-Dispatch** | • Immediate terminal script dispatch | • **Structured proposal confirmation cards**<br>• **KISS orthogonal parameterization matrix**<br>• **Anti-history-inertia negative constraint** | 100% user control before dispatch; tames lightweight 8B models (e.g. flash-lite) from repeating old turns |
-| **Upstream Sync & CI/CD** | — | • **Decoupled architecture (`scripts/` vs DSH core)**<br>• **One-click sync script (`npm run sync:upstream`)**<br>• **Automated weekly GitHub Actions sync PRs** | Upstream selector updates can be pulled in seconds without overwriting DSH enhancements |
+| Module | Upstream Foundation (`gemini-web-agent`) | DSH Extension (`dsh-gemini-web`) |
+| :--- | :--- | :--- |
+| **Interface** | Python Command Line (CLI) execution | Native DSH Desktop GUI settings panel, status badges, and live quota monitors |
+| **Browser Channel** | CDP (port 9222) connection | AgentLimb 100% zero-popup tunnel, plus auto-discovery for Chrome/Edge/Brave |
+| **Fallback Ladder** | Static hardcoded fallback chain | Visual 1~5 model reordering (`↑`/`↓`), Smart vs. Strict single-model toggles |
+| **AI Studio** | Web chat & code generation dispatches | Extra High disabled (prevents 403 freeze), Paid-tier charge filter |
+| **Google Flow** | Automated web image generation | Canvas 0-credit infinite generation (Nano Banana 2.1), daily reset detection |
+| **Local File Analysis**| Basic text input handling | Direct zero-popup mounting of local code, logs, and PDFs into 1M context |
+| **File Delivery** | Terminal text output | Auto-saving code/media to `downloads/` with clickable Markdown local links |
+| **Dispatch Protocol** | Direct script dispatch | "Ask-Before-Dispatch" confirmation cards with anti-history-inertia constraints |
 
 ---
 
