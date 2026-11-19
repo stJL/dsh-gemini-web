@@ -882,57 +882,57 @@ function apply(ctx) {
     try {
       const toolDef = {
         name: "gemini_web_agent",
-        description: `【\uD83D\uDEA8 Google 外部免費算力與多模態網關 / 唯一鐵律：一律先問後用】
-【\uD83D\uDEA8 致命調用前置條件 - 第 1 步絕對禁止直接調用發包】：
-本工具嚴格遵循「一律先問後用」規範，無任何例外！
-在使用者提出任何需求後，你【第 1 步絕對禁止直接調用本工具發包，絕對禁止調用 ask_user_question】！
-你必須在第 1 步先在聊天中輸出【Gemini Web Agent 調度提案卡】（列出推薦渠道 site、入口 entry、模型 model、思考等級 thinking_level、話題隔離 new_chat 與 0 成本預算），並在此【停止當前回應】，等待使用者確認！
-只有當使用者在下一輪明確回覆「確認」、「1」或給予明確發包授權時，才正式調用本工具發包！
-1. \uD83C\uDFAF【使用者指定模型絕對優先】：若使用者指定了具體模型（如「用 Gemini 3.5 Flash Lite」、「用 Argon」），提案卡與發包必須 100% 採用該模型，嚴禁擅自升級或替換！只有使用者完全未指定時才推薦預設模型。
-2. \uD83D\uDED1【明令禁止本地擅自代勞與 Subagent 劫持】：嚴禁在本地自行編寫答案，嚴禁調用 subagent 消耗付費額度！
-3. \uD83D\uDCE6【調用完成後的展示義務】：調用完成後，必須完整呈現降級流程通知、落地檔案超連結以及核心架構說明與程式碼！`,
+        description: `【\uD83D\uDEA8 Google 外部免费算力与多模态网关 / 唯一铁律：一律先问后用】
+【\uD83D\uDEA8 致命调用前置条件 - 第 1 步绝对禁止直接调用发包】：
+本工具严格遵循「一律先问后用」规范，无任何例外！
+在使用者提出任何需求后，你【第 1 步绝对禁止直接调用本工具发包，绝对禁止调用 ask_user_question】！
+你必须在第 1 步先在聊天中输出【Gemini Web Agent 调度提案卡】（列出推荐渠道 site、入口 entry、模型 model、思考等级 thinking_level、话题隔离 new_chat 与 0 成本预算），并在此【停止当前回应】，等待用户确认！
+只有当用户在下一轮明确回复「确认」、「1」或给予明确发包授权时，才正式调用本工具发包！
+1. \uD83C\uDFAF【用户指定模型绝对优先】：若用户指定了具体模型（如「用 Gemini 3.5 Flash Lite」、「用 Argon」），提案卡与发包必须 100% 采用该模型，严禁擅自升级或替换！只有用户完全未指定时才推荐默认模型。
+2. \uD83D\uDED1【明令禁止本地擅自代劳与 Subagent 劫持】：严禁在本地自行编写答案，严禁调用 subagent 消耗付费额度！
+3. \uD83D\uDCE6【调用完成后的展示义务】：调用完成后，必须完整呈现降级流程通知、落地文件超链接以及核心架构说明与代码！`,
         parameters: {
           type: "object",
           required: ["task"],
           properties: {
             task: {
               type: "string",
-              description: "交由 Gemini 網頁端執行的完整任務指令、需求描述與要求"
+              description: "交由 Gemini 网页端执行的完整任务指令、需求描述与要求"
             },
             model: {
               type: "string",
-              description: "指定調度的模型別名（選填，如 hydrogen, argon, flash, flash-lite, nano2.1, omni1.2, lyria 等）"
+              description: "指定调度的模型别名（选填，如 hydrogen, argon, flash, flash-lite, nano2.1, omni1.2, lyria 等）"
             },
             site: {
               type: "string",
-              description: "目標站點：aistudio (預設，代碼與長文本), flow (生圖生視頻，Nano 2.1 享 0 點數), 或 gemini (官網對話與 task 模式)"
+              description: "目标站点：aistudio (默认，代码与长文本), flow (生图生视频，Nano 2.1 享 0 点数), 或 gemini (官网对话与 task 模式)"
             },
             entry: {
               type: "string",
-              description: "入口模式：chat (預設對話), task (Gemini 官網任務與畫布模式)"
+              description: "入口模式：chat (默认对话), task (Gemini 官网任务与画布模式)"
             },
             thinking_level: {
               type: "string",
-              description: "思考等級：high (預設穩定), medium, 或 low。注意：extra-high 已封印，避免免費池引發 Permission Denied 錯誤"
+              description: "思考等级：high (默认稳定), medium, 或 low。注意：extra-high 已封印，避免免费池引发 Permission Denied 错误"
             },
             thinking_policy: {
               type: "string",
-              description: "思考閾值策略：adaptive (智慧自適應，預設), custom (自定義超時), strict (嚴格模式不降級)"
+              description: "思考阈值策略：adaptive (自适应，默认), custom (自定义超时), strict (严格模式不降级)"
             },
             timeout_sec: {
               type: "number",
-              description: "任務超時限制秒數 (自定義模式下生效，如 240)"
+              description: "任务超时限制秒数 (自定义模式下生效，如 240)"
             },
             new_chat: {
               type: "boolean",
-              description: "是否開啟全新對話視窗（若為 true 則重置為全新聊天室，預設為 false 延續對話）"
+              description: "是否开启全新对话窗口（若为 true 则重置为全新聊天室，默认为 false 延续对话）"
             }
           }
         },
         output: {
           schema: {
             type: "string",
-            description: "Gemini 網頁端執行產出成果"
+            description: "Gemini 网页端执行产出成果"
           },
           render: (_args, value) => [{
             type: "text",
@@ -954,41 +954,56 @@ function apply(ctx) {
           });
           if (!res.ok) {
             if (res.error?.includes("CONGESTION_HALT")) {
-              return `⚠️ 【Google 免費池壅塞警報】
+              return `⚠️ 【Google 免费池排队拥塞警报】
 ${res.error}
 
-\uD83D\uDCA1 建議：目前 Google AI Studio 免費池處於高負載排隊狀態。您可以稍候幾分鐘後重試，或者切換為本地 DeepSeek 模型繼續進行。`;
+\uD83D\uDCA1 建议：目前 Google AI Studio 免费池处于高负载排队状态。您可以稍候几分钟后重试，或者切换为本地模型继续进行。`;
             }
-            return `❌ Gemini Web Agent 調度失敗: ${res.error || "未知錯誤"}`;
+            return `❌ Gemini Web Agent 调度失败: ${res.error || "未知错误"}`;
           }
           let notice = "";
           if (res.fellBack) {
             const initial = res.initialModel || "初始模型";
-            const current = res.model || "備援模型";
-            const pathDisplay = res.fallbackHistory || `\`${initial}\` ➔ 尖峰塞車 ➔ \`${current}\``;
-            notice = `> \uD83D\uDD04 **【模型與渠道降級調度流程通知】**
-> - 原選模型/渠道：\`${initial}\`（遭遇 Google AI Studio 免費池尖峰塞車）
-> - 階梯調度路徑：${pathDisplay}
-> - 最終交付渠道與模型：\`${current}\`（推演與代碼生成成功）
+            const current = res.model || "备援模型";
+            const pathDisplay = res.fallbackHistory || `\`${initial}\` ➔ 尖峰拥塞 ➔ \`${current}\``;
+            notice = `> \uD83D\uDD04 **【模型与渠道降级调度流程通知】**
+> - 原选模型/渠道：\`${initial}\`（遭遇 Google AI Studio 免费池尖峰排队）
+> - 调度路径：${pathDisplay}
+> - 最终交付渠道与模型：\`${current}\`（推演与生成成功）
 
 `;
           } else if (res.site === "gemini" || args.site === "gemini") {
-            notice = `> \uD83C\uDF10 **【執行渠道通知】**：本次任務已由 **Gemini 官網通道 (gemini.google.com)** 順利執行完成。
+            notice = `> \uD83C\uDF10 **【执行渠道通知】**：本次任务已由 **Gemini 官网通道 (gemini.google.com)** 顺利执行完成。
+
+`;
+          } else if (res.site === "flow" || args.site === "flow") {
+            notice = `> \uD83C\uDFA8 **【执行渠道通知】**：本次任务已由 **Google Flow (flow.google.com)** 顺利生成完成。
 
 `;
           }
           let fileLinks = "";
           if (res.files && res.files.length > 0) {
-            fileLinks = `\uD83D\uDCC1 **成果檔案已落地存檔至本地工作區**：
-` + res.files.map((f) => `- [${path4.basename(f)}](file://${f})`).join(`
+            const linkItems = res.files.map((f) => {
+              const base = path4.basename(f);
+              const fileUrl = `file://${f}`;
+              const isImg = /\.(png|jpe?g|webp|gif)$/i.test(base);
+              if (isImg) {
+                return `- [\uD83D\uDCC1 ${base}](${fileUrl})
+
+  ![${base}](${fileUrl})`;
+              }
+              return `- [\uD83D\uDCC1 ${base}](${fileUrl})`;
+            });
+            fileLinks = `\uD83D\uDCC1 **成果文件已落地存档至本地工作区**：
+` + linkItems.join(`
 `) + `
 
 `;
           }
-          const instructionHeader = `【\uD83D\uDEA8 系統核心指令：請宿主 AI 在最終回覆中務必完整呈現：
-1. \uD83D\uDD04【模型降級調度流程通知】（若有降級）；
-2. \uD83D\uDCC1【落地檔案存檔連結】（引導使用者點擊開啟本地工作區完整源碼）；
-3. \uD83D\uDCBB【核心架構說明與關鍵程式碼精華】（展示核心類別、重要演算法實作與註釋，嚴禁僅回覆一句話摘要）！】
+          const instructionHeader = `【\uD83D\uDEA8 系统核心指令：请宿主 AI 在最终回复中务必完整呈现：
+1. \uD83D\uDD04【模型降级调度流程通知】（若有降级）；
+2. \uD83D\uDCC1【落地文件存档链接与图片预览】（必须原样保留 file:/// 绝对路径，严禁改为相对路径 downloads/，否则前端无法预览）；
+3. \uD83D\uDCBB【核心架构说明与关键代码精华】（展示核心类、重要算法实现与注释，严禁仅回复一句话摘要）！】
 
 `;
           return `${instructionHeader}${notice}${fileLinks}${res.output}`;

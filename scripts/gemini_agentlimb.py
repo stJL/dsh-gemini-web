@@ -66,18 +66,9 @@ def wait_for_selector(tab_id: int, selector: str, timeout: float = 15.0) -> bool
 
 import base64
 
-FALLBACK_LADDER = {
-    "gemini-4-neon": ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"],
-    "gemini-4-argon": ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"],
-    "gemini-4-hydrogen": ["gemini-3.8-flash", "gemini-3.5-flash-lite"],
-    "gemini-3.8-flash": ["gemini-3.5-flash-lite"],
-    "gemini-3.5-flash-lite": [],
-    "gemini-decision-1": ["gemini-4-argon", "gemini-4-hydrogen", "gemini-3.8-flash"],
-}
-
 
 def _save_data_url(data_url: str, out_dir: Path, prefix: str) -> str:
-    """將 data:<mime>;base64,... 解碼保存到本地文件"""
+    """将 data:<mime>;base64,... 解码保存到本地文件"""
     m = re.match(r"^data:([^;]+);base64,(.+)$", data_url, re.DOTALL)
     if not m:
         return ""
@@ -103,7 +94,7 @@ def _save_data_url(data_url: str, out_dir: Path, prefix: str) -> str:
 
 
 def _fetch_blob_as_data_url(tab_id: int, blob_url: str) -> str:
-    """在瀏覽器中讀取 blob: URL 並轉為 data URL"""
+    """在浏览器中讀取 blob: URL 並轉為 data URL"""
     js = f"""(async () => {{
         try {{
             const resp = await fetch({json.dumps(blob_url)});
@@ -125,6 +116,56 @@ def _fetch_blob_as_data_url(tab_id: int, blob_url: str) -> str:
         return ""
 
 
+def _extract_and_save_code(text: str, task: str, download_dir: str = "") -> list[str]:
+    """统一提取文本中的代码块并保存到本地工作区（KISS 简洁版，杜绝重复代码）"""
+    if not text:
+        return []
+    code_text = ""
+    lang = ""
+    code_block_match = re.search(r'```([a-zA-Z0-9_\-\+\#]+)?\s*\n(.*?)```', text, re.DOTALL)
+    if code_block_match:
+        lang = (code_block_match.group(1) or "").lower().strip()
+        code_text = code_block_match.group(2)
+    else:
+        alt_match = re.search(r'(?:^|\n)(Rust|C\+\+|Python|Go|TypeScript|JavaScript|HTML|CSS|TOML|JSON)\s*\n(.*?)(?=\n\s*(?:[A-Z][a-z]+|#{1,6}\s+|[\u4e00-\u9fa5]{2,})|\Z)', text, re.DOTALL)
+        if alt_match:
+            lang = alt_match.group(1).lower().strip()
+            code_text = alt_match.group(2)
+
+    if not code_text:
+        return []
+
+    ext_map = {
+        "cpp": ".cpp", "c++": ".cpp", "cxx": ".cpp", "c": ".c", "h": ".h", "hpp": ".hpp",
+        "python": ".py", "py": ".py", "rust": ".rs", "rs": ".rs", "go": ".go", "golang": ".go",
+        "javascript": ".js", "js": ".js", "typescript": ".ts", "ts": ".ts",
+        "html": ".html", "css": ".css", "sh": ".sh", "bash": ".sh", "json": ".json", "yaml": ".yaml", "yml": ".yml", "toml": ".toml"
+    }
+    ext = ext_map.get(lang, ".txt")
+    stem = "gemini_generated_code"
+    tl = task.lower()
+    if any(k in tl for k in ("thread", "线程池")):
+        stem = "thread_pool"
+    elif any(k in tl for k in ("actor", "akka", "rust")):
+        stem = "actor_system"
+    elif any(k in tl for k in ("queue", "无锁", "队列")):
+        stem = "lock_free_queue"
+    elif any(k in tl for k in ("crawler", "爬虫")):
+        stem = "async_crawler"
+    elif any(k in tl for k in ("tree", "红黑树")):
+        stem = "red_black_tree"
+
+    out_p = Path(download_dir).resolve() if download_dir else (Path.cwd() / "downloads").resolve()
+    out_p.mkdir(parents=True, exist_ok=True)
+    code_file = out_p / f"{stem}{ext}"
+    try:
+        code_file.write_text(code_text.strip(), encoding="utf-8")
+        return [str(code_file.resolve())]
+    except Exception as e:
+        print(f"[code_save_error] {e}", file=sys.stderr)
+        return []
+
+
 def _run_gemini_web_task(
     task: str,
     model: str = "hydrogen",
@@ -134,7 +175,7 @@ def _run_gemini_web_task(
     keep_tab: bool = False,
     entry: str = "chat",
 ) -> dict:
-    """在外部瀏覽器的 gemini.google.com/app 中執行對話（支援 TrustedHTML、零彈窗、模型切換與多輪隔離）"""
+    """在外部浏览器的 gemini.google.com/app 中執行对话（支援 TrustedHTML、零彈窗、模型切換與多輪隔離）"""
     t0 = time.time()
     tabs = agentlimb_client.get_tabs()
     target_tab = None
@@ -160,9 +201,9 @@ def _run_gemini_web_task(
     def _execute():
         ready = wait_for_selector(tab_id, 'div[role="textbox"]', timeout=15.0)
         if not ready:
-            return {"ok": False, "error": "Gemini 官網頁面載入逾時（未找到輸入框）"}
+            return {"ok": False, "error": "Gemini 官網頁面加载超时（未找到输入框）"}
 
-        # 0. 未雨綢繆：動態能級探測與全自動解鎖選模 (完全適應未來 Gemini 5、各類會員階層與無選單模式)
+        # 0. 未雨綢繆：動態能級探測與全自動解鎖選模 (完全適應未來 Gemini 5、各類會員階層與無菜单模式)
         ml = (model or "").lower()
         if any(k in ml for k in ("argon", "neon", "pro", "ultra", "complex", "code", "deeper", "reason")):
             target_intent = "reasoning"
@@ -182,12 +223,12 @@ def _run_gemini_web_task(
 
             const currentPickerLabel = (picker.getAttribute('aria-label') || '') + ' ' + (picker.innerText || '');
 
-            // 確保選單已開啟
+            // 確保菜单已開啟
             if (picker.getAttribute('aria-expanded') !== 'true') {
                 picker.click();
             }
 
-            // 等待項目載入 (最多 600ms)
+            // 等待項目加载 (最多 600ms)
             let items = [];
             for (let i = 0; i < 6; i++) {
                 await wait(100);
@@ -226,7 +267,7 @@ def _run_gemini_web_task(
                     if (/deeper|analysis|code|complex|ultra|pro|neon|argon/i.test(full)) s += 200;
                     else if (/everyday|hydrogen|balanced/i.test(full)) s += 50;
                     else if (/auto/i.test(full)) s += 10;
-                    // 若無任何關鍵字命中，選單越後面的項目權重越高 (Google 慣例：進階旗艦排在後方)
+                    // 若無任何關鍵字命中，菜单越後面的項目權重越高 (Google 慣例：進階旗艦排在後方)
                     s += idx * 10;
                 } else if (targetIntent === 'balanced') {
                     if (/everyday|hydrogen|balanced|flash|help/i.test(full)) s += 200;
@@ -245,13 +286,13 @@ def _run_gemini_web_task(
             const bestModelName = (lines.length > 1 ? lines[1] : lines[0]).trim();
             const coreName = bestModelName.replace(/^\d+\s*/, '').toLowerCase();
 
-            // 若目前選中的模型即為最佳可用模型，關閉選單退出
+            // 若目前選中的模型即為最佳可用模型，關閉菜单退出
             if (currentPickerLabel.toLowerCase().includes(coreName)) {
                 if (picker.getAttribute('aria-expanded') === 'true') picker.click();
                 return { ok: true, switched: false, activeModel: bestModelName, score: score(best, intent) };
             }
 
-            // 點擊切換至最佳解鎖模型
+            // 点击切換至最佳解鎖模型
             best.el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
             best.el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
             best.el.click();
@@ -273,7 +314,7 @@ def _run_gemini_web_task(
         init_res = agentlimb_client.eval_js("document.querySelectorAll('model-response').length", tab_id=tab_id)
         initial_responses = init_res.get("result", {}).get("result", 0)
 
-        # 2. 寫入輸入框 (處理 TrustedHTML 規範)
+        # 2. 寫入输入框 (處理 TrustedHTML 規範)
         fill_js = f"""(() => {{
           const tb = document.querySelector('div[role="textbox"]');
           if (!tb) return false;
@@ -286,9 +327,9 @@ def _run_gemini_web_task(
         agentlimb_client.eval_js(fill_js, tab_id=tab_id)
         time.sleep(0.3)
 
-        # 3. 點擊傳送
+        # 3. 点击发送
         send_js = """(() => {
-          const sendBtn = document.querySelector('button[aria-label*="Send message" i], button[aria-label*="傳送訊息" i], button[aria-label*="发送" i], button.send-button');
+          const sendBtn = document.querySelector('button[aria-label*="Send message" i], button[aria-label*="发送訊息" i], button[aria-label*="发送" i], button.send-button');
           if (sendBtn) {
             sendBtn.click();
             return true;
@@ -297,7 +338,7 @@ def _run_gemini_web_task(
         })()"""
         agentlimb_client.eval_js(send_js, tab_id=tab_id)
 
-        # 4. 監控生成
+        # 4. 监控生成
         deadline = time.time() + timeout_sec
         has_started = False
         stable_ticks = 0
@@ -340,7 +381,7 @@ def _run_gemini_web_task(
             else:
                 stable_ticks = 0
 
-        # 5. 擷取回應
+        # 5. 提取回應
         extract_js = f"""(() => {{
           const responses = Array.from(document.querySelectorAll('model-response'));
           const newResponses = responses.slice({initial_responses});
@@ -370,59 +411,16 @@ def _run_gemini_web_task(
                     if saved:
                         saved_files.append(saved)
 
-        # 自動代碼檢測與保存落地（官網通道防吞噬）
+        # 自动代码检测与保存落地（官网通道防吞噬）
         if final_text:
-            code_text = ""
-            lang = ""
-            code_block_match = re.search(r'```([a-zA-Z0-9_\-\+\#]+)?\s*\n(.*?)```', final_text, re.DOTALL)
-            if code_block_match:
-                lang = (code_block_match.group(1) or "").lower().strip()
-                code_text = code_block_match.group(2)
-            else:
-                # 檢測 gemini.google.com 網頁端特有的代碼標題格式 (例如 "Rust\nuse ...", "C++\n#include ...", "Python\nimport ...")
-                alt_match = re.search(r'(?:^|\n)(Rust|C\+\+|Python|Go|TypeScript|JavaScript|HTML|CSS|TOML|JSON)\s*\n(.*?)(?=\n\s*(?:[A-Z][a-z]+|#{1,6}\s+|[\u4e00-\u9fa5]{2,})|\Z)', final_text, re.DOTALL)
-                if alt_match:
-                    lang = alt_match.group(1).lower().strip()
-                    code_text = alt_match.group(2)
-
-            if code_text:
-                ext_map = {
-                    "cpp": ".cpp", "c++": ".cpp", "cxx": ".cpp", "c": ".c", "h": ".h", "hpp": ".hpp",
-                    "python": ".py", "py": ".py",
-                    "rust": ".rs", "rs": ".rs",
-                    "go": ".go", "golang": ".go",
-                    "javascript": ".js", "js": ".js", "typescript": ".ts", "ts": ".ts",
-                    "html": ".html", "css": ".css", "sh": ".sh", "bash": ".sh",
-                    "json": ".json", "yaml": ".yaml", "yml": ".yml", "toml": ".toml"
-                }
-                ext = ext_map.get(lang, ".txt")
-                stem = "gemini_generated_code"
-                tl = task.lower()
-                if "thread" in tl or "線程池" in task or "线程池" in task:
-                    stem = "thread_pool"
-                elif "actor" in tl or "akka" in tl or "rust" in tl:
-                    stem = "actor_system"
-                elif "queue" in tl or "無鎖" in task or "佇列" in task or "队列" in task:
-                    stem = "lock_free_queue"
-                elif "crawler" in tl or "爬蟲" in task or "爬虫" in task:
-                    stem = "async_crawler"
-                elif "tree" in tl or "紅黑樹" in task or "红黑树" in task:
-                    stem = "red_black_tree"
-
-                out_p = Path(download_dir).resolve() if download_dir else (Path.cwd() / "downloads").resolve()
-                out_p.mkdir(parents=True, exist_ok=True)
-                code_file_path = out_p / f"{stem}{ext}"
-                try:
-                    with open(code_file_path, "w", encoding="utf-8") as cf:
-                        cf.write(code_text)
-                    if str(code_file_path) not in saved_files:
-                        saved_files.append(str(code_file_path))
-                except Exception as e:
-                    print(f"[code_save_error] {e}", file=sys.stderr)
+            code_files = _extract_and_save_code(final_text, task, download_dir)
+            for cf in code_files:
+                if cf not in saved_files:
+                    saved_files.append(cf)
 
         if saved_files:
             links = "\n".join([f"- [{Path(f).name}](file://{f})" for f in saved_files])
-            final_text += f"\n\n🎉 生成成果已同步落地存檔至本地工作區：\n{links}"
+            final_text += f"\n\n🎉 生成成果已同步落地存档至本地工作区：\n{links}"
 
         success = bool(final_text or saved_files)
         return {
@@ -432,7 +430,7 @@ def _run_gemini_web_task(
             "fell_back": False,
             "output": final_text,
             "files": saved_files,
-            "error": "" if success else "未獲取到 Gemini 回應內容",
+            "error": "" if success else "未获取到 Gemini 回应内容",
             "elapsed_sec": round(time.time() - t0, 2),
         }
 
@@ -453,7 +451,7 @@ def _run_flow_task(
     download_dir: str = "",
     keep_tab: bool = False,
 ) -> dict:
-    """在外部瀏覽器的 Google Flow (flow.google.com) 畫布中生成多媒體（支援 0 點數 Nano Banana 2.1）"""
+    """在外部浏览器的 Google Flow (flow.google.com) 画布中生成多媒體（支援 0 點數 Nano Banana 2.1）"""
     t0 = time.time()
     tabs = agentlimb_client.get_tabs()
     target_tab = None
@@ -473,7 +471,7 @@ def _run_flow_task(
         agentlimb_client.call_tool("tab_activate", {"tabId": tab_id})
 
     def _execute():
-        # 若在首頁，點擊新建專案進入畫布
+        # 若在首頁，点击新建專案進入画布
         time.sleep(1.5)
         url_info = agentlimb_client.eval_js("location.href", tab_id=tab_id).get("result", {}).get("result", "")
         if "/project/" not in url_info:
@@ -495,7 +493,7 @@ def _run_flow_task(
 
         ready = wait_for_selector(tab_id, 'div.ProseMirror, div[role="textbox"]', timeout=20.0)
         if not ready:
-            return {"ok": False, "error": "Google Flow 畫布載入逾時（未找到輸入框）"}
+            return {"ok": False, "error": "Google Flow 画布加载超时（未找到输入框）"}
 
         # 記錄生成前的媒體 URLs
         collect_js = """(() => {
@@ -521,7 +519,7 @@ def _run_flow_task(
         agentlimb_client.eval_js(fill_js, tab_id=tab_id)
         time.sleep(0.3)
 
-        # 點擊開始生成
+        # 点击開始生成
         click_js = """(() => {
             const btn = document.querySelector('button[aria-label*="生成" i], button[aria-label*="Generate" i], button.generate-icon-button, button.mat-mdc-tooltip-trigger:has(.material-symbols-outlined)');
             if (btn) {
@@ -532,7 +530,7 @@ def _run_flow_task(
         })()"""
         agentlimb_client.eval_js(click_js, tab_id=tab_id)
 
-        # 監控生成新檔案
+        # 监控生成新文件
         deadline = time.time() + timeout_sec
         new_urls = []
         while time.time() < deadline:
@@ -543,7 +541,7 @@ def _run_flow_task(
                 break
 
         if not new_urls:
-            return {"ok": False, "error": f"等待 Google Flow 生成超時 ({timeout_sec} 秒)"}
+            return {"ok": False, "error": f"等待 Google Flow 生成超时 ({timeout_sec} 秒)"}
 
         # 下載保存媒體
         saved_files = []
@@ -570,7 +568,7 @@ def _run_flow_task(
             "ok": bool(saved_files or new_urls),
             "model": "Nano Banana 2.1 (Google Flow · 0 點數消耗)",
             "fell_back": False,
-            "output": f"已在 Google Flow (flow.google.com) 成功生成多媒體，共產出 {len(new_urls)} 個檔案（Nano Banana 2.1 享 0 點數消耗）。",
+            "output": f"已在 Google Flow (flow.google.com) 成功生成多媒體，共產出 {len(new_urls)} 個文件（Nano Banana 2.1 享 0 點數消耗）。",
             "files": saved_files,
             "error": "",
             "elapsed_sec": round(time.time() - t0, 2),
@@ -603,7 +601,7 @@ def run_agent_task(
     t0 = time.time()
     st = agentlimb_client.get_status()
     if not st or not st.get("ok"):
-        return {"ok": False, "error": "AgentLimb Bridge (8765) 未在線或擴充功能未連線"}
+        return {"ok": False, "error": "AgentLimb Bridge (8765) 未在线或扩展未连接"}
 
     # 站點分支：如果是 Google Flow
     if site.lower() in ("flow", "google_flow", "flow.google.com"):
@@ -650,7 +648,7 @@ def run_agent_task(
         tab_id = target_tab.get("id")
         agentlimb_client.call_tool("tab_activate", {"tabId": tab_id})
         current_tab_url = target_tab.get("url", "")
-        # 若要求開新對話，或當前分頁不在 /prompts/，導航至新聊天室
+        # 若要求開新对话，或當前标签页不在 /prompts/，導航至新聊天室
         if new_chat or "/prompts/" not in current_tab_url:
             agentlimb_client.call_tool("navigate", {"tabId": tab_id, "url": target_url})
 
@@ -674,7 +672,7 @@ def run_agent_task(
         tune_js = f"""(async (desiredLevel) => {{
           const wait = ms => new Promise(r => setTimeout(r, ms));
           try {{
-            // 檢查並調試 Thinking Level 下拉選單
+            // 檢查並調試 Thinking Level 下拉菜单
             const tl = document.querySelector('mat-select[aria-label*="Thinking"], [aria-label*="Thinking"]');
             if (tl) {{
               const curTxt = (tl.innerText || '').toLowerCase();
@@ -718,7 +716,7 @@ def run_agent_task(
         }})('{safe_thinking}')"""
         agentlimb_client.eval_js(tune_js, tab_id=tab_id)
 
-        # 1.5 記錄點擊前初始 turns 數量與廣播器狀態
+        # 1.5 記錄点击前初始 turns 數量與廣播器狀態
         init_js = """(() => {
           return {
             turns: document.querySelectorAll('ms-chat-turn').length,
@@ -729,19 +727,19 @@ def run_agent_task(
         initial_turns = init_res.get("turns", 0)
         initial_announcer = init_res.get("announcer", "")
 
-        # 2. 點擊 Run
+        # 2. 点击 Run
         agentlimb_client.eval_js(
             'document.querySelector("button.ctrl-enter-submits")?.click()',
             tab_id=tab_id,
         )
 
-        # 3. 監控輸出與完成狀態
+        # 3. 监控輸出與完成狀態
         has_started_generating = False
 
         # 智慧思考閾值與任務量級研判 (三大策略：adaptive, custom, strict)
         is_deep_reasoning = any(k in current_model_id.lower() for k in ["argon", "hydrogen", "decision"])
         heavy_keywords = [
-            "c++", "cpp", "rust", "紅黑樹", "red-black", "算法", "演算法", "架構",
+            "c++", "cpp", "rust", "红黑树", "red-black", "算法", "演算法", "架構",
             "從零", "完整實作", "生產級", "完整代碼", "重構", "design pattern",
             "compiler", "parser", "full stack", "全棧", "spring", "kernel", "btree"
         ]
@@ -753,9 +751,9 @@ def run_agent_task(
         #    - 深度推理模型 (Hydrogen/Argon) + 複雜架構任務：給滿 150 秒（給予模型充足空間推演 500 行邏輯）
         #    - 深度推理模型 + 一般日常任務：80 秒
         #    - 輕量模型 (Flash/Flash-Lite)：35 秒
-        #    - 總逾時自動寬限至至少 300 秒 (5分鐘)
-        # 2. custom (自定義超時)：嚴格遵循指定秒數 (thinking_timeout 或 timeout_sec)
-        # 3. strict (嚴格模式)：堅守模型絕不降級，深度模型給滿 150 秒（或自定義秒數），逾時直接中斷提醒
+        #    - 總超时自動寬限至至少 300 秒 (5分鐘)
+        # 2. custom (自定義超时)：嚴格遵循指定秒數 (thinking_timeout 或 timeout_sec)
+        # 3. strict (嚴格模式)：堅守模型絕不降級，深度模型給滿 150 秒（或自定義秒數），超时直接中斷提醒
         if thinking_policy == "custom":
             thinking_limit = float(thinking_timeout if thinking_timeout > 0 else timeout_sec)
             actual_timeout = timeout_sec
@@ -793,7 +791,7 @@ def run_agent_task(
                 }}
               }}
               const turns = Array.from(document.querySelectorAll('ms-chat-turn'));
-              // 僅檢查本次請求新增的 turns，徹底隔離歷史對話干擾
+              // 僅檢查本次請求新增的 turns，徹底隔離歷史对话干擾
               const newTurns = turns.slice({initial_turns});
               const modelTurns = newTurns.filter(t => {{
                 const container = t.querySelector('.chat-turn-container');
@@ -896,7 +894,7 @@ def run_agent_task(
             if running or has_model_turn:
                 has_started_generating = True
 
-            # 動態增長監控（支援 textContent 穿透折疊思考塊）：只要總文本或思考過程持續在吐字，持續刷新截止時間
+            # 動態增長监控（支援 textContent 穿透折疊思考塊）：只要總文本或思考過程持續在吐字，持續刷新截止時間
             if total_text_len > last_seen_text_len + 5 or thought_text_len > last_seen_thought_len + 5:
                 last_seen_text_len = total_text_len
                 last_seen_thought_len = thought_text_len
@@ -913,28 +911,28 @@ def run_agent_task(
                 elif is_thinking:
                     sys.stderr.write(f"🧠 [Gemini Web Agent] 深度思考中... (已耗時 {elapsed}s, {policy_tag})\n")
                 elif total_text_len > 0:
-                    sys.stderr.write(f"⏳ [Gemini Web Agent] 內容生成中... (已耗時 {elapsed}s, 累計字數 {total_text_len})\n")
+                    sys.stderr.write(f"⏳ [Gemini Web Agent] 内容生成中... (已耗時 {elapsed}s, 累計字數 {total_text_len})\n")
                 else:
-                    sys.stderr.write(f"⏳ [Gemini Web Agent] 排隊等待回應中... (已耗時 {elapsed}s, {policy_tag})\n")
+                    sys.stderr.write(f"⏳ [Gemini Web Agent] 排队等待回应中... (已耗時 {elapsed}s, {policy_tag})\n")
                 sys.stderr.flush()
 
             # 檢測伺服器錯誤、配額耗盡或權限拒絕（立即終止退出，絕不乾等）
             combined_err = f"{last_text} {last_turn_full} {error_messages}".lower()
             fatal_errors = [
-                ("permission denied", "當前 Google 帳號無權存取 (Permission denied)"),
-                ("check your account permissions", "帳號權限不足 (Check your account permissions)"),
+                ("permission denied", "当前 Google 账号无权访问 (Permission denied)"),
+                ("check your account permissions", "账号权限不足 (Check your account permissions)"),
                 ("model isn't available", "Google 免費池該模型暫不可用"),
-                ("internal error", "Google 伺服器內部錯誤 (Internal error)"),
-                ("quota exceeded", "達到免費池配額限額 (Quota exceeded)"),
-                ("rate limit", "達到請求頻率限制 (Rate limit)"),
-                ("resource has been exhausted", "免費池資源耗盡 (Resource exhausted)"),
-                ("thinking level is unsupported", "該模型不支援所選思考等級"),
+                ("internal error", "Google 服务器内部错误 (Internal error)"),
+                ("quota exceeded", "达到免费池配额限额 (Quota exceeded)"),
+                ("rate limit", "达到请求频率限制 (Rate limit)"),
+                ("resource has been exhausted", "免费池资源耗尽 (Resource exhausted)"),
+                ("thinking level is unsupported", "该模型不支持所选思考等级"),
                 ("model error", "模型執行錯誤"),
                 ("failed to generate", "生成失敗"),
-                ("safety blocks", "內容觸發 Google 安全策略攔截"),
-                ("blocked by safety", "內容觸發安全審查攔截"),
-                ("service unavailable", "Google 伺服器服務暫時不可用"),
-                ("an error occurred", "伺服器發生異常錯誤"),
+                ("safety blocks", "内容触发 Google 安全策略拦截"),
+                ("blocked by safety", "内容触发安全审查拦截"),
+                ("service unavailable", "Google 服务器服务暂时不可用"),
+                ("an error occurred", "服务器发生异常错误"),
                 ("something went wrong", "Google 服務端發生未知錯誤"),
             ]
             for err_key, err_desc in fatal_errors:
@@ -943,7 +941,7 @@ def run_agent_task(
 
             # 檢測真正卡死 (思考或生成狀態超過時限且文本與思考皆完全無任何增長)
             if running and time.time() > stuck_threshold:
-                return False, "", [], f"免費池排隊塞車：{current_model_id} 思考或生成超過 {int(thinking_limit)} 秒無增長卡死"
+                return False, "", [], f"免费池排队拥塞：{current_model_id} 思考或生成超過 {int(thinking_limit)} 秒無增長卡死"
 
             # 正常完成信號：已開始生成過，且不在 running 狀態，且已有輸出
             if has_started_generating and not running and has_output:
@@ -960,9 +958,9 @@ def run_agent_task(
                 stable_ticks = 0
 
         if not completed:
-            return False, "", [], f"執行逾時 ({actual_timeout} 秒，思考閾值 {int(thinking_limit)} 秒)"
+            return False, "", [], f"執行超时 ({actual_timeout} 秒，思考閾值 {int(thinking_limit)} 秒)"
 
-        # 4. 擷取生成結果（強制滾動以喚醒 Angular 虛擬滾動 Virtual Scrolling）
+        # 4. 提取生成結果（強制滾動以喚醒 Angular 虛擬滾動 Virtual Scrolling）
         extract_js = f"""(() => {{
           const turns = Array.from(document.querySelectorAll('ms-chat-turn'));
           const newTurns = turns.slice({initial_turns});
@@ -1092,13 +1090,13 @@ def run_agent_task(
         if final_text or saved_files:
             return True, final_text, saved_files, ""
 
-        return False, "", [], f"執行逾時 ({timeout_sec} 秒)"
+        return False, "", [], f"執行超时 ({timeout_sec} 秒)"
 
     try:
-        # 等待輸入框就緒
+        # 等待输入框就緒
         ready = wait_for_selector(tab_id, 'textarea[aria-label="Enter a prompt"]', timeout=15.0)
         if not ready:
-            return {"ok": False, "error": "AI Studio 頁面載入逾時（未找到輸入框）"}
+            return {"ok": False, "error": "AI Studio 頁面加载超时（未找到输入框）"}
 
         # 初次嘗試
         success, output, files, err = _attempt_run(initial_model_id)
@@ -1106,93 +1104,41 @@ def run_agent_task(
         fell_back = False
         fallback_chain = [initial_model_id]
 
-        # 若失敗且啟用了自動降級 (Auto-Fallback)
-        # 注意：若 thinking_policy == "strict"，auto_fallback 必定為 False，絕不走入以下階梯
+        # 若失败且启用了自动降级 (Auto-Fallback)
+        # 注意：若 thinking_policy == "strict"，auto_fallback 必定为 False，绝不走入以下降级
         if not success and auto_fallback and thinking_policy != "strict":
-            # 依序使用階梯備援模型
-            ladder = FALLBACK_LADDER.get(initial_model_id, ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"])
-            fallback_targets = [c for c in ladder if c != initial_model_id]
+            # 极简直通备援：AI Studio 遭遇排队拥塞时，直接无缝切换至官网通道，无需在 AI Studio 内部反复多轮无效跳转
+            web_res = _run_gemini_web_task(
+                task=task,
+                model=initial_model_id,
+                timeout_sec=timeout_sec,
+                new_chat=True,
+                download_dir=download_dir,
+                keep_tab=keep_tab,
+                entry=entry,
+            )
+            if web_res.get("ok"):
+                success = True
+                output = web_res.get("output", "")
+                files = web_res.get("files", [])
+                err = ""
+                active_model = web_res.get("model", "gemini.google.com (官网通道)")
+                fallback_chain.append(active_model)
+                fell_back = True
+            else:
+                err = "CONGESTION_HALT: Google AI Studio 与 Gemini 官网免费池全数高负载排队拥塞。"
 
-            for target in fallback_targets:
-                fallback_chain.append(target)
-                fb_url = f"https://aistudio.google.com/prompts/new_chat?model={target}"
-                agentlimb_client.call_tool("navigate", {"tabId": tab_id, "url": fb_url})
-                wait_for_selector(tab_id, 'textarea[aria-label="Enter a prompt"]', timeout=15.0)
-
-                fb_success, fb_output, fb_files, fb_err = _attempt_run(target)
-                if fb_success:
-                    success = True
-                    output = fb_output
-                    files = fb_files
-                    err = ""
-                    active_model = target
-                    fell_back = True
-                    break
-
-            if not success:
-                # 終極備援：跨站點無縫降級至 gemini.google.com 官網免費通道
-                web_res = _run_gemini_web_task(
-                    task=task,
-                    model=initial_model_id,
-                    timeout_sec=timeout_sec,
-                    new_chat=True,
-                    download_dir=download_dir,
-                    keep_tab=keep_tab,
-                    entry=entry,
-                )
-                if web_res.get("ok"):
-                    success = True
-                    output = web_res.get("output", "")
-                    files = web_res.get("files", [])
-                    err = ""
-                    active_model = web_res.get("model", "gemini.google.com (官網通道)")
-                    fallback_chain.append(active_model)
-                    fell_back = True
-                else:
-                    err = "CONGESTION_HALT: Google AI Studio 與 Gemini 官網免費池全數高負載壅塞。"
-
-        # 自動代碼檢測與保存落地（防吞噬雙重保險）
+        # 自动代码检测与保存落地（AI Studio 通道防吞噬）
         if success and output:
-            code_block_match = re.search(r'```([a-zA-Z0-9_\-\+\#]+)?\s*\n(.*?)```', output, re.DOTALL)
-            if code_block_match:
-                lang = (code_block_match.group(1) or "").lower().strip()
-                code_text = code_block_match.group(2)
-                ext_map = {
-                    "cpp": ".cpp", "c++": ".cpp", "cxx": ".cpp", "c": ".c", "h": ".h", "hpp": ".hpp",
-                    "python": ".py", "py": ".py",
-                    "rust": ".rs", "rs": ".rs",
-                    "go": ".go", "golang": ".go",
-                    "javascript": ".js", "js": ".js", "typescript": ".ts", "ts": ".ts",
-                    "html": ".html", "css": ".css", "sh": ".sh", "bash": ".sh",
-                    "json": ".json", "yaml": ".yaml", "yml": ".yml"
-                }
-                ext = ext_map.get(lang, ".txt")
-                stem = "gemini_generated_code"
-                tl = task.lower()
-                if "thread" in tl or "線程池" in task or "线程池" in task:
-                    stem = "thread_pool"
-                elif "queue" in tl or "無鎖" in task or "佇列" in task or "队列" in task:
-                    stem = "lock_free_queue"
-                elif "crawler" in tl or "爬蟲" in task or "爬虫" in task:
-                    stem = "async_crawler"
-                elif "tree" in tl or "紅黑樹" in task or "红黑树" in task:
-                    stem = "red_black_tree"
-                elif "actor" in tl or "akka" in tl:
-                    stem = "actor_system"
+            code_files = _extract_and_save_code(output, task, download_dir)
+            for cf in code_files:
+                if cf not in files:
+                    files.append(cf)
 
-                try:
-                    code_file_path = out_path / f"{stem}{ext}"
-                    with open(code_file_path, "w", encoding="utf-8") as cf:
-                        cf.write(code_text)
-                    if str(code_file_path) not in files:
-                        files.append(str(code_file_path))
-                except Exception as e:
-                    print(f"[code_save_error] {e}", file=sys.stderr)
-
-        # 若有多模態檔案或代碼落地，追加工作區超連結
+        # 若有多模态文件或代码落地，追加工作区超链接
         if files:
             links = "\n".join([f"- [{Path(f).name}](file://{f})" for f in files])
-            output += f"\n\n🎉 生成成果已同步落地存檔至本地工作區：\n{links}"
+            output += f"\n\n🎉 生成成果已同步落地存档至本地工作区：\n{links}"
 
         try:
             agentlimb_client.call_tool(
@@ -1292,7 +1238,7 @@ def check_gemini_usage(include_flow: bool = True) -> dict:
     try:
         ready = wait_for_selector(tab_id, '[data-testid="current-usage"], [data-usage-island-root]', timeout=15.0)
         if not ready:
-            gemini_result = {"status": "error", "error": "用量頁面載入逾時"}
+            gemini_result = {"status": "error", "error": "用量頁面加载超时"}
         else:
             eval_res = agentlimb_client.eval_js(
                 """(() => {
@@ -1336,7 +1282,7 @@ def check_gemini_usage(include_flow: bool = True) -> dict:
         except Exception:
             pass
 
-    # 循序執行：Gemini 分頁關閉後，再開啟 Flow 分頁探測，避免雙分頁競爭
+    # 循序執行：Gemini 标签页關閉後，再開啟 Flow 标签页探測，避免雙标签页競爭
     flow_info = {"credits": None, "reset_time": None}
     if include_flow:
         flow_info = check_flow_usage()
@@ -1373,7 +1319,7 @@ def discover_available_models() -> dict:
         if not ready:
             return {"status": "error", "error": "未找到模型選擇按鈕"}
 
-        # 點開模型選單
+        # 點開模型菜单
         agentlimb_client.eval_js('document.querySelector(".model-selector-card")?.click()', tab_id=tab_id)
         time.sleep(0.4)
 
@@ -1406,7 +1352,7 @@ def discover_available_models() -> dict:
             "models": models,
         }
     finally:
-        # 如果是臨時建立的分頁，讀取完畢立刻關閉，不留垃圾分頁
+        # 如果是臨時建立的标签页，讀取完畢立刻關閉，不留垃圾标签页
         if created_tab and tab_id:
             try:
                 agentlimb_client.call_tool("tab_close", {"tabId": tab_id})
@@ -1434,13 +1380,13 @@ if __name__ == "__main__":
     p_task.add_argument("--site", default="aistudio")
     p_task.add_argument("--entry", default="chat", help="入口模式：chat 或 task")
     p_task.add_argument("--thinking-level", default="high")
-    p_task.add_argument("--thinking-policy", choices=["adaptive", "custom", "strict"], default="adaptive", help="思考閾值策略：adaptive(智慧自適應), custom(自定義超時), strict(嚴格模式不降級)")
-    p_task.add_argument("--thinking-timeout", type=int, default=0, help="自定義思考逾時秒數 (0 表示由 policy 決定)")
+    p_task.add_argument("--thinking-policy", choices=["adaptive", "custom", "strict"], default="adaptive", help="思考閾值策略：adaptive(智慧自適應), custom(自定義超时), strict(嚴格模式不降級)")
+    p_task.add_argument("--thinking-timeout", type=int, default=0, help="自定義思考超时秒數 (0 表示由 policy 決定)")
     p_task.add_argument("--timeout", type=int, default=180)
-    p_task.add_argument("--new-chat", action="store_true", help="開新對話")
+    p_task.add_argument("--new-chat", action="store_true", help="開新对话")
     p_task.add_argument("--no-fallback", action="store_true", help="關閉階梯降級 (嚴格模式)")
     p_task.add_argument("--download-dir", default="", help="多模態下載目錄")
-    p_task.add_argument("--keep-tab", action="store_true", help="執行完畢後保留瀏覽器分頁不關閉")
+    p_task.add_argument("--keep-tab", action="store_true", help="執行完畢後保留浏览器标签页不關閉")
 
     # 如果傳入了 usage 子命令
     if len(sys.argv) > 1 and sys.argv[1] == "usage":
@@ -1465,7 +1411,7 @@ if __name__ == "__main__":
     # 執行 task 子命令
     if len(sys.argv) > 1 and sys.argv[1] == "task":
         args = parser.parse_args()
-        prompt = args.prompt or (" ".join(args.task_prompt) if args.task_prompt else "請用繁體中文用一句話介紹你自己")
+        prompt = args.prompt or (" ".join(args.task_prompt) if args.task_prompt else "請用简体中文用一句話介紹你自己")
         res = run_agent_task(
             prompt,
             model=args.model,
@@ -1484,6 +1430,6 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # 預設：直接把所有參數當作任務提示詞
-    task_input = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "請用繁體中文用一句話介紹你自己"
+    task_input = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "請用简体中文用一句話介紹你自己"
     res = run_agent_task(task_input)
     print(json.dumps(res, ensure_ascii=False))

@@ -15,8 +15,8 @@ description: >-
 > 1. **【绝对禁令】**：本地宿主 AI（DeepSeek / Claude / GPT 等）**严禁自行在本地编写答案或擅自代劳作答**！  
 > 2. **【严禁 Subagent 劫持】**：**严禁调用 `subagent` 或 `list_subagent_models` 打付费 Google API 路由**！使用者的核心诉求是使用外部浏览器的【零 Token 免费池 (key_off)】，严禁偷开 subagent 消耗用户本地付费配额！
 > 3. **【一律先问后用提案工作流 (唯一标准流程)】**：
->    - **第 1 步绝对禁令**：在接收到用户指令的第 1 步，**绝对禁止直接调用 `gemini_web_agent` 工具發包，绝对禁止调用 `ask_user_question`**！宿主 AI 必须先在文本回复中向用户呈现【Gemini Web Agent 调度提案】卡片（目标渠道 `site`、入口模式 `entry`、推荐模型 `model`、思考等级 `thinking_level`、预估成本 0 Token 免费），并**立即结束当前回显**等待用户确认；
->    - **第 2 步授权发包**：待用户明确确认（回复「确认」、「1」或调整参数）后，才在下一轮正式调用 `gemini_web_agent` 發包執行；
+>    - **第 1 步绝对禁令**：在接收到用户指令的第 1 步，**绝对禁止直接调用 `gemini_web_agent` 工具发包，绝对禁止调用 `ask_user_question`**！宿主 AI 必须先在文本回复中向用户呈现【Gemini Web Agent 调度提案】卡片（目标渠道 `site`、入口模式 `entry`、推荐模型 `model`、思考等级 `thinking_level`、预估成本 0 Token 免费），并**立即结束当前回显**等待用户确认；
+>    - **第 2 步授权发包**：待用户明确确认（回复「确认」、「1」或调整参数）后，才在下一轮正式调用 `gemini_web_agent` 发包执行；
 > 4. **🎯【严格尊重用户指定模型・严禁擅自“升级”】**：
 >    - 若用户明确要求「用 Gemini 3.5 Flash Lite」、「用 Flash」、「用 Argon」等，**必须 100% 将用户指定的模型代号（如 `flash-lite`、`flash`、`argon`）写入提案卡并传入 `model` 参数**！
 >    - **严禁**因为看到代码任务就自作聪明把用户的 `flash-lite` 擅自“升级”成 `hydrogen`！只有当用户**完全没有指定任何模型名称**时，才允许根据场景表格推荐默认模型。
@@ -46,8 +46,8 @@ description: >-
 | 任务场景 | 首选渠道（URL & 模型） | 次选 / 兜底 | 额度与关键参数 |
 | :--- | :--- | :--- | :--- |
 | **轻量开发 / 独立原型 / 异步任务** | `gemini.google.com/app` **`任务 (Task)`（`4 Hydrogen`）**（**优先级高于 Build**，产出干净不乱加料） | Playground `gemini-4-hydrogen` / `Canvas` | 走网页主额度 |
-| **日常推理 / 1M 長輸出 / 代碼** | `aistudio.google.com/prompts/new_chat?model=gemini-4-hydrogen` | `gemini.google.com/app`（`任務` / 對話） | **`key_off` 免費**；Thinking 設為 **`High`**（封印 Extra High），輸出拉 `1048576` |
-| **複雜架構 / 深度研究** | `aistudio.google.com/prompts/new_chat?model=gemini-4-neon`（或 `gemini-4-argon` / `deep-research-preview-04-2026`） | `gemini.google.com/app`（`4 Neon` / `Deep Research`；Web 端 `4 Argon` 已替換為 `4 Neon`） | AI Studio **`key_off`**；Thinking 設為 **`High`**（封印 Extra High）+ `1048576` |
+| **日常推理 / 1M 长输出 / 代码** | `aistudio.google.com/prompts/new_chat?model=gemini-4-hydrogen` | `gemini.google.com/app`（`任务` / 对话） | **`key_off` 免费**；Thinking 设为 **`High`**（封印 Extra High），输出拉 `1048576` |
+| **复杂架构 / 深度研究** | `aistudio.google.com/prompts/new_chat?model=gemini-4-neon`（或 `gemini-4-argon` / `deep-research-preview-04-2026`） | `gemini.google.com/app`（`4 Neon` / `Deep Research`；Web 端 `4 Argon` 已替换为 `4 Neon`） | AI Studio **`key_off`**；Thinking 设为 **`High`**（封印 Extra High）+ `1048576` |
 | **图片生成与参考改图** | `flow.google.com`（`Nano Banana 2.1`，**0 点数**，务必改 **`x1`**，可下 `2K`） | Playground `gemini-nano-banana-2.1`（`key_off`）/ Gemini `制作图片` | Flow 每日数十张免费；参考图改图见 `references/agentlimb.md` |
 | **视频生成（含原生音频）** | `aistudio.google.com/prompts/new_chat?model=gemini-omni-1.2-flash`（最高 15s） | Flow（`Omni 1.2 Flash` 8~24 点 / `Veo 3.1 - Lite` 10 点，选 `x1`） | AI Studio **`key_off` 免费不扣 Flow 点数** |
 | **完整歌曲 / 配音 / 转写** | `aistudio.google.com/new_music?model=lyria-3.5` / `/generate-speech?model=gemini-3.8-flash-tts` | `gemini.google.com` `制作音乐` / `?model=gemini-3.5-transcribe` | **`key_off` 免费**（MP3 / WAV base64 直出） |
@@ -119,7 +119,7 @@ description: >-
       const opts = [...document.querySelectorAll('.cdk-overlay-pane mat-option')].filter(
         o => o.getAttribute('aria-disabled') !== 'true' && !/\bpaid\b/i.test(o.innerText)
       );
-      // 封印 Extra High：免費池優先選 High，其次選 Medium，絕不選 Extra High（防 403 Permission Denied 與超長假死）
+      // 封印 Extra High：免费池优先选 High，其次选 Medium，绝不选 Extra High（防 403 Permission Denied 与超长假死）
       const pick = opts.find(o => /^high$/i.test(o.innerText.trim())) || opts.find(o => /medium/i.test(o.innerText.trim())) || opts.at(-1);
       if (pick) { pick.click(); await wait(200); }
     }
@@ -180,7 +180,7 @@ description: >-
 & $py $cli ask --model hydrogen --file "需求.pdf" --prompt "轻量原型/调研任务" --async-send
 & $py $cli fetch --out-file "result.md"
 
-# AI Studio Playground（預設自動選 High + 1048576，封印 Extra High；支援多模態與直寫檔案）
+# AI Studio Playground（默认自动选 High + 1048576，封印 Extra High；支持多模态与直写文件）
 & $py $cli playground --model hydrogen --system-file "设定.md" --file "参考.pdf" --prompt "写正文" --out-file "out.md" --new-chat
 & $py $cli playground --model research --prompt "深度调研" --out-file "research.md" --new-chat
 & $py $cli playground --model lyria --prompt "warm cozy solo piano, 100bpm" --download-dir "./out"
