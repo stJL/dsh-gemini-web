@@ -1816,7 +1816,7 @@ def execute_flow_usage(browser) -> dict:
         raw = re.sub(r"\s+", " ", (dialog.inner_text() or "")).strip()
         credits_m = re.search(r"([\d,]+)\s*(?:个\s*Google Flow\s*点数|Google Flow\s*credits?)", raw, re.IGNORECASE)
         reset_m = re.search(
-            r"(?:重置时间[:：]\s*|Resets?\s+)([^\n]+?)(?=\s+(?:升级|person|Upgrade|退出|Sign\s*out|frame_spark|可见水印|隐私权|Privacy)|$)",
+            r"(?:重置时间[:：]\s*|Resets?\s+|Credits?\s+refresh(?:\s+daily\s+at)?|点数将于|點數將於|刷新时间[:：]|每日)\s+([^\n]+?)(?=\s+(?:刷新|重置|升级|升級|person|Upgrade|退出|Sign\s*out|frame_spark|可见水印|隐私权|Privacy)|$)",
             raw,
             re.IGNORECASE,
         )

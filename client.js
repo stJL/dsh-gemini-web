@@ -1199,8 +1199,12 @@ window.__ModuleLoader__.load({
                 h('span', { style: { fontWeight: 600, color: '#fbbf24', whiteSpace: 'nowrap' } }, t('flow_title')),
                 h('span', {
                   className: 'gw-badge',
-                  style: usage?.flowResetTime ? { background: '#059669', color: '#fff' } : { background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' }
-                }, usage?.flowResetTime ? t('flow_connected_badge') : t('flow_pending_badge'))
+                  style: (usage?.flowResetTime || (usage?.flowCredits !== undefined && usage?.flowCredits !== null))
+                    ? { background: '#059669', color: '#fff' }
+                    : { background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' }
+                }, (usage?.flowResetTime || (usage?.flowCredits !== undefined && usage?.flowCredits !== null))
+                  ? t('flow_connected_badge')
+                  : t('flow_pending_badge'))
               ]),
               // 行 2: 獨立一行的可用點數與免扣點特權標籤 (單獨佔一行，空間充裕絕不截斷)
               h('div', {
@@ -1215,14 +1219,16 @@ window.__ModuleLoader__.load({
                 }
               }, [
                 h('span', { style: { fontWeight: 600, color: '#10b981', fontSize: 12, lineHeight: 1.4, whiteSpace: 'nowrap' } },
-                  t('flow_credits_unit', { credits: usage?.flowCredits !== undefined && usage?.flowCredits !== null ? usage.flowCredits : 1050 }))
+                  t('flow_credits_unit', { credits: usage?.flowCredits !== undefined && usage?.flowCredits !== null ? usage.flowCredits : 50 }))
               ]),
               // 行 3: 額度用途與重置時間詳細說明
               h('div', { style: { fontSize: 11, opacity: 0.85, lineHeight: 1.6 } }, [
                 h('div', null, t('flow_desc_p1')),
                 h('div', { style: { color: '#10b981', fontWeight: 500 } }, t('flow_desc_p2')),
                 h('div', { style: { opacity: 0.8 } }, t('flow_desc_p3', {
-                  time: usage?.flowResetTime ? t('flow_reset_note', { time: usage.flowResetTime }) : ''
+                  time: usage?.flowResetTime
+                    ? t('flow_reset_note', { time: usage.flowResetTime })
+                    : ((usage?.flowCredits !== undefined && usage?.flowCredits !== null) ? '（每日自动刷新）' : '')
                 }))
               ])
             ]),

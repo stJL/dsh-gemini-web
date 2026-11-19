@@ -1282,7 +1282,11 @@ def check_flow_usage() -> dict:
             raw,
             re.IGNORECASE,
         )
-        reset_m = re.search(r"Resets?(?:\s+on)?\s+([^\n]+)", raw, re.IGNORECASE)
+        reset_m = re.search(
+            r"(?:Resets?(?:\s+on)?|Credits?\s+refresh(?:\s+daily\s+at)?|点数将于|點數將於|刷新时间[:：]|重置时间[:：]|每日)\s+([^\n]+?)(?=\s*(?:刷新|重置|升级|升級|Upgrade|Manage|Sign\s*out|退出|$))",
+            raw,
+            re.IGNORECASE,
+        )
 
         credits = int(credits_m.group(1).replace(",", "")) if credits_m else None
         reset_time = (
