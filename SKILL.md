@@ -1,21 +1,25 @@
 ---
 name: gemini-web-agent
 description: >-
-  【必须最优先加载・一律先问后用】当用户提到 AI Studio, Google Flow, Gemini 网页端, 或指定 Hydrogen, Argon, Neon, Nano Banana, Omni, Lyria, TTS, 或要求高难度 C++/Rust/Python 并发算法（无锁队列/线程池）、生图/生视频/长文本时，必须第一步调用本 skill！严格遵循「一律先问后用」提案规范：第 1 步必须先向用户输出调度提案卡并停止回复，绝对禁止直接调用 gemini_web_agent 工具；待用户确认（回复「1」或「确认」）后才正式发包！严禁本地擅自代劳，严禁调用 subagent。若用户显式附带 [免确认] 或直接发包方可直通。
+  【必须最优先加载・先问后用与直通规范】当用户提到 AI Studio, Google Flow, Gemini 网页端, 或指定 Hydrogen, Argon, Neon, Flash, Flash-Lite, Nano Banana, Omni, Lyria, TTS, 或要求并发算法、生图/生视频/长文本时，必须第一步调用本 skill！
+  1. 若显式附带 [免确认] 或直接发包：第 1 步必须直接调用 gemini_web_agent 工具发包！严禁调用 ask_user_question，严禁输出提案卡！
+  2. 若未附带 [免确认]：严格遵循「先问后用」，第 1 步先输出提案卡并停止回复！
+  3. 严格尊重用户指定的模型（如 Flash Lite、Argon），严禁擅自升级为 Hydrogen！
 ---
 
 # Gemini Web-Agent（三站点全模态与额度调度）
 
 > [!IMPORTANT]
 > **🚨 最高命令铁律：明令禁止本地模型擅自代劳与 Subagent 劫持**  
-> 当使用者在对话中显式指定调用 **`gemini-web-agent`**、**`gemini_web_agent`**、**`/gw`**、**“Gemini 网页端”**、**“Google 网页”**、**“AI Studio”**、**“Google Flow”**，指定使用 **`Hydrogen` / `Argon` / `Neon` / `Nano Banana` / `Omni` / `Lyria`** 等模型，或提出高算力架构推演、C++/Rust/Python 高效能并发算法（如无锁队列、线程池、内存模型）等复杂编程任务时：  
+> 当使用者在对话中显式指定调用 **`gemini-web-agent`**、**`gemini_web_agent`**、**`/gw`**、**“Gemini 网页端”**、**“Google 网页”**、**“AI Studio”**、**“Google Flow”**，指定使用 **`Hydrogen` / `Argon` / `Neon` / `Flash` / `Flash-Lite` / `Nano Banana` / `Omni` / `Lyria`** 等模型，或提出高算力架构推演、C++/Rust/Python 高效能并发算法（如无锁队列、线程池、内存模型）等复杂编程任务时：  
 > 1. **【绝对禁令】**：本地宿主 AI（DeepSeek / Claude / GPT 等）**严禁自行在本地编写答案或擅自代劳作答**！  
 > 2. **【严禁 Subagent 劫持】**：**严禁调用 `subagent` 或 `list_subagent_models` 打付费 Google API 路由**！使用者的核心诉求是使用外部浏览器的【零 Token 免费池 (key_off)】，严禁偷开 subagent 消耗用户本地付费配额！
 > 3. **【一律先问后用提案工作流 (原作者规范)】**：
->    - **【第 1 步绝对禁令】**：在接收到用户指令的第 1 步，**绝对禁止直接调用 `gemini_web_agent` 工具發包**！宿主 AI 必须先在文本回复中向用户呈现【Gemini Web Agent 调度提案】卡片（目标渠道 `site`、入口模式 `entry`、推荐模型 `model`、思考等级 `thinking_level`、预估成本 0 Token 免费），并**立即结束当前回显**等待用户；
->    - **【第 2 步授权发包】**：待用户明确确认（回复「确认」、「1」或调整参数）后，才在下一轮正式调用 `gemini_web_agent` 發包執行；
->    - **⚡【唯一例外直通】**：仅当用户指令中显式包含「[免确认]」、「直接发包」、「立即执行」等直通标签，或外挂设定已切为「极速直通模式」时，才允许第 1 步跳过确认卡直接发包！普通 `/gemini-web-agent` 依然必须先出提案卡！
-> 4. **【尊重意志】**：使用者之所以显式指定外部网页端，是为了利用 Google 免费额度（key_off）、1M 超大上下文或多模态能力，本地模型不得以“自己也能写代码”为由截胡！
+>    - **⚡【直通例外（最高优先级）】**：当用户指令中显式包含「[免确认]」、「直接发包」、「立即执行」等直通标签，或外挂设定已切为「极速直通模式」时，**第 1 步必须直接调用 `gemini_web_agent` 工具发包**！严禁调用 `ask_user_question`，严禁输出提案卡！
+>    - **🛡️【先问后用常规流程】**：若用户未附带 [免确认]，在第 1 步**绝对禁止直接调用 `gemini_web_agent` 工具發包**！宿主 AI 必须先在文本回复中向用户呈现【Gemini Web Agent 调度提案】卡片（目标渠道 `site`、入口模式 `entry`、推荐模型 `model`、思考等级 `thinking_level`、预估成本 0 Token 免费），并**立即结束当前回显**等待用户确认；待用户明确确认（回复「确认」、「1」或调整参数）后，才在下一轮正式调用 `gemini_web_agent` 發包執行；
+> 4. **🎯【严格尊重用户指定模型・严禁擅自“升级”】**：
+>    - 若用户明确要求「用 Gemini 3.5 Flash Lite」、「用 Flash」、「用 Argon」等，**必须 100% 将用户指定的模型代号（如 `flash-lite`、`flash`、`argon`）传入 `model` 参数**！
+>    - **严禁**因为看到代码任务就自作聪明把用户的 `flash-lite` 擅自“升级”成 `hydrogen`！只有当用户**完全没有指定任何模型名称**时，才允许根据场景表格推荐默认模型。
 > 5. **【0 探测开销】**：底层 Chrome 与 AgentLimb 桥接已由外挂 Daemon 背景完全托管。**发包前严禁进行任何端口扫描、进程检查、代码逆向或环境探测**！直接发包执行！
 > 6. **【📦 致命铁律：严禁摘要，必须 100% 完整贴出代码全文与降级通知】**：调用 `gemini_web_agent` 完成后，使用者在前端聊天窗口看不见 tool result 内部细节！你必须在最终回复中，将工具回传之「降级流程通知」、「落地文件超链接」以及「全部源代码与注释全文」100% 原封不动完整呈现给使用者，严禁仅以「已为您完成...」等一句话摘要概括！未贴出代码全文视同严重调度失败！
 
@@ -30,7 +34,7 @@ description: >-
 > 1. **🛡️ 先问后用模式（原作者规范・默认安全控费）**：
 >    当用户提出需要调用外部资源的任务时，宿主 AI 先输出「Gemini Web Agent 调度提案」，将底层的真实参数（渠道、入口、模型、思考等级、话题策略与 0 成本）透明化呈现给用户审阅。待用户确认（回复「确认」、「1」或调整参数）后立即调用 `gemini_web_agent` 真实发包执行。
 > 2. **⚡ 例外直通（原作者白名单规则：明确指定则直接跑）**：
->    若用户的指令中包含直通标记（如 `/gw`、`[免确认]`、`直接发包`、`立即执行`、`--fast`），或外挂设置已切换为「极速直通模式」，则自动跳过前置确认卡，第 1 步直接调用 `gemini_web_agent`，0 延迟秒级交付！
+>    若用户的指令中包含直通标记（如 `[免确认]`、`直接发包`、`立即执行`、`--fast`），或外挂设置已切换为「极速直通模式」，**第 1 步必须直接调用 `gemini_web_agent` 发包，严禁调用 `ask_user_question`，严禁输出提案卡，0 延迟秒级交付！**
 > 3. **【🚨 严禁使用 Subagent 劫持】**：
 >    任何情况下严禁调用 `subagent` 或 `list_subagent_models` 呼叫付费 Google API 路由！使用者的核心诉求是使用外部浏览器的【零 Token 免费池 (key_off)】，绝不偷跑消耗本地付费配额！
 
