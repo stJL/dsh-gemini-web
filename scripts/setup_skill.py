@@ -71,27 +71,6 @@ def sync_skill_files(source_root: Path, target_dir: Path) -> bool:
     """将仓库核心文件同步到全局 Skill 目录（跳过 .git / .venv / __pycache__）。"""
     if source_root.resolve() == target_dir.resolve():
         return False
-    # ...
-
-
-def link_workspace_skill(target_dir: Path) -> str | None:
-    """若当前运行于 DSH 或 Git 项目工作区，自动软链接到工作区 .agents/skills/gemini-web-agent 穿透 DSH 多账号隔离"""
-    cwd = Path.cwd().resolve()
-    if (cwd / ".dsh").exists() or (cwd / ".git").exists() or (cwd / "package.json").exists():
-        ws_skills = cwd / ".agents" / "skills"
-        try:
-            ws_skills.mkdir(parents=True, exist_ok=True)
-            link_path = ws_skills / SKILL_NAME
-            if link_path.is_symlink() or link_path.exists():
-                if link_path.is_dir() and not link_path.is_symlink():
-                    shutil.rmtree(link_path)
-                else:
-                    link_path.unlink()
-            link_path.symlink_to(target_dir, target_is_directory=True)
-            return str(link_path)
-        except Exception:
-            return None
-    return None
 
     target_dir.mkdir(parents=True, exist_ok=True)
     ignore = shutil.ignore_patterns(".git", ".venv", "venv", "__pycache__", "*.pyc", ".DS_Store")
@@ -247,22 +226,22 @@ def detect_agentlimb_mcp() -> dict:
     }
 
 
-def _probe_cdp_http(port: str, timeout_sec: float = 1.5) -> dict | None:
+def _probe_cdp_http(port: int | str, timeout_sec: float = 1.5) -> dict | None:
     """探测 Chrome CDP HTTP 端口 /json/version（绕过系统代理）。"""
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    req = urllib.request.Request(f"http://127.0.0.1:{port}/json/version", method="GET")
-    try:
-        with opener.open(req, timeout=timeout_sec) as resp:
-            if resp.status == 200:
-                return json.loads(resp.read().decode("utf-8", errors="replace"))
-    except Exception:
-        return None
-    return None
+    return platform_utils.probe_cdp_http(port, timeout_sec=timeout_sec)
 
 
-def detect_chrome_cdp() -> dict:
-    """跨平台检测本机 Chromium 系浏览器（Chrome/Chromium/Edge/Brave + Snap/Flatpak）、DevToolsActivePort 与实际就绪模式。"""
+def detect_chrome_cdp(
+    ai_port: int = platform_utils.AI_CHROME_DEFAULT_PORT,
+    ai_dir: str = "",
+) -> dict:
+    """跨平台检测本机 Chromium 系浏览器、专用 AI Chrome CDP（优先）与日常 DevToolsActivePort。"""
+    ai_profile = platform_utils.get_ai_chrome_profile_dir(custom_dir=ai_dir)
     active_ports = platform_utils.iter_devtools_active_port_files()
+    ai_port_file = ai_profile / "DevToolsActivePort"
+    if ai_port_file not in active_ports:
+        active_ports.insert(0, ai_port_file)
+
     chrome_bins = platform_utils.detect_chromium_executables()
     default_browser = platform_utils.detect_default_browser()
 
@@ -270,26 +249,55 @@ def detect_chrome_cdp() -> dict:
     active_port_file = None
     cdp_mode = "inactive"
     cdp_http_ready = False
-    for port_file in active_ports:
-        if port_file.exists():
+    cdp_port: int | None = None
+    is_dedicated_ai_chrome = False
+
+    # 1. 最高优先级：直接探测专用独立 AI Chrome 的 CDP HTTP 端口（免弹窗、极速直连）
+    dedicated_ver = _probe_cdp_http(ai_port, timeout_sec=1.5)
+    if dedicated_ver:
+        cdp_http_ready = True
+        cdp_mode = "http_ready"
+        cdp_port = int(ai_port)
+        cdp_ws_url = dedicated_ver.get("webSocketDebuggerUrl") or f"http://127.0.0.1:{ai_port}"
+        is_dedicated_ai_chrome = True
+        if ai_port_file.exists():
+            active_port_file = str(ai_port_file)
+    else:
+        # 2. 回退扫描各浏览器 DevToolsActivePort（优先选择 HTTP 就绪者，否则保留第一个可见文件）
+        fallback_ui: tuple[str, str, int] | None = None
+        for port_file in active_ports:
+            if not port_file.exists():
+                continue
             lines = [l.strip() for l in port_file.read_text(encoding="utf-8", errors="ignore").splitlines() if l.strip()]
-            if len(lines) >= 2:
+            if len(lines) < 2 or not lines[0].isdigit():
+                continue
+            port_num = int(lines[0])
+            ws_candidate = f"ws://127.0.0.1:{port_num}{lines[1]}"
+            ver = _probe_cdp_http(port_num, timeout_sec=1.0)
+            if ver:
                 active_port_file = str(port_file)
-                port = lines[0]
-                cdp_ws_url = f"ws://127.0.0.1:{port}{lines[1]}"
-                ver = _probe_cdp_http(port)
-                if ver:
-                    cdp_http_ready = True
-                    cdp_mode = "http_ready"
-                else:
-                    cdp_mode = "chrome_ui_approval_required"
+                cdp_ws_url = ver.get("webSocketDebuggerUrl") or ws_candidate
+                cdp_http_ready = True
+                cdp_mode = "http_ready"
+                cdp_port = port_num
+                is_dedicated_ai_chrome = port_file.resolve() == ai_port_file.resolve()
                 break
+            if fallback_ui is None:
+                fallback_ui = (str(port_file), ws_candidate, port_num)
+
+        if not cdp_http_ready and fallback_ui is not None:
+            active_port_file, cdp_ws_url, cdp_port = fallback_ui
+            cdp_mode = "chrome_ui_approval_required"
 
     found_chrome = chrome_bins[0] if chrome_bins else None
     return {
         "cdp_active": cdp_ws_url is not None,
         "cdp_http_ready": cdp_http_ready,
         "cdp_mode": cdp_mode,
+        "cdp_port": cdp_port,
+        "is_dedicated_ai_chrome": is_dedicated_ai_chrome,
+        "ai_chrome_profile_dir": str(ai_profile),
+        "ai_chrome_default_port": int(ai_port),
         "active_port_file": active_port_file,
         "cdp_ws_url": cdp_ws_url,
         "chrome_executable": found_chrome,
@@ -491,11 +499,57 @@ def main() -> None:
     parser.add_argument("--check-if-stale", action="store_true", help="仅当距离上次检查超过 --cache-hours 小时才联网查更新")
     parser.add_argument("--cache-hours", type=float, default=24.0, help="自动更新检查缓存小时数（默认 24 小时）")
     parser.add_argument("--update", action="store_true", help="自动从 GitHub 拉取最新版并重新同步全局 Skill 目录")
+    parser.add_argument("--setup-ai-chrome", action="store_true", help="在桌面创建专用独立 AI Chrome 快捷方式（绝不碰日常 Chrome）")
+    parser.add_argument("--launch-ai-chrome", action="store_true", help="启动专用独立 AI Chrome（CDP 免弹窗高速通道 B）")
+    parser.add_argument("--ai-chrome-port", type=int, default=platform_utils.AI_CHROME_DEFAULT_PORT, help="专用 AI Chrome CDP 端口（默认 9229）")
+    parser.add_argument("--ai-chrome-dir", default="", help="专用 AI Chrome 独立数据目录（默认 ~/.gemini-web-chrome）")
     parser.add_argument("--json", action="store_true", help="输出完整 JSON 诊断报告（默认仅输出极简行摘要）")
     args = parser.parse_args()
 
     source_root = Path(__file__).resolve().parent.parent
     target_dir = detect_target_skill_dir(source_root, args.target)
+
+    if args.setup_ai_chrome or args.launch_ai_chrome:
+        chrome_bins = platform_utils.detect_chromium_executables()
+        chrome_exe = chrome_bins[0] if chrome_bins else ""
+        profile_dir = platform_utils.get_ai_chrome_profile_dir(custom_dir=args.ai_chrome_dir)
+        out_payload: dict = {"ok": True, "profile_dir": str(profile_dir), "port": int(args.ai_chrome_port)}
+        try:
+            if args.setup_ai_chrome:
+                out_payload["shortcut"] = platform_utils.create_ai_chrome_shortcut(
+                    chrome_exe=chrome_exe,
+                    profile_dir=profile_dir,
+                    port=args.ai_chrome_port,
+                )
+            if args.launch_ai_chrome:
+                out_payload["launch"] = platform_utils.launch_ai_chrome(
+                    chrome_exe=chrome_exe,
+                    profile_dir=profile_dir,
+                    port=args.ai_chrome_port,
+                )
+        except Exception as e:
+            if args.json:
+                print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False, indent=2))
+            else:
+                print(f"ai_chrome_failed | {e}")
+            sys.exit(1)
+
+        if args.json:
+            print(json.dumps(out_payload, ensure_ascii=False, indent=2))
+        else:
+            parts = ["ok | ai_chrome"]
+            if "shortcut" in out_payload:
+                parts.append(f"shortcut={out_payload['shortcut']['shortcut_path']}")
+            if "launch" in out_payload:
+                linfo = out_payload["launch"]
+                st = "already_running" if linfo.get("already_running") else ("ready" if linfo.get("cdp_http_ready") else "starting")
+                parts.append(f"state={st}")
+                if linfo.get("first_run_login_needed"):
+                    parts.append("login=first_time_required")
+            parts.append(f"port={args.ai_chrome_port}")
+            parts.append(f"dir={profile_dir}")
+            print(" | ".join(parts))
+        return
 
     if args.update:
         try:
@@ -540,17 +594,24 @@ def main() -> None:
     if synced or not (target_dir / VERSION_FILE_NAME).exists():
         _write_version_meta(target_dir, source_root)
 
-    ws_linked_path = link_workspace_skill(target_dir)
-
     venv_info = ensure_venv_and_deps(target_dir, skip_pip=args.skip_pip)
     agentlimb_info = detect_agentlimb_mcp()
-    cdp_info = detect_chrome_cdp()
+    cdp_info = detect_chrome_cdp(ai_port=args.ai_chrome_port, ai_dir=args.ai_chrome_dir)
     version_meta = _read_version_meta(target_dir)
 
     safety_rules = [
-        "严禁 AI 擅自 taskkill / 强杀用户正在运行的 Chrome 进程，也严禁擅自传入临时 --user-data-dir 重启或复制默认 User Data 目录。",
-        "Chrome 136+ 已禁止对默认 User Data 目录直接传 --remote-debugging-port=9222；强制切目录或强杀进程会导致已登录多账号与扩展失效。",
+        "严禁 AI 擅自 taskkill / 强杀用户正在运行的日常 Chrome 进程，也严禁修改或复制用户默认 Chrome User Data 目录。",
+        "严禁 AI 未经用户明确同意擅自运行 --setup-ai-chrome / --launch-ai-chrome 拉起需重新登录的新浏览器；新建独立 Chrome Profile 完全开源本地运行（数据仅存本机 ~/.gemini-web-chrome，不触碰日常账号、不上传任何凭证），是否开启必须由用户自己决定。",
     ]
+
+    if cdp_info["cdp_http_ready"] and venv_info["dependencies_ready"]:
+        recommended_channel = "B"
+    elif agentlimb_info["configured"]:
+        recommended_channel = "A"
+    elif cdp_info["cdp_active"] and venv_info["dependencies_ready"]:
+        recommended_channel = "B_ui_approval"
+    else:
+        recommended_channel = "setup_required"
 
     next_actions = []
     if not venv_info["dependencies_ready"]:
@@ -559,35 +620,41 @@ def main() -> None:
         next_actions.append(
             f"请检查网络并手动执行: \"{venv_info['venv_python']}\" -m pip install -r \"{target_dir / 'requirements.txt'}\""
         )
-    if not agentlimb_info["configured"] and not cdp_info["cdp_active"]:
+    if recommended_channel == "B":
+        tag = "用户已启用的专用 AI Chrome" if cdp_info.get("is_dedicated_ai_chrome") else f"Chrome CDP({cdp_info.get('cdp_port')})"
+        next_actions.append(
+            f"检测到高速通道 B ({tag}) 已处于运行状态，优先使用 `gemini_web.py daemon` + `wave` 并发引擎。"
+        )
+    elif recommended_channel == "A":
+        next_actions.append(
+            "通道 A (AgentLimb MCP) 已就绪，无需重新登录即可直接复用日常 Chrome（稳妥托底首选）。"
+            "若用户感觉多标签调度较慢、明确希望提速 5~10 倍，可向用户透明说明利弊并征求其选择："
+            "由用户自行决定是否运行 `--setup-ai-chrome --launch-ai-chrome` 配置纯本地独立 Profile（需在该隔离窗口登录一次 Google 账号，以后免弹窗直连通道 B）。"
+        )
+    elif recommended_channel == "B_ui_approval":
+        next_actions.append(
+            "检测到日常 Chrome 开启了浏览器内调试开关（首次连接时需在 Chrome 弹窗点一次「允许」即可免重登直接跑通道 B）；"
+            "若希望跨重启彻底免弹窗，也可由用户自主选择创建独立 AI Chrome Profile（详见 README）。"
+        )
+    else:
         if cdp_info.get("firefox_default_note"):
             next_actions.append(cdp_info["firefox_default_note"])
         next_actions.append(
-            "未检测到 AgentLimb MCP 与已开启的 Chrome 远程调试端口。强烈推荐首选方案 (1)："
-            " (1) 安装并启用 AgentLimb 扩展 MCP >= v0.8.2（https://github.com/hooosberg/AgentLimb ，"
-            "不改 Chrome 启动参数、重启电脑后原账号与扩展直接可用，参见 references/agentlimb.md）；"
-            " 或 (2) 若坚持使用无扩展通道 B：请让用户在当前已打开的 Chrome 地址栏自行访问 "
-            "chrome://inspect/#remote-debugging 开启内置调试开关（严禁强杀 Chrome 或用临时 --user-data-dir 重启）。"
-        )
-    elif agentlimb_info["configured"] and cdp_info["cdp_mode"] == "chrome_ui_approval_required":
-        next_actions.append(
-            "通道 A (AgentLimb MCP) 已就绪，推荐直接使用通道 A。检测到 Chrome 当前通过浏览器内开关监听调试端口（/json/version 未暴露），"
-            "若必须切换通道 B 且连接挂起：建议先启动 `gemini_web.py daemon` 并在 Chrome 弹出的「允许远程调试」框点一次允许即可复用长连接（切勿强杀或改用临时 --user-data-dir 重启 Chrome）。"
-        )
-    elif agentlimb_info["configured"]:
-        next_actions.append("通道 A (AgentLimb MCP) 已就绪，可直接操控已登录外部 Chrome；通道 B (gemini_web.py) 已配齐备用。")
-    else:
-        next_actions.append(
-            f"通道 B (Chrome CDP) 已就绪，可运行测试命令: \"{venv_info['venv_python']}\" \"{target_dir / 'scripts' / 'gemini_web.py'}\" usage --include-flow"
+            "未检测到可用通道。请先向用户坦诚提供两套并列方案由其自行选择（勿擅自拉起新窗口催促登录）："
+            "(1) 【零重登稳妥托底】安装并启用开源 AgentLimb 扩展 MCP >= v0.8.2（直接复用日常 Chrome 已登录账号，零风险）；"
+            "或在日常 Chrome 地址栏打开 chrome://inspect/#remote-debugging 开启调试开关并点允许；"
+            "(2) 【高速并发进阶】若想单命令并发提速 5~10 倍，可运行 "
+            f"`python \"{target_dir / 'scripts' / 'setup_skill.py'}\" --setup-ai-chrome --launch-ai-chrome` "
+            "在本机创建纯本地独立 Chrome Profile（~/.gemini-web-chrome，不碰日常数据、不传凭证，需用户自己在该新窗口登录一次 Google 账号）。"
         )
 
     report = {
         "ok": venv_info["dependencies_ready"],
         "skill_name": SKILL_NAME,
+        "recommended_channel": recommended_channel,
         "installed_commit": version_meta.get("installed_commit") or None,
         "source_dir": str(source_root.resolve()),
         "installed_skill_dir": str(target_dir),
-        "workspace_skill_link": ws_linked_path,
         "files_synced_to_global": synced,
         "cli_script": str(target_dir / "scripts" / "gemini_web.py"),
         "quota_monitor_script": str(target_dir / "scripts" / "inspect_antigravity.py"),
@@ -602,13 +669,16 @@ def main() -> None:
     else:
         a_tag = "ready" if agentlimb_info["configured"] else "off"
         b_tag = cdp_info["cdp_mode"]
+        if cdp_info.get("cdp_port"):
+            b_tag = f"{b_tag}:{cdp_info['cdp_port']}"
         deps_tag = "ok" if venv_info["dependencies_ready"] else "missing"
         print(
-            f"ok={str(venv_info['dependencies_ready']).lower()} | commit={version_meta.get('installed_commit') or '-'} "
-            f"| A={a_tag} | B={b_tag} | deps={deps_tag} | py={venv_info['venv_python']} "
+            f"ok={str(venv_info['dependencies_ready']).lower()} | prefer={recommended_channel} "
+            f"| commit={version_meta.get('installed_commit') or '-'} "
+            f"| B={b_tag} | A={a_tag} | deps={deps_tag} | py={venv_info['venv_python']} "
             f"| cli={target_dir / 'scripts' / 'gemini_web.py'} | inspect={target_dir / 'scripts' / 'inspect_antigravity.py'}"
         )
-        if not agentlimb_info["configured"] or not venv_info["dependencies_ready"]:
+        if recommended_channel == "setup_required" or not venv_info["dependencies_ready"]:
             for rule in safety_rules:
                 print(f"rule: {rule}")
             for act in next_actions:

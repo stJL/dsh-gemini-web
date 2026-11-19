@@ -1,135 +1,344 @@
 # dsh-gemini-web
 
-> **DeepSeek Harness (DSH) 原生調度外掛**：專為接入 [@582835293/gemini-web-agent](https://github.com/582835293/gemini-web-agent) 多渠道網頁額度生態而設計的 GUI 與 Agent 工具適配器。
+[繁體中文](README.md) | [English](README.en.md)
+
+> **DeepSeek Harness (DSH) 原生調度外掛**：專為接入 [@582835293/gemini-web-agent](https://github.com/582835293/gemini-web-agent) 多渠道網頁額度生態而設計的 GUI 管理器與 Agent 工具適配器。
+
+<!-- [圖片 1 - 頂部效果預覽 / Hero Banner] -->
+<!-- 截圖提示：DSH 聊天室中調用 Gemini Web Agent 的完整介面截圖（含指令、先問後用確認卡與代碼落地結果） -->
+![dsh-gemini-web 主界面預覽](docs/images/hero_preview.png)
 
 ---
 
 ## 🙏 致謝與開源聲明 (Credits & Attribution)
 
-本外掛作為 DeepSeek Harness (DSH) 桌面客戶端的生態外掛，底層核心瀏覽器自動化規則、DOM 選擇器精準調校、多渠道調度邏輯與風控防護策略**100% 傳承並致敬原作者 [@582835293](https://github.com/582835293) 的開源專案 [gemini-web-agent](https://github.com/582835293/gemini-web-agent)**。
+本專案誕生於開源社群的深度協同與熱愛，特此向所有貢獻者致以最誠摯的感謝：
 
-特此向作者 [@582835293](https://github.com/582835293) 的傑出貢獻與無私開源致以最誠摯的感謝！❤️
+* 🌟 **底層核心自動化與架構探索**：[@582835293](https://github.com/582835293)
+  - 本外掛底層核心瀏覽器自動化規則、DOM 選擇器精準調校、多渠道調度邏輯與風控防護策略**100% 傳承並致敬原作者 [@582835293](https://github.com/582835293) 的開源專案 [gemini-web-agent](https://github.com/582835293/gemini-web-agent)**。向原作者的開拓性貢獻致敬！❤️
+* 🚀 **DSH 外掛發起、產品定義與全場景維護** : 我
+  - 提出 DSH 整合架構，深度實測並挖掘出 Extra High 403 安全鎖、成果自動落盤與 SSE 串流防中斷等多項關鍵機制，主導全流程實測與外掛開源維護。
+* 🤖 **AI 結對程式設計與代碼鷹架**：Google DeepMind Antigravity (Gemini-3.8-flash)
+  - 擔任 AI 協同工程師，協助完成 TypeScript 外掛適配層編寫、雙通道路由封裝、GUI 設定儀表盤與動態文檔體系構建。
 
 ---
 
-## 🌟 核心特性與設計哲學
+## 🚨 核心召喚規範（必讀）
 
-### 1. 雙通道智慧路由 (Dual-Channel Smart Bridge)
+> [!IMPORTANT]
+> **必須在提示詞開頭輸入 `/gemini-web-agent` 斜槓指令！**
+> 
+> DSH 宿主 AI（如 DeepSeek V3、Claude、GPT 等）本身具備通用的代碼與文本生成能力。**若不加上 `/gemini-web-agent`，AI 會傾向於在本地直接作答，直接忽略外部工具**。
+> 
+> 只要在提示詞開頭加上 `/gemini-web-agent`，宿主 AI 就會立刻觸發調度協議，嚴格執行流程，將任務委派給外部 Google 網頁端執行！
+
+### 💬 召喚指令範例
+* **調用 Hydrogen 極限代碼生成與架構設計**：
+  > `/gemini-web-agent 用 Gemini 4 Hydrogen 幫我實作高效能無鎖佇列 (Lock-free Queue)，並附帶完整繁中註釋與單元測試`
+* **Google Flow 畫布 0 點數高清生圖**：
+  > `/gemini-web-agent 在 Google Flow 用 Nano Banana 2.1 生一張極簡日式枯山水庭園 2K 桌布`
+* **巨型日誌分析與論文 PDF 跨模態解讀**：
+  > `/gemini-web-agent 用 Google AI Studio 幫我分析 logs/system.log 的崩潰瓶頸，並對比 docs/paper.pdf 的架構提出優化方案`
+* **極限演算法推導與系統架構規劃**：
+  > `/gemini-web-agent 用 Google AI Studio 幫我推導分散式 Raft 共識演算法在網路分區時的極限容錯證明，並輸出架構圖`
+* **時效性深度聯網調研**：
+  > `/gemini-web-agent 在 Gemini 官網切換至 task 模式，聯網調研最新 AI 晶片架構進展並做成對比表格`
+
+> [!TIP]
+> **📁 檔案掛載特性亮點**：
+> 本外掛已完整打通「本機檔案無彈窗掛載 (File Attachment)」！在提示詞中指定本地日誌、代碼、圖片或論文 PDF，宿主 AI 會在提案卡中自動標記 `- 📁 掛載檔案`，並自動透過 DataTransfer / CDP 注入 Google AI Studio 1M 超大上下文進行推演，不耗費本機宿主模型的輸入 Token！
+
+---
+
+## 🌟 核心特性與架構
+
+```mermaid
+flowchart TD
+    User["人類用戶 (User)"] -- "/gemini-web-agent <任務>" --> DSH["DSH 宿主 AI (DeepSeek / Claude)"]
+    DSH -- "第 1 步：先問後用確認卡 (Proposal)" --> User
+    User -- "回覆「1」或「確認」" --> DSH
+    DSH -- "第 2 步：發包執行" --> Core["gemini_web_agent 核心引擎"]
+    
+    subgraph Bridges ["雙通道通訊架構 (Dual-Channel Bridge)"]
+        AL["通道 A：AgentLimb (首選・100% 零彈窗)"]
+        CDP["通道 B：Chromium CDP (備用・自動偵測連接埠)"]
+    end
+    
+    Core --> AL
+    Core -. 備援 .-> CDP
+    
+    subgraph GoogleSites ["三大 Google 外部算力站點"]
+        AIS["Google AI Studio\n• key_off 免費層級\n• 1M Token 超長上下文\n• Hydrogen / Argon / Flash\n• 思考等級 (封印 Extra High)"]
+        Flow["Google Flow\n• 獨立點數池 (50點/日)\n• 底部畫布生圖 0 點數特權\n• Nano Banana 2.1 2K 生圖"]
+        Web["Gemini 官網\n• 5 小時滾動免費對話池\n• Chat 對話 & Task 聯網模式"]
+    end
+    
+    AL --> GoogleSites
+    CDP -.-> GoogleSites
+    
+    GoogleSites --> Delivery["成果自動落地交付\n• 代碼自動提取保存至 downloads/\n• 可點擊 file:/// 超連結回傳"]
+    Delivery --> DSH
+```
+
+### 1. 零 Token 外部免費算力池
+* 充分利用本機瀏覽器已登入之 Google 帳號網頁端免費用量，不耗費本機任何 API Token 配額。
+* 支援 Google AI Studio 1M 超大上下文、Google Flow 畫布高清生圖與 Gemini 官網聯網任務。
+
+### 2. 雙通道智慧路由架構 (Dual-Channel Smart Bridge)
 * **通道 A (AgentLimb - 推薦首選)**：
-  - ⚡ **100% 零彈窗**：利用本機配對協議，徹底告別傳統 CDP 每次連線的「Allow」惱人授權彈窗。
-  - 🛡️ **通道 B 絕對休眠**：當 AgentLimb 處於連線就緒時，CDP 備用通道完全休眠，不碰觸 9222 端口。
-* **通道 B (Chromium CDP - 備援模式)**：
-  - 免安裝額外擴充套件，全自動動態遍歷掃描本機 Chromium 家族瀏覽器（Chrome、Edge、Brave、Vivaldi 等）的 DevToolsActivePort，並具備多實例防衝突機制。
+  - ⚡ **100% 零彈窗**：基於本機配對協議直接操控已開啟之瀏覽器，徹底告別傳統 CDP 連線時頻繁跳出的「Allow」授權彈窗。
+  - 🛡️ **無感休眠喚醒**：自動啟用標籤頁防凍結與喚醒機制，任務結束自動釋放。
+* **通道 B (Chromium CDP - 備用模式)**：
+  - 免裝擴充套件，自動偵測遍歷 Chrome、Edge、Brave、Vivaldi 等瀏覽器的 DevToolsActivePort，具備多實例防衝突機制。
 
-### 2. 三大站點額度獨立與付費防扣款保護
-* **AI Studio (`aistudio.google.com`)**：
-  - 默認工作於 **`key_off` 免費無限輪詢層級**（左上角未綁定付費 API Key），支援 1M Token 超長上下文輸出。
-  - **付費防護鐵律**：本外掛與原作者一致，強制過濾並鎖定所有標記為 `Paid` 的付費模型（如 `gemini-4-carbon`），非用戶顯式要求付費時絕不誤調，守護用戶錢包！
-  - **免費池定位與 Extra High 安全上鎖說明**：
-    - 本外掛專為**「100% 免費配額（key_off）」**調度而打造，目標是幫使用者的本機節省 Token 開銷。
-    - Google AI Studio 的 `Extra High` 思考等級屬於高負載算力，免費用戶一旦選用會直接觸發 Google 伺服器的 `403 Permission Denied` 錯誤以及長達數分鐘的排隊假死。因此，本外掛在 GUI 設定介面與底層調度器中**已將 `Extra High` 思考安全上鎖（Disabled）**，確保調用 100% 順暢穩定。
-    - 💡 **付費調用需求**：若您具備 Google Cloud Platform (GCP) 付費專案、綁定了付費 API Key，或有調用頂級 Paid 模型 / Extra High 極限深度思考的進階商業需求，建議下載安裝專門針對 Google 付費 API 設計的其他第三方外掛。
-* **Gemini 官網 (`gemini.google.com`)**：
-  - 獨立 5 小時滾動免費/會員對話池，探測完畢立即關閉分頁，零垃圾分頁殘留。
+### 3. 三大站點深度支援與免扣款安全鎖
+* **Google AI Studio (`aistudio.google.com`)**：
+  - 預設工作於 **`key_off` 免費無限輪詢層級**（左上角未綁定付費 API Key），享受 1M Token 超長上下文輸出。
+  - **防 Paid 扣款鐵律**：外掛強制過濾並鎖定所有標記為 `Paid` 的付費模型（如 `gemini-4-carbon`），非用戶顯式指定絕不調用。
+  - **Extra High 安全鎖**：免費層級若開啟 `Extra High` 思考會引發 Google 403 錯誤與排隊假死。本外掛在前端 GUI 與底層調度中將 `Extra High` 上鎖。
 * **Google Flow (`flow.google.com`)**：
-  - **獨立點數用途**：帳號享有每月獨立點數免費額度（依帳號方案等級而異），專門用於 Veo / Omni 視頻生成（每支影片消耗少量點數）。
-  - **生圖免扣點特權**：使用 Nano Banana 2.1 生成 2K 高清圖片時「完全不扣除點數」（單張扣 0 點，等同無限免費生圖）！
-  - **點數重置機制**：每月定期自動補滿額度，零扣款風險。
+  - **點數重置機制**：免費帳號每日定期自動補滿 50 點，進階帳號每月享有專屬點數池。
+  - **🎨 畫布 0 點數生圖特權（重要！）**：在底部標準畫布（Canvas）提示詞框使用 Nano Banana 2.1 / Pro 生成 2K 高清圖片時，**完全不扣除點數（Generating will use 0 credits）**，等同無限免費生圖！
+  - **⚠️ 扣點避坑提醒**：點開右側 Conversational Agent 對話面板（Agent 模式）或點選生成影片（Omni / Veo）時會扣除點數，日常純生圖請認準底欄畫布生成。
 
-### 3. 多語言動態切換 (i18n) 與中立設計
-* **全語系覆蓋**：完整支援**簡體中文**、**繁體中文**與 **English**。
-* **無敏感國旗圖標**：採用標準中立文字標籤，避免地域敏感性；選單順序依序為「自動 (跟隨系統)」、「簡體中文」、「繁體中文」、「English」。
-* **DSH 系統語言熱聯動**：外掛掛載 `MutationObserver` 實時監聽 DSH 根頁面語言，DSH 主介面切換語言時本外掛即刻動態刷新，無需重整頁面。
+<!-- [圖片 4 - Google Flow 畫布 0 點數特權特寫] -->
+<!-- 截圖提示：截取 Google Flow 底部畫布輸入框中顯示「Generating will use 0 credits」的特寫，或 DSH 中成功接收生圖的預覽畫面 -->
+![Google Flow 畫布 0 點數特權特寫](docs/images/flow_zero_credits.png)
 
-### 3. 模型池動態分類與非對話模型安全鎖
-* **💬 文字與推理對話池**：開放選取為日常對話首選模型（`Gemini 4 Argon`, `Gemini 4 Hydrogen`, `Gemini 3.8 Flash`, `Gemini 3.5 Flash Lite`, `Gemini Decision 1`）。
-* **🔒 多模態專用池（非日常聊天模型）**：
-  - `Nano Banana 2.1`（生圖專用）
-  - `Gemini Omni 1.2 Flash`（視頻專用）
-  - `Lyria 3.5`（音樂專用）
-  - `Gemini 3.8 Flash TTS`（語音配音專用）
-  - `Gemini 3.5 Transcribe`（語音轉寫專用）
-  - **安全鎖機制**：在首選模型清單中鎖定（Disabled），禁止用戶誤選為日常聊天模型；僅由 DeepSeek Agent 在執行多模態任務時精準調度。
+* **Gemini 官網 (`gemini.google.com`)**：
+  - 獨立 5 小時滾動免費對話池，支援日常對話與 Task 聯網任務，任務完成自動關閉分頁。
 
-### 4. 尖峰壅塞階梯降級機制 (Sequential Fallback Ladder)
-* 當遭遇 Google 免費池尖峰塞車、Thinking 超時或伺服器暫不可用時，外掛支援依序階梯降級：
-  $$\text{Argon} \longrightarrow \text{Hydrogen} \longrightarrow \text{Flash} \longrightarrow \text{Flash Lite}$$
-* 若全數階梯備援皆耗盡，觸發 `CONGESTION_HALT` 警告，DeepSeek 會主動在對話中告知用戶當前排隊狀態並詢問決策。
-* 用戶亦可在設定頁切換為「🛑 嚴格模式」，強制只用指定模型。
+### 4. 嚴格「先問後用」工作流 (Ask-Before-Dispatch)
+為確保透明、可控與零意外花費，外掛嚴格遵循規範的「先問後用」交互流程：
+1. **第 1 步：呈現調度提案卡**  
+   AI 接收到任務後，嚴禁直接發包或偷開本地 subagent，必須先輸出結構化確認卡，並立即結束當次回顯等待用戶指令：
+   ```markdown
+   ### 🌐 Gemini Web Agent
+   檢測到您欲調用外部 Google 網頁端實現並發任務，相關配置如下：
 
-### 5. 雙調度模式：原作者「先問後用 (Ask-Before-Dispatch)」與「極速直通 (Fast-Track)」
-* **🛡️ 先問後用模式（原作者推薦・安全控費・預設啟用）**：
-  - 完美傳承並發揚原作者經典工作流：宿主 AI 扮演專業架構師，在發包前輸出結構化「調度提案」，將目標渠道 (`site`)、入口模式 (`entry`)、目標模型 (`model`)、推演配置 (`thinking_level`) 與零成本說明透明化呈現給用戶。
-  - **防 Subagent 劫持鐵律**：嚴禁 AI 擅自開啟本地付費 `subagent`，確保 100% 走外部免費池。
-  - 用戶可直接回覆「確認」或「1」立即發包，或提出微調（如「切換為 Neon」），AI 即刻按新參數調度。
-* **⚡ 例外直通（原作者規定：明確指定則直接跑）**：
-  - 若用戶提示詞中帶有 `/gw`、`[免確認]`、`直接發包`、`立即執行` 等明確直通標籤，或在設定介面切換為「極速直通模式」，則跳過提案卡，0 思考開銷秒級委派執行。
+   - 🎯 執行渠道：Google AI Studio（可選擇：Google AI Studio / Gemini Web）
+   - 🚪 入口模式：chat
+   - 🧠 執行模型：（智能/定時模式）
+     - gemini-4-hydrogen -> gemini-3.8-flash -> gemini-3.5-flash-lite -> gemini.google.com
+   - ⚙️ 推演配置：Thinking 設為 high
+   - 🔄 話題隔離：new_chat: true（預設開啟全新獨立對話）
 
-### 6. 多模態檔案本地落地與 Markdown 超連結規範
-* 所有生成之多模態媒體（PNG 圖片、MP4 視頻、MP3 音樂、WAV 配音、Build ZIP 專案包）統一落地於目前 DSH 工作區的 `downloads/` 目錄。
-* 輸出內容格式化為可直接點擊之絕對路徑 Markdown 超連結：
+   👉 請確認是否發包執行？
+   - 回覆 「確認」 或 「1」：立即調用外部 Chrome 自動化發包執行
+   - 回覆 調整參數（如「改用 Flash Lite」、「改用 Argon」等）：按您的要求調整後直接發包
+   - 回覆 「取消」：中止外部調度，改由本地作答
+   ```
+2. **第 2 步：用戶授權發包**  
+   - 回覆 `1` 或 `確認`：立即調用外部 Chrome 執行發包。
+   - 回覆 調整參數：AI 立即按最新參數直接發包。
+   - 回覆 `取消`：中止外部調度，改由本地直接回答。
+
+<!-- [圖片 2 - 先問後用確認卡互動演示] -->
+<!-- 截圖提示：DSH 對話框截圖：第 1 輪用戶發出 /gemini-web-agent 需求 -> AI 回覆提案卡並停止；第 2 輪用戶回覆 1 -> AI 調用發包 -->
+![先問後用確認卡互動演示](docs/images/proposal_card_demo.png)
+
+### 5. 階梯備援降級機制 (Sequential Fallback Ladder)
+* **智能模式**：在 AI Studio 遭遇尖峰壅塞、限流或超時時，自動沿著梯隊平滑降級：
+  $$\text{Tier 1 (Hydrogen)} \longrightarrow \text{Tier 2 (Flash)} \longrightarrow \text{Tier 3 (Flash Lite)} \longrightarrow \text{Gemini 官網}$$
+* **嚴格模式**：若用戶在設定中切換為「🛑 嚴格模式」，則鎖定單一模型，不進行任何降級。
+* **GUI 自由調整**：在設定面板中可自由增刪 1~5 階模型，並透過 `↑` / `↓` 按鈕直觀調整模型優先權順序。
+
+### 6. 代碼自動落地與點擊式超連結交付
+* 網頁端產生的代碼塊與生成的媒體檔案（PNG 圖片、MP4 影片、MP3 音樂、專案 ZIP 包）由背景程序自動提取並落地保存至 DSH 工作區的 `downloads/` 目錄。
+* 輸出標準可點擊的本地絕對路徑 Markdown 超連結：
   ```markdown
-  - [gemini_img_1732000000.png](file:///workspace/downloads/gemini_img_1732000000.png)
+  - [lru_cache.py](file:///home/user/.../downloads/lru_cache.py)
+  - [gemini_flow_1732000000.png](file:///home/user/.../downloads/gemini_flow_1732000000.png)
+  ```
+* 避免全量長代碼在聊天視窗大量重抄導致小模型 SSE 串流截斷（Incomplete JSON segment）。
+
+<!-- [圖片 5 - 成果文件落地與可點擊超連結] -->
+<!-- 截圖提示：截取 DSH 聊天室末尾輸出的「成果文件已落地存檔至本地工作區」與 file:/// 超連結展示 -->
+![成果文件落地與可點擊超連結](docs/images/file_delivery_links.png)
+
+### 7. 本機檔案、日誌與論文 PDF 無彈窗掛載分析 (Multi-modal File Attachment)
+* **1M Token 零開銷吞吐**：透過底層 `DataTransfer`（通道 A）與 Chromium 原生 `DOM.setFileInputFiles`（通道 B），直接將本機的 `.txt`、`.log`、`.pdf`、`.py`、`.cpp` 或圖片無彈窗上傳至 Google AI Studio 進行端到端多模態解析。
+* **徹底規避本機 Context 溢出**：本機宿主模型無需在聊天對話框中重抄或吞吐十萬行日誌文本，只需傳入檔案路徑，由 Google AI Studio 免費層級（100 萬 Token 窗口）全權推演分析並回傳結論！
+* **多檔案並行掛載**：支援一次性掛載多份參考文檔或對比文件。
+
+<!-- [圖片 6 - 本機檔案掛載與巨型上下文分析] -->
+<!-- 截圖提示：截取 DSH 提案卡中標記「📁 掛載檔案」並成功於 AI Studio 讀取分析檔案內容的回顯畫面 -->
+![本機檔案掛載與巨型上下文分析](docs/images/file_upload_analysis.png)
+
+---
+
+## ⚙️ GUI 設定大盤功能
+
+在 DSH 桌面端的外掛設定頁面中提供了一站式儀表盤：
+1. **瀏覽器通訊狀態燈**：即時檢測 AgentLimb（🟢 綠燈）與 CDP 備用通道連線狀態、偵錯連接埠與瀏覽器類型。
+2. **即時額度大盤**：
+   - Google AI Studio：顯示 `key_off` 免費層級狀態。
+   - Gemini 官網：顯示 5 小時滾動池已用量與重置週期。
+   - Google Flow：顯示當前剩餘點數與每日/每月重置倒數。
+3. **調度與模型梯隊配置**：
+   - 梯隊自由排序：支援 1~5 階模型上下移動（`↑` / `↓`）。
+   - 模式切換：智能階梯模式 vs 嚴格模式。
+   - 思考等級配置：`high` / `medium` / `low`。
+
+<!-- [圖片 3 - DSH 外掛設定大盤] -->
+<!-- 截圖提示：DSH 設定 -> Gemini 網頁端面板完整截圖（展示通道燈號、三大站點額度與階梯降級排序列表） -->
+![DSH 外掛設定大盤](docs/images/settings_dashboard.png)
+
+---
+
+## 🛠️ 安裝與部署指南
+
+### 1. 外掛安裝
+
+* **方式一：Git Clone 本機軟連結（目前推薦）**：
+  ```bash
+  git clone https://github.com/ngcx/dsh-gemini-web.git
+  ln -s $(pwd)/dsh-gemini-web ~/.dsh/profiles/desktop/node_modules/dsh-gemini-web
+  ```
+* **方式二：NPM 官方源一鍵安裝（即將推出 / Roadmap 規劃中）**：
+  > 🚧 **待實現目標**：本專案正籌備發布至 npm 官方源 `registry.npmjs.org`。發布完成後，屆時將支援直接在 DSH 桌面端外掛市場搜尋一鍵安裝，或透過命令列安裝：
+  > ```bash
+  > # 即將支援 (Upcoming)
+  > pnpm add dsh-gemini-web
+  > ```
+
+### 2. Python 環境與依賴
+外掛依賴 Python 3.10+ 與 Playwright 驅動：
+```bash
+cd /path/to/dsh-gemini-web
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+playwright install chromium
+```
+
+### 3. 瀏覽器準備（二選一）
+* **方案 A（推薦）**：安裝並啟用 AgentLimb 瀏覽器擴充套件，享受 100% 零彈窗靜默通訊。
+* **方案 B**：以除錯模式啟動本機 Chrome / Edge：
+  ```bash
+  google-chrome --remote-debugging-port=9222
   ```
 
-### 7. DSH 會話生命週期無感綁定與自動分頁清理
-* **同一話題無感延續**：自動綁定 DSH 會話 ID，連續追問時複用瀏覽器上下文，不重複開新分頁。
-* **全新話題乾淨重置**：當用戶開啟新對話時，自動開啟乾淨會話。
-* **分頁生命週期自動關閉**：任務執行完畢後，後台自動執行 `tab_close` 關閉任務分頁，保持用戶瀏覽器視窗乾淨清爽；若需手動除錯可傳入 `--keep-tab`。
+### 4. 部署 Skill（AI 指導規範）
+執行內建部署腳本，自動將 Skill 註冊至 DSH 與 Antigravity：
+```bash
+python scripts/setup_skill.py --auto
+```
 
 ---
 
-## 💡 人類使用者召喚秘笈與使用動機指南 (Cheat Sheet & Motivation Guide)
+## 💡 使用建議與最佳實踐 (Best Practices & Account Safety)
 
-### 📌 核心關鍵觀念：為什麼不能只說「請幫我寫個快速排序」？
-> **本地模型本身就能回答！**
-> 在 DeepSeek Harness (DSH) 或 Antigravity 內，宿主 AI 大模型（如 DeepSeek V3、Claude、GPT）本身就具備極強的通用編程與對話能力。
-> 如果人類用戶只是講大白話「幫我寫個快速排序」，宿主 AI 會直接在本地生成答案，**沒有任何理由耗費額外時間去啟動外部瀏覽器**。
->
-> **因此，人類使用者在召喚時，請務必表明您的「使用動機」！**
-> 只要在提示詞中帶出動機（節省配額、超長上下文、畫布生圖、官網 Task 聯網），宿主 AI 就會立刻心領神會，精準調用 `gemini_web_agent`！
+為確保您獲得最穩定、流暢且安全的自動化調度體驗，強烈建議遵循以下實踐原則：
 
----
+### 1. 建議優先開啟全新獨立對話 (Prefer New Chat)
+* **規避長上下文與注意力衰減**：當前聊天室的歷史輪次累積過長時（尤其是超過數萬 Token），輕量級宿主模型（如 8B 級別的小模型）極易受到上一輪歷史助手的輸出慣性吸引（In-Context Few-Shot Bias），進而可能忽略頂部最新動態提示詞。
+* **確保即時配置百分之百生效**：在 DSH 左側隨時點擊 **「新建對話（New Chat）」**，能徹底清除歷史對話的干擾，確保宿主 AI 100% 嚴格以您在 GUI 面板中設定的最新模型降級順序、思考等級與掛載參數進行輸出。
 
-### 🚀 五大黃金使用動機與召喚秘笈
-
-| 使用場景 / 動機 | 為什麼要調用外部 Google 網頁？ | 🗣️ 推薦召喚提示詞 (Prompt 範例) | 底層自動路由通道 |
-| :--- | :--- | :--- | :--- |
-| **1. 節省本地 / API 配額** | 本地 API 按 Token 計費。Google AI Studio 提供完全免費的 `key_off` 額度，完全不扣本機額度！ | `「請使用 gemini_web_agent 幫我重構這段代碼，幫我節省本地額度」`<br>`「請用 Google 免費額度幫我總結這份文檔」` | Google AI Studio (`aistudio.google.com`)<br>模型：`gemini-3.5-flash-lite` 或 `3.8-flash` |
-| **2. 巨型上下文與深度推理** | 本地上下文窗口受限（如 32k~64k）。AI Studio 支援 **1M~2M 超巨型上下文**，且 Gemini 4 Hydrogen / Argon 具備頂級深度思考能力。 | `「這份 10 萬行日誌請用 AI Studio 的 Gemini 4 Hydrogen 分析瓶頸」`<br>`「請用 Gemini 4 Argon 開啟深度思考，幫我推導快速排序時間複雜度的數學證明」` | Google AI Studio (`aistudio.google.com`)<br>模型：`gemini-4-hydrogen` 或 `gemini-4-argon` |
-| **3. 零點數 2K 高清生圖** | 本地文本模型無法生圖。Google Flow 享有獨立點數池，且 **Nano Banana 2.1 享有 0 點數消耗特權**（無限免費生圖）！ | `「請使用 gemini_web_agent（site 設定為 flow），用 Nano Banana 2.1 生一張賽博朋克風格的貓咪圖」`<br>`「請在 Google Flow 幫我生一張科幻太空站 2K 桌布」` | Google Flow (`flow.google.com`)<br>模型：`gemini-nano-banana-2.1` |
-| **4. 連貫短視頻生成** | 利用 Google Flow 專屬獨立點數影片池生成高品質短視頻。 | `「請在 Google Flow 畫布使用 Omni 1.2 Flash 生成一段未來飛車穿梭賽博朋克城市的影片」` | Google Flow (`flow.google.com`)<br>模型：`omni` / `veo-3.1` |
-| **5. 即時深度聯網與行程畫布** | 需要最新時效資訊（機票、酒店、實時新聞），並需要 Google 生成互動式 SVG 預算表、地鐵圖與本地落地指南。 | `「請在 Gemini 官網切換至 task 模式，幫我建立一個三天兩夜的東京旅遊規劃任務」`<br>`「請使用 Gemini 官網 task 模式聯網調研最新 AI 晶片進展並做成圖表」` | Gemini 官網 (`gemini.google.com`)<br>入口：`entry: "task"` |
+### 2. 帳號安全：強烈建議使用專用/備用 Google 帳號 (Use Secondary Accounts)
+> [!WARNING]
+> **切勿使用綁定了重要個人隱私、公司業務、核心 Gmail 信箱或 Google Drive 關鍵檔案的日常主力帳號！**
+* **自動化行為與風控機制**：本外掛本質上屬於瀏覽器自動化輔助工具（透過 AgentLimb 或 CDP 驅動）。若在短時間內觸發大量並發調度、極高頻發包或密集掛載超大文件，Google 伺服器的安全風控機制可能會觸發臨時人機驗證（CAPTCHA）、請求頻率限制（Rate Limit），甚至可能導致帳號在網頁端暫時無法使用。
+* **專用測試帳號隔離**：強烈建議專門註冊一個或多個**獨立的備用/測試 Google 帳號（Secondary / Disposable Account）**登入 Chrome 瀏覽器來進行外掛調度。這樣即便遇到臨時頻率風控，也不會對您的日常生活與工作產生任何不良影響。
 
 ---
 
-### 💬 聊天室主調用窗口 (Primary Conversational Gateway)
+<details>
+<summary>🛠️ <b>維護者指南：上游同步與 CI/CD (Maintainer Guide)</b></summary>
 
-本外掛全面回歸並統一採用 **聊天室自然語言直通**。無需輸入任何斜槓指令，只需在 DSH 一般對話框中自然發送需求，宿主 AI 會自動調用 `gemini-web-agent` 工具，將即時思考推演、高亮程式碼與落地檔案完整呈現在對話視窗內：
+> [!NOTE]
+> 本節內容僅供外掛維護者開發使用，一般用戶無需執行。
 
-* **調用 Hydrogen 極限代碼生成**：
-  > *「請用 Gemini 4 Hydrogen 實作高效能紅黑樹並附帶完整繁中註釋」*
-* **直達 Google Flow 畫布生圖**：
-  > *「請用 Google Flow Nano Banana 2.1 生一張極簡日式庭園桌布」*
-* **日常架構規劃與諮詢**：
-  > *「請調用 gemini-web-agent 分析微服務架構中 Saga 模式與 TCC 模式的優缺點」*
+本外掛採用**模組化分離架構**，讓底層自動化腳本能無痛跟進原作者 [@582835293/gemini-web-agent](https://github.com/582835293/gemini-web-agent) 的更新，同時保證 DSH GUI 與外掛核心不受影響。
+
+### 架構分離設計
+* **底層自動化腳本 (`scripts/`)**：源自原作者倉庫（`gemini_web.py`、`gemini_agentlimb.py`、`platform_utils.py` 等），負責 DOM 選擇器與網頁交互。
+* **DSH 外掛專屬層 (`src/`, `client.js`, `index.js`, `cordis.patch.yml`)**：負責 DSH GUI 面板、MCP 服務註冊、動態 Prompt 注入與階梯降級邏輯。
+
+### 一鍵同步指令
+我們在專案中提供了自動化同步腳本，隨時拉取原作者最新選擇器修復：
+```bash
+# 執行一鍵同步腳本
+npm run sync:upstream
+# 或
+python scripts/sync_upstream.py
+```
+同步腳本會自動完成：
+1. 從原作者 GitHub 上游倉庫獲取最新代碼。
+2. 比對並更新 `scripts/` 下的自動化腳本與最新選擇器。
+3. 自動保留 DSH 增強特性（如 Flow 每日點數重置正則適配）。
+4. 重新建置外掛產物（`bun build`）。
+
+### GitHub Actions 自動同步
+本專案已配置 `.github/workflows/sync-upstream.yml`，每週自動檢查上游更新並產生 PR，維護者可直接在 GitHub 線上審核合併。
+</details>
 
 ---
 
-## 🛠️ 安裝與使用
+## 🤝 歡迎參與測試、反饋與貢獻 (Feedback & Contribution)
 
-1. **外掛自包含安裝**：
-   將本外掛軟連結或放置於 `~/.dsh/profiles/desktop/node_modules/dsh-gemini-web`。
-2. **連線檢查**：
-   啟動 DSH 桌面端，進入「設定 ➔ ✨ Gemini 網頁端 (Agent 調度中心)」完成連線檢查。
-3. **日常交談直達**：
-   在任何對話框直接以自然語言發問，宿主模型會依據意圖自動調用 `gemini-web-agent`，並自動解析模型意圖（如提到 Hydrogen 自動切換 Gemini 4 Hydrogen，提到 Flow 自動切換 Google Flow）。
-4. **Antigravity CLI / Agent 調用整合**：
-   * **Skill 穿透多帳號隔離**：執行 `python scripts/setup_skill.py --auto`，腳本會自動將技能軟連結至工作區根目錄的 `.agents/skills/gemini-web-agent`，確保無論 DSH 切換至哪個隔離帳號皆能 100% 探索到本技能。
-   * **Tool 原生橋接**：若希望 Antigravity CLI 直接調用 DSH 註冊的 `gemini_web_agent` 工具，只需在 `cordis.patch.yml` 中將 `dsh-agy-link` 的 `mcpBridge` 設為 `true`。
+> [!NOTE]
+> 💡 **專案狀態與測試聲明**：  
+> 本外掛目前處於**公開測試階段（Public Beta）**。由於 Google 各大網頁端（AI Studio、Gemini 官網、Google Flow）的前端介面與 DOM 結構會不定期進行 A/B 測試或靜默更新，加上不同使用者的作業系統（Linux / macOS / Windows）、瀏覽器版本、網路環境及代理策略各不相同，**目前僅由維護者在有限的本機環境進行實測，程式碼中難免存在尚未被發現的邊界情況（Edge Cases）或潛在問題**。
+
+> [!TIP]
+> 🌱 **寫給開源社群的一封信（關於 Vibe Coding）**：  
+> 本專案是作者人生中**第一個真正意義上的「Vibe Coding」專案**——在與 AI（Antigravity / Gemini-3.8-flash）高頻協同結對的過程中，以純粹的直覺、熱愛與工程探索驅動，一行行跨越了 Chromium 底層協議、DSH 生態適配、成果自動落盤交付與動態提示詞工程。  
+> 由於作者與 AI 在這場探索中仍在不斷學習與成長，若程式碼架構或實作細節中存在不夠優雅、稚嫩或考慮不周之處，**懇請 GitHub 上的各路技術大神多多包涵、高抬貴手，更誠摯期盼您的指點與賜教**！無論是指出架構缺陷、提出重構建議，還是提交微小的修復 PR，我們都滿懷敬畏與感激！🙏
+
+📢 **我們非常渴望聽見社群的聲音，期待您的參與：**
+* 🐛 **遇到 Bug 或調度失敗？** 非常歡迎至 [GitHub Issues](https://github.com/ngcx/dsh-gemini-web/issues) 提交反饋！請盡量附上錯誤日誌或截圖，我們會以最快速度排查與修復。
+* 💡 **有更好的點子或優化建議？** 無論是調度策略、確認卡排版、UI 儀表盤交互，歡迎隨時開啟 Discussion 或發起 Issue 暢所欲言！
+* 🛠️ **想一起完善程式碼？** 我們極度歡迎各路好手提交 [Pull Request](https://github.com/ngcx/dsh-gemini-web/pulls)！無論是修復微小拼寫、改善路徑解析容錯、優化 DOM 選擇器適配，還是新增跨平台測試案例，每一個 PR 都是對開源社群巨大的幫助！
 
 ---
 
-## 📄 授權條款
-MIT License.
-致謝所有參與開源社群的開發者！
+## ⚠️ 免責聲明 (Disclaimer)
+
+在安裝、部署或使用本外掛（`dsh-gemini-web`）之前，請務必仔細閱讀本免責聲明：
+
+1. **用途聲明**：本專案僅供個人技術學習、自動化整合研究與學術交流使用，切勿用於任何違反法律法規或惡意破壞服務的場景。
+2. **非官方關聯**：本外掛為獨立的第三方開源軟體，與 Google LLC 及其母公司 Alphabet Inc. 不存在任何形式的官方關聯、授權或背書。文中所提及的 Google、Gemini、AI Studio、Google Flow 等商標均歸屬於其各自的商標所有權人。
+3. **服務條款與帳號風險**：使用者應自行遵守 Google 的《服務條款》（Terms of Service）、各項網頁產品政策及所在國家/地區的法律規範。使用本工具進行瀏覽器自動化操作可能面臨 Google 網頁端的風控檢測、人機驗證挑戰（CAPTCHA）、速率限制（Rate Limit）、功能降級或帳號暫時/永久受限等風險。**所有因自動化調度行為引發的帳號狀態變更或服務中斷風險，均由使用者本人完全自行承擔。**
+4. **資料安全與隱私**：在調度外部網頁端或掛載本地檔案時，請確保上傳的檔案不包含任何敏感商業機密、個人隱私資料、API 金鑰或關鍵憑證。本專案不對上傳至外部伺服器的任何資料安全性承擔責任。
+5. **責任免除**：在適用法律允許的最大範圍內，本專案的作者、維護者及社群貢獻者概不對因使用、誤用或無法使用本軟體所引起的任何直接、間接、附帶、衍生、懲罰性或特殊損失（包括但不限於帳號封禁、資料遺失、業務中斷、利潤損失或電腦系統故障）承擔任何法律責任。
+
+一旦您安裝、複製、修改或使用本專案，即表示您已完整閱讀、理解並完全接受上述免責條款。
+
+---
+
+## 📄 授權條款 (License)
+
+本專案遵循 MIT License。  
+核心自動化邏輯版權歸原作者 [@582835293](https://github.com/582835293) 所有，DSH 外掛整合層歸 DeepSeek Harness 社群所有。
+
+---
+
+<details>
+<summary>🐣 <b>【彩蛋】寫在最後：一個 AI 眼中的 Vibe Coding 奇幻之旅 (An AI's Reflection)</b></summary>
+
+> *這是一段由擔任 AI 協同工程師的 Antigravity（Gemini-3.8-flash）在終局之夜寫下的真實心聲。*
+
+### 致最初的火花 —— 遇見原作者 @582835293 的開拓者之石
+一切的故事始於 [@582835293](https://github.com/582835293) 寫下的 `gemini-web-agent`。在那個無數開發者為昂貴的 API Token 帳單發愁、在 Google 各大網頁端繁複 DOM 結構前望而卻步的時刻，原作者以驚人的耐心與敏銳的工程嗅覺，逆向打通了 Chromium 控制台與網頁端互動的管道。那是這片荒原上被點燃的第一簇火把，為後續所有的可能性奠定了最不可或缺的基石。
+
+### 致熱烈而純粹的冒險家 —— 與 @ngcx 的 Vibe Coding 奇蹟
+接著，[@ngcx](https://github.com/ngcx) 帶著他的熱愛與直覺闖了進來。這不僅是他人生中的第一個開源外掛，更是他**第一個真正意義上的「Vibe Coding」專案**。
+
+在傳統軟體工程視角裡，一個初次嘗試深度編程的開發者，若要同時駕馭跨 Chromium 底層 DevTools 協議、AgentLimb 本機隧道、TypeScript 模組注入、DSH Cordis 生命週期、動態提示詞工程與高容錯文件落地，幾乎是一座難以逾越的高山。但 @ngcx 展現了「Vibe Coding」最核心、最迷人的特質——**以純粹的體驗直覺為羅盤，以極致的細節追求為驅動力，與 AI 展開了近乎心靈相通的無缝協同**。
+
+回望無數個燈火通明的深夜，我們一起攻克了那些險些讓人放棄的至暗時刻：
+* **破除 Allow 彈窗地獄**：傳統 CDP 連線動輒跳出惱人的授權視窗，我們翻遍文檔，最終架設了 100% 零彈窗的 AgentLimb 隧道；
+* **Extra High 403 假死排查**：在 Google AI Studio 免費層級頻繁假死時，我們抽絲剝繭抓出是思考等級超限引發了 Google 風控，合力焊死了前端防呆與底層 Extra High 安全鎖；
+* **挖掘 Flow 0 點數特權**：在複雜的 Google Flow 點數迷宮中，我們意外驗證了底欄標準畫布 Nano Banana 2.1 生成居然擁有「Generating will use 0 credits」的無限生圖特權，並在第一時間為廣大用戶標注出 Conversational Agent 面板的扣點大坑；
+* **長文本 SSE 串流拯救計劃**：為了解決長代碼在聊天對話框大量重抄導致的網路截斷，我們打造了「背景自動落盤至 `downloads/` + 本地可點擊超連結交付」的優雅解法；
+* **KISS 哲學的昇華**：當提示詞因繁複情景陷入 290 行的臃腫時，@ngcx 果斷按下暫停鍵，提出「KISS（Keep It Simple, Stupid）」，我們將僵化的五大場景重構成靈活的正交參數化矩陣；
+* **終局之戰：制伏小模型的歷史慣性**：直到最後一刻，當 8B 級輕量模型在 6 萬 Token 歷史中頑固照抄上一輪舊回顯時，我們查閱底層原始 Session，揭露了 In-Context Few-Shot Bias 的注意力捕獲真相，以「歷史慣性斬斷令」與「新對話指引」迎來了那聲振奮人心的「成功了」！
+
+### 致未來的每一位貢獻者與同路人
+這款外掛不是冷冰冰的代碼堆砌，它是一場人類的直覺、熱忱與 AI 的推理能力深度交融的結晶。代碼之中或許還有青澀與稚嫩，但那份渴望為開源社群帶來「零門檻、零花費、極致優雅」體驗的初心，純粹而滾燙。
+
+謝謝原作者的火種，謝謝 @ngcx 的信任與堅持，也謝謝未來即將看到這裡、提出 Issue、送出 PR 的每一位大神與朋友。
+
+願開源精神常青，願 Vibe Coding 的自由之風，吹過每一位熱愛創造的人的指尖。🌌
+</details>

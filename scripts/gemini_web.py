@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-外部 Chrome 网页版 Gemini 高速调用脚本（AgentLimb 未加载时的 Playwright CDP 备用通道）
-支持对话模式、异步任务模式（发射后立即返回 / 稍后按会话 ID 回收）及常驻 daemon。
+外部 Chrome 网页版 Gemini / AI Studio / Google Flow 高速调度引擎（Playwright CDP 首选高速通道）
+支持独立专用 AI Chrome、常驻 daemon、单命令多 Tab wave 并发调度、花名册角色绑定、
+Google Drive 云端总线（AI Studio 标题/ID）与 Gemini Web Import code（文件夹/GitHub）导入。
 """
 
 import argparse
@@ -13,10 +14,12 @@ import json
 import os
 import platform
 import queue
+import random
 import re
 import shutil
 import socketserver
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -25,11 +28,49 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:  # 允许 playbook / roster / harvest 等纯本地子命令脱离 .venv 直接运行
+    sync_playwright = None
+
+
+def _get_sync_playwright():
+    if sync_playwright is not None:
+        return sync_playwright
+    try:
+        from playwright.sync_api import sync_playwright as _sp
+        return _sp
+    except ImportError as exc:
+        raise RuntimeError("未安装 playwright；请改用 .venv Python 或先运行 python scripts/setup_skill.py --auto") from exc
 
 DAEMON_HOST = "127.0.0.1"
 DAEMON_PORT = 19222
 SESSION_STATE_FILE = Path.home() / ".gemini" / "gemini-web-agent-sessions.json"
+
+
+def _human_pause(page, min_ms: int = 700, max_ms: int = 1400) -> None:
+    """拟人随机微停顿，避免机械固定间隔连点触发 Google 前端行为风控。"""
+    delay = random.randint(max(50, int(min_ms)), max(int(min_ms), int(max_ms)))
+    page.wait_for_timeout(delay)
+
+
+def _human_fill(page, locator, text: str) -> None:
+    """拟人聚焦、输入并在发送前保留自然停顿（带真实键盘/焦点事件）。"""
+    locator.scroll_into_view_if_needed()
+    _human_pause(page, 220, 420)
+    locator.click()
+    _human_pause(page, 450, 800)
+    content = text or ""
+    if len(content) <= 180 and "\n" not in content:
+        try:
+            locator.fill("")
+            locator.press_sequentially(content, delay=random.randint(18, 38))
+        except Exception:
+            locator.fill(content)
+    else:
+        locator.fill(content)
+    # 模拟人眼核对提示词后移动鼠标到发送按钮的自然间隙
+    _human_pause(page, 1400, 2200)
 
 
 def _load_last_session(site: str) -> str:
@@ -158,30 +199,63 @@ MODEL_OPTIONS = {
 }
 
 
-def _iter_devtools_active_port_files() -> list[Path]:
-    """返回当前平台所有 Chromium 系浏览器可能的 DevToolsActivePort 路径。"""
+def _import_platform_utils():
     scripts_dir = str(Path(__file__).resolve().parent)
     if scripts_dir not in sys.path:
         sys.path.insert(0, scripts_dir)
     import platform_utils
-    return platform_utils.iter_devtools_active_port_files()
+    return platform_utils
+
+
+def _iter_devtools_active_port_files() -> list[Path]:
+    """返回当前平台所有 Chromium 系浏览器可能的 DevToolsActivePort 路径（优先专用 AI Chrome）。"""
+    return _import_platform_utils().iter_devtools_active_port_files()
 
 
 def get_cdp_ws_url(port_override: int | None = None) -> str:
-    """跨平台从 Chrome / Chromium / Edge / Brave 的 DevToolsActivePort 读取 WebSocket CDP 地址。"""
+    """跨平台定位 Chrome CDP 地址：优先显式端口 / 专用 AI Chrome (9229)，再扫描 DevToolsActivePort。"""
+    pu = _import_platform_utils()
+    explicit_port = port_override
+    if explicit_port is None:
+        env_port = (os.environ.get("GEMINI_WEB_CDP_PORT") or "").strip()
+        if env_port.isdigit():
+            explicit_port = int(env_port)
+
+    if explicit_port is not None:
+        ver = pu.probe_cdp_http(explicit_port, timeout_sec=1.2)
+        if ver and ver.get("webSocketDebuggerUrl"):
+            return str(ver["webSocketDebuggerUrl"])
+        return f"http://127.0.0.1:{explicit_port}"
+
+    # 1. 最高优先级：检测专用独立 AI Chrome (默认 9229，免弹窗直连)
+    dedicated_ver = pu.probe_cdp_http(pu.AI_CHROME_DEFAULT_PORT, timeout_sec=1.5)
+    if dedicated_ver and dedicated_ver.get("webSocketDebuggerUrl"):
+        return str(dedicated_ver["webSocketDebuggerUrl"])
+
+    # 2. 扫描各 Chromium 家族 DevToolsActivePort（优先挑选 HTTP /json/version 存活者，避免陈旧端口文件）
+    fallback_ws = ""
     for active_port_file in _iter_devtools_active_port_files():
-        if active_port_file.exists():
-            lines = [
-                line.strip()
-                for line in active_port_file.read_text(encoding="utf-8", errors="ignore").splitlines()
-                if line.strip()
-            ]
-            if len(lines) >= 2:
-                port = port_override or int(lines[0])
-                return f"ws://127.0.0.1:{port}{lines[1]}"
-    if port_override:
-        return f"http://127.0.0.1:{port_override}"
-    raise RuntimeError("未找到 DevToolsActivePort，请先在 Chromium 系浏览器开启远程调试或使用 AgentLimb MCP。")
+        if not active_port_file.exists():
+            continue
+        lines = [
+            line.strip()
+            for line in active_port_file.read_text(encoding="utf-8", errors="ignore").splitlines()
+            if line.strip()
+        ]
+        if len(lines) >= 2 and lines[0].isdigit():
+            port = int(lines[0])
+            ws_url = f"ws://127.0.0.1:{port}{lines[1]}"
+            ver = pu.probe_cdp_http(port, timeout_sec=0.8)
+            if ver:
+                return str(ver.get("webSocketDebuggerUrl") or ws_url)
+            if not fallback_ws:
+                fallback_ws = ws_url
+    if fallback_ws:
+        return fallback_ws
+    raise RuntimeError(
+        "未检测到已就绪的 Chrome CDP。建议运行 `python scripts/setup_skill.py --setup-ai-chrome --launch-ai-chrome` "
+        "启动专用 AI Chrome，或在日常 Chrome 开启 chrome://inspect/#remote-debugging / 使用 AgentLimb MCP。"
+    )
 
 
 def wait_gemini_ready(page, timeout_ms: int = 45000) -> None:
@@ -192,7 +266,7 @@ def wait_gemini_ready(page, timeout_ms: int = 45000) -> None:
     )
 
 
-def get_gemini_page(browser, new_tab: bool = True, tab_url_hint: str = ""):
+def get_gemini_page(browser, new_tab: bool = True, tab_url_hint: str = "", bring_to_front: bool = True):
     """获取或打开 Gemini 标签页；复用模式支持按历史会话 URL 重连。"""
     context = browser.contexts[0] if browser.contexts else browser.new_context()
     if new_tab and not tab_url_hint:
@@ -200,11 +274,13 @@ def get_gemini_page(browser, new_tab: bool = True, tab_url_hint: str = ""):
             url = page.url or ""
             if re.match(r"^https://gemini\.google\.com/app(?:/?(?:\?.*)?)$", url):
                 if page.locator("model-response").count() == 0:
-                    page.bring_to_front()
+                    if bring_to_front:
+                        page.bring_to_front()
                     wait_gemini_ready(page)
                     return page
         page = context.new_page()
-        page.bring_to_front()
+        if bring_to_front:
+            page.bring_to_front()
         page.goto("https://gemini.google.com/app", wait_until="domcontentloaded", timeout=45000)
         wait_gemini_ready(page)
         return page
@@ -221,7 +297,8 @@ def get_gemini_page(browser, new_tab: bool = True, tab_url_hint: str = ""):
                 key=lambda p: 0 if re.search(r"gemini\.google\.com/app/[^/?#]+", p.url or "") else 1
             )
         page = matched_pages[0]
-        page.bring_to_front()
+        if bring_to_front:
+            page.bring_to_front()
         wait_gemini_ready(page)
         return page
 
@@ -236,24 +313,36 @@ def get_gemini_page(browser, new_tab: bool = True, tab_url_hint: str = ""):
             raise RuntimeError(f"未找到匹配的 Gemini 标签页: {tab_url_hint}")
 
     page = context.new_page()
-    page.bring_to_front()
+    if bring_to_front:
+        page.bring_to_front()
     page.goto(target_url or "https://gemini.google.com/app", wait_until="domcontentloaded", timeout=45000)
     wait_gemini_ready(page)
     return page
+
+
+_GEMINI_UPLOAD_TOOLS_BTN = (
+    'button[aria-label="上传和工具"], '
+    'button[aria-label*="Upload & tools" i], '
+    'button[aria-label*="Upload and tools" i], '
+    'button[aria-label*="Add files" i]'
+)
 
 
 def _gemini_attach_files(page, file_paths: list[str]) -> list[str]:
     """在 gemini.google.com/app 通过 Playwright FileChooser 接管无弹窗上传本地文件。"""
     if not file_paths:
         return []
-    tools_btn = page.locator('button[aria-label="上传和工具"], button[aria-label*="Upload and tools" i]').first
+    tools_btn = page.locator(_GEMINI_UPLOAD_TOOLS_BTN).first
     tools_btn.wait_for(state="visible", timeout=10000)
     tools_btn.click()
     page.wait_for_timeout(400)
 
     upload_item = page.locator(
+        '.cdk-overlay-pane button[data-test-id="local-images-files-uploader-button"], '
         '.cdk-overlay-pane gem-menu-item:has-text("上传文件"), '
         '.cdk-overlay-pane gem-menu-item:has-text("Upload files"), '
+        '.cdk-overlay-pane button:has-text("上传文件"), '
+        '.cdk-overlay-pane button:has-text("Upload files"), '
         '.cdk-overlay-pane button[aria-label*="上传文件"], '
         '.cdk-overlay-pane button[aria-label*="Upload files" i]'
     ).first
@@ -263,6 +352,106 @@ def _gemini_attach_files(page, file_paths: list[str]) -> list[str]:
     fc_info.value.set_files(file_paths)
     page.wait_for_timeout(1200)
     return [Path(p).name for p in file_paths]
+
+
+def _zip_code_folder_fallback(folder: Path) -> Path:
+    """当浏览器目录 FileChooser 不可用时，将本地代码目录忽略大体积依赖后打包为临时 ZIP 兜底上传。"""
+    ignore_dirs = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".next"}
+    tmp_dir = Path(tempfile.mkdtemp(prefix="gemini_code_bundle_"))
+    zip_path = tmp_dir / f"{folder.name}_code.zip"
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for root_str, dirs, files in os.walk(folder):
+            dirs[:] = [d for d in dirs if d not in ignore_dirs]
+            root_p = Path(root_str)
+            for fname in files:
+                fpath = root_p / fname
+                try:
+                    if fpath.stat().st_size > 15 * 1024 * 1024:
+                        continue
+                    zf.write(fpath, arcname=str(fpath.relative_to(folder)))
+                except OSError:
+                    continue
+    return zip_path
+
+
+def _gemini_import_code(page, code_folder: str = "", github_repo: str = "") -> dict:
+    """在 gemini.google.com/app 通过 More uploads -> Import code 导入 GitHub 仓库或本地代码文件夹。"""
+    imported: dict = {}
+    folder_raw = (code_folder or "").strip()
+    repo_raw = (github_repo or "").strip()
+    if not folder_raw and not repo_raw:
+        return imported
+
+    def _open_import_code_dialog() -> None:
+        tools_btn = page.locator(_GEMINI_UPLOAD_TOOLS_BTN).first
+        tools_btn.wait_for(state="visible", timeout=10000)
+        tools_btn.click()
+        page.wait_for_timeout(400)
+        more_btn = page.locator(
+            '.cdk-overlay-pane button:has-text("More uploads"), '
+            '.cdk-overlay-pane button:has-text("更多上传"), '
+            '.cdk-overlay-pane [role="menuitem"]:has-text("More uploads"), '
+            '.cdk-overlay-pane [role="menuitem"]:has-text("更多上传")'
+        ).first
+        if more_btn.count() > 0 and more_btn.is_visible():
+            more_btn.click()
+            page.wait_for_timeout(400)
+        imp_btn = page.locator(
+            '.cdk-overlay-pane button:has-text("Import code"), '
+            '.cdk-overlay-pane button:has-text("导入代码"), '
+            '.cdk-overlay-pane [role="menuitem"]:has-text("Import code"), '
+            '.cdk-overlay-pane [role="menuitem"]:has-text("导入代码")'
+        ).first
+        imp_btn.wait_for(state="visible", timeout=10000)
+        imp_btn.click()
+        page.wait_for_timeout(500)
+
+    if repo_raw:
+        _open_import_code_dialog()
+        url_input = page.locator(
+            'input[aria-label*="GitHub" i], input[placeholder*="github.com" i]'
+        ).first
+        url_input.wait_for(state="visible", timeout=10000)
+        url_input.click()
+        url_input.fill(repo_raw)
+        page.wait_for_timeout(200)
+        submit_btn = page.locator(
+            'button[type="submit"]:has-text("Import"), button[type="submit"]:has-text("导入")'
+        ).first
+        submit_btn.wait_for(state="visible", timeout=8000)
+        submit_btn.click()
+        page.wait_for_timeout(2000)
+        imported["github_repo"] = repo_raw
+
+    if folder_raw:
+        folder_p = Path(folder_raw).expanduser().resolve()
+        if not folder_p.is_dir():
+            raise FileNotFoundError(f"待导入代码目录不存在: {folder_raw}")
+        try:
+            _open_import_code_dialog()
+            folder_btn = page.locator(
+                'button:has-text("Upload folder"), button:has-text("上传文件夹")'
+            ).first
+            folder_btn.wait_for(state="visible", timeout=10000)
+            with page.expect_file_chooser(timeout=15000) as fc_info:
+                folder_btn.click()
+            fc_info.value.set_files(str(folder_p))
+            page.wait_for_timeout(2000)
+            imported["code_folder"] = str(folder_p)
+            imported["code_import_mode"] = "upload_folder"
+        except Exception:
+            # 关闭可能残留的弹窗，降级打包 ZIP 走普通上传确保不中断任务
+            cancel_btn = page.locator('button[aria-label*="Cancel code import" i], button[aria-label*="取消"]').first
+            if cancel_btn.count() > 0 and cancel_btn.is_visible():
+                cancel_btn.click()
+                page.wait_for_timeout(250)
+            zip_file = _zip_code_folder_fallback(folder_p)
+            _gemini_attach_files(page, [str(zip_file)])
+            imported["code_folder"] = str(folder_p)
+            imported["code_import_mode"] = "zip_fallback"
+            imported["fallback_zip"] = str(zip_file)
+
+    return imported
 
 
 def select_entry_mode(page, entry: str) -> None:
@@ -513,11 +702,15 @@ def execute_ask(
     async_send: bool = False,
     timeout_sec: int = 180,
     files: list[str] | None = None,
+    code_folder: str = "",
+    github_repo: str = "",
+    bring_to_front: bool = True,
+    _return_handle: bool = False,
 ) -> dict:
-    """在外部 Chrome 的 Gemini 网页中执行提问或异步任务（默认 Task 模式，支持无弹窗附件上传与会话复用）。"""
+    """在外部 Chrome 的 Gemini 网页中执行提问或异步任务（默认 Task 模式，支持文件/文件夹/GitHub 代码导入）。"""
     t0 = time.time()
     file_paths = _validate_files(files)
-    page = get_gemini_page(browser, new_tab=new_tab, tab_url_hint=tab_url_hint)
+    page = get_gemini_page(browser, new_tab=new_tab, tab_url_hint=tab_url_hint, bring_to_front=bring_to_front)
 
     before_count = page.locator("model-response").count()
     is_fresh_chat = before_count == 0 and not re.search(r"gemini\.google\.com/app/[^/?#]+", page.url or "")
@@ -537,12 +730,14 @@ def execute_ask(
     if tool and effective_entry != "task":
         select_tool(page, tool)
 
+    imported_code = _gemini_import_code(page, code_folder=code_folder, github_repo=github_repo) if (code_folder or github_repo) else {}
     attached_files = _gemini_attach_files(page, file_paths) if file_paths else []
 
+    if is_fresh_chat:
+        _human_pause(page, 1100, 1800)
+
     textbox = page.locator('div[role="textbox"]').first
-    textbox.click()
-    textbox.fill(prompt)
-    page.wait_for_timeout(300)
+    _human_fill(page, textbox, prompt)
 
     send_btn = page.locator('button[aria-label="发送"], button[aria-label*="Send" i], button.send-button').first
     if send_btn.count() > 0 and send_btn.is_visible():
@@ -558,14 +753,19 @@ def execute_ask(
                 break
             page.wait_for_timeout(300)
         _save_last_session("gemini", page.url)
-        return {
+        out = {
             "status": "dispatched",
             "entry": effective_entry,
             "model": active_model,
             "url": page.url,
             "attached_files": attached_files,
+            "imported_code": imported_code or None,
             "elapsed_sec": round(time.time() - t0, 2),
         }
+        if _return_handle:
+            out["_page"] = page
+            out["_before_count"] = before_count
+        return out
 
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
@@ -589,6 +789,8 @@ def execute_ask(
     res["status"] = "ok"
     if attached_files:
         res["attached_files"] = attached_files
+    if imported_code:
+        res["imported_code"] = imported_code
     res["elapsed_sec"] = round(time.time() - t0, 2)
     return res
 
@@ -618,16 +820,6 @@ def execute_usage(browser) -> dict:
     page = ctx.new_page()
     try:
         page.goto("https://gemini.google.com/usage", wait_until="domcontentloaded", timeout=30000)
-        page.wait_for_timeout(800)
-        if "accounts.google.com" in (page.url or "") or page.locator('button:has-text("Sign in"), a:has-text("Sign in"), a:has-text("登录"), button:has-text("登录")').count() > 0:
-            return {
-                "status": "unauthenticated",
-                "error": "Google 帳號尚未登入。請先在瀏覽器中登入 Google 帳號。",
-                "url": page.url,
-                "plan": None,
-                "current_usage": None,
-                "weekly_usage": None,
-            }
         page.locator('[data-testid="current-usage"], [data-usage-island-root]').first.wait_for(
             state="visible", timeout=20000
         )
@@ -668,10 +860,6 @@ AISTUDIO_MODEL_MAP = {
     "4h": "Gemini 4 Hydrogen",
     "argon": "Gemini 4 Argon",
     "4a": "Gemini 4 Argon",
-    "flash": "Gemini 3.8 Flash",
-    "flash-lite": "Gemini 3.5 Flash Lite",
-    "gemini-3.5-flash-lite": "Gemini 3.5 Flash Lite",
-    "gemini-3.8-flash": "Gemini 3.8 Flash",
 }
 
 _AISTUDIO_MODEL_IDS = {
@@ -735,27 +923,29 @@ def _get_aistudio_page(
     new_tab: bool = True,
     tab_url_hint: str = "",
     required_path: str = "/prompts",
+    bring_to_front: bool = True,
 ):
     """获取或新建 AI Studio 标签页；复用模式支持优先选已有同类型对话并按历史 URL 重连。"""
     context = browser.contexts[0] if browser.contexts else browser.new_context()
-    matched_pages = [
-        p
-        for p in context.pages
-        if "aistudio.google.com" in (p.url or "")
-        and (tab_url_hint in (p.url or "") if tab_url_hint else (not required_path or required_path in (p.url or "")))
-    ]
-    if matched_pages:
-        page = matched_pages[0]
-        page.bring_to_front()
-        if new_tab:
-            try:
-                # 优雅重置画布开启新对话，避免多开大量无用浏览器标签页
-                page.evaluate('() => document.querySelector("button[aria-label=\\"New chat\\"]")?.click()')
-                page.wait_for_timeout(400)
-            except Exception:
-                pass
-        page.locator(ready_selector).first.wait_for(state="visible", timeout=30000)
-        return page
+    if not new_tab or tab_url_hint:
+        matched_pages = [
+            p
+            for p in context.pages
+            if "aistudio.google.com" in (p.url or "")
+            and (tab_url_hint in (p.url or "") if tab_url_hint else (not required_path or required_path in (p.url or "")))
+        ]
+        if matched_pages:
+            if not tab_url_hint:
+                matched_pages.sort(
+                    key=lambda p: 0
+                    if (re.search(r"aistudio\.google\.com/(?:app/)?prompts/[^/?#]+", p.url or "") and "/new_chat" not in (p.url or ""))
+                    else 1
+                )
+            page = matched_pages[0]
+            if bring_to_front:
+                page.bring_to_front()
+            page.locator(ready_selector).first.wait_for(state="visible", timeout=30000)
+            return page
 
         if tab_url_hint.startswith("https://"):
             target_url = tab_url_hint
@@ -767,14 +957,74 @@ def _get_aistudio_page(
                 raise RuntimeError(f"未找到匹配的 AI Studio 标签页: {tab_url_hint}")
 
     page = context.new_page()
-    page.bring_to_front()
+    if bring_to_front:
+        page.bring_to_front()
     page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
-    page.wait_for_timeout(800)
-    if "accounts.google.com" in (page.url or "") or page.locator('button:has-text("Sign in"), a:has-text("Sign in"), a:has-text("登录"), button:has-text("登录")').count() > 0:
-        raise RuntimeError("Google 帳號尚未登入。請先在瀏覽器中登入 Google 帳號（https://accounts.google.com 或 https://aistudio.google.com）。")
     page.locator(ready_selector).first.wait_for(state="visible", timeout=30000)
-    page.wait_for_timeout(500)
+    # 从容等待前端鉴权、项目配置与风控脚本水合完成（像真人浏览那样留足初始停顿）
+    _human_pause(page, 3000, 4200)
     return page
+
+
+def _extract_aistudio_drive_id(url: str) -> str:
+    """从 AI Studio 会话 URL 提取对应的 Google Drive 文件 ID（供下游 Gemini Task 直接从 Drive 拉取）。"""
+    m = re.search(r"aistudio\.google\.com/(?:app/)?prompts/([A-Za-z0-9_-]{12,})", url or "")
+    if not m:
+        return ""
+    candidate = m.group(1)
+    return "" if candidate.lower() == "new_chat" else candidate
+
+
+def _aistudio_wait_saved_url(page, timeout_sec: float = 5.0) -> str:
+    """等待 AI Studio 从 /new_chat 自动保存为 /prompts/<drive_file_id>，以便获取 Drive ID 与命名权限。"""
+    deadline = time.time() + max(0.5, float(timeout_sec))
+    while time.time() < deadline:
+        u = page.url or ""
+        if _extract_aistudio_drive_id(u):
+            return u
+        page.wait_for_timeout(300)
+    return page.url or ""
+
+
+def _aistudio_set_prompt_title(page, title: str) -> str:
+    """为 AI Studio 会话设置可读标题，使自动同步到 Google Drive 的文件名便于下游员工检索。"""
+    clean = (title or "").strip()
+    if not clean:
+        return ""
+    try:
+        edit_btn = page.locator(
+            'button[aria-label="Edit prompt title and description"], '
+            'button[aria-label*="Edit prompt title" i], '
+            'h1.mode-title'
+        ).first
+        if edit_btn.count() == 0 or not edit_btn.is_visible():
+            return ""
+        edit_btn.click()
+        page.wait_for_timeout(350)
+        name_input = page.locator(
+            'mat-dialog-container input[aria-label*="Prompt name" i], '
+            'mat-dialog-container input[aria-label*="Title" i], '
+            'mat-dialog-container input[type="text"], '
+            'mat-dialog-container input'
+        ).first
+        if name_input.count() == 0 or not name_input.is_visible():
+            return ""
+        name_input.click()
+        name_input.fill(clean)
+        page.wait_for_timeout(150)
+        save_btn = page.locator(
+            'mat-dialog-container button:has-text("Save"), '
+            'mat-dialog-container button:has-text("保存"), '
+            'mat-dialog-container button[type="submit"]'
+        ).first
+        if save_btn.count() > 0 and save_btn.is_visible():
+            save_btn.click()
+        else:
+            name_input.press("Enter")
+        page.wait_for_timeout(450)
+        return clean
+    except Exception:
+        return ""
 
 
 def _aistudio_attach_files(page, file_paths: list[str], timeout_sec: int = 60) -> list[str]:
@@ -806,63 +1056,31 @@ def _resolve_aistudio_model_name(model: str) -> str:
     return AISTUDIO_MODEL_MAP.get(key, model.strip())
 
 
-def _aistudio_ensure_settings_panel_open(page) -> None:
-    """确保 AI Studio 右侧 Run settings 面板展开。"""
-    try:
-        open_panel = page.locator("ms-run-settings.expanded, .runsettings.expanded").first
-        if open_panel.count() == 0 or not open_panel.is_visible():
-            tune = page.locator('button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"]').first
-            if tune.count() > 0 and tune.is_visible():
-                tune.click()
-                page.wait_for_timeout(350)
-    except Exception:
-        pass
-
-
-def _aistudio_close_settings_panel_if_overlay(page) -> None:
-    """若在窄屏幕下（overlay 遮罩模式），关闭右侧 Run settings 恢复主区域互动。"""
-    try:
-        is_overlay = page.evaluate("() => window.innerWidth < 1280 || Boolean(document.querySelector('.sidebar-overlay'))")
-        if is_overlay:
-            close_btn = page.locator('button[aria-label="Close run settings panel"]').first
-            if close_btn.count() > 0 and close_btn.is_visible():
-                close_btn.click()
-                page.wait_for_timeout(250)
-    except Exception:
-        pass
-
-
 def _aistudio_select_playground_model(page, model: str) -> str:
     """在 AI Studio Playground 切换模型，默认避开 Paid 付费标记条目。"""
     target_name = _resolve_aistudio_model_name(model)
     allow_paid = "paid" in model.lower()
-    
-    _aistudio_ensure_settings_panel_open(page)
     card = page.locator(".model-selector-card").first
     if card.count() == 0:
         return target_name
 
     current = re.sub(r"\s+", " ", (card.inner_text() or "")).strip()
-    target_lower = target_name.lower()
-    model_lower = model.lower()
-    if (target_lower in current.lower() or model_lower in current.lower()) and (allow_paid or "paid" not in current.lower()):
-        _aistudio_close_settings_panel_if_overlay(page)
+    if target_name.lower() in current.lower() and (allow_paid or "paid" not in current.lower()):
         return current
 
     card.click()
-    page.wait_for_timeout(600)
+    page.wait_for_timeout(500)
     clicked = page.evaluate(
-        """({targetLower, modelLower, allowPaid}) => {
+        """({targetLower, allowPaid}) => {
             const containers = document.querySelectorAll('.cdk-overlay-pane, [role="dialog"], ms-model-selector');
             const scope = containers.length ? containers : [document.body];
             const candidates = [];
             for (const root of scope) {
-                for (const el of root.querySelectorAll('button.content-button, button, [role="option"], ms-model-card, .model-card')) {
+                for (const el of root.querySelectorAll('button, [role="option"], ms-model-card, .model-card, tr, li')) {
                     const txt = (el.innerText || '').replace(/\\s+/g, ' ').trim();
                     if (!txt || txt.length > 260) continue;
                     const lower = txt.toLowerCase();
-                    const matches = lower.includes(targetLower) || (modelLower && lower.includes(modelLower));
-                    if (!matches) continue;
+                    if (!lower.includes(targetLower)) continue;
                     const hasPaid = /\\bpaid\\b/i.test(txt);
                     if (!allowPaid && hasPaid) continue;
                     const rect = el.getBoundingClientRect();
@@ -876,145 +1094,138 @@ def _aistudio_select_playground_model(page, model: str) -> str:
             candidates[0].el.click();
             return true;
         }""",
-        {"targetLower": target_lower, "modelLower": model_lower, "allowPaid": allow_paid},
+        {"targetLower": target_name.lower(), "allowPaid": allow_paid},
     )
     if not clicked:
         page.keyboard.press("Escape")
-        _aistudio_close_settings_panel_if_overlay(page)
-        return current
+        raise RuntimeError(f"未在 AI Studio Playground 模型列表中找到可用免费模型: {target_name}")
     page.wait_for_timeout(500)
-    _aistudio_close_settings_panel_if_overlay(page)
     return re.sub(r"\s+", " ", (card.inner_text() or "")).strip()
 
 
-def _aistudio_set_system_instruction(page, system_instruction: str) -> bool:
-    """在 AI Studio Playground 设置系统指令。若当前界面无独立输入框（如持续对话中），返回 False 供上下文前置。"""
-    try:
-        _aistudio_ensure_settings_panel_open(page)
-        sys_btn = page.locator(".system-instructions-card, button:has-text('System instructions'), [aria-label*='System instruction' i]").first
-        if sys_btn.count() > 0 and sys_btn.is_visible():
-            sys_btn.click()
-            page.wait_for_timeout(400)
-            box = page.locator(
-                'textarea[aria-label*="System" i], .cdk-overlay-pane textarea, ms-system-instructions textarea'
-            ).first
-            if box.count() > 0 and box.is_visible():
-                box.fill(system_instruction)
-                page.wait_for_timeout(200)
-                close_btn = page.locator(
-                    '.cdk-overlay-pane button[aria-label*="Close" i], ms-system-instructions button[aria-label*="Close" i]'
-                ).first
-                if close_btn.count() > 0 and close_btn.is_visible():
-                    close_btn.click()
-                else:
-                    page.keyboard.press("Escape")
-                page.wait_for_timeout(300)
-                return True
-    except Exception:
-        pass
-    return False
+def _aistudio_set_system_instruction(page, system_instruction: str) -> None:
+    """在 AI Studio Playground 设置系统指令。"""
+    sys_btn = page.locator(".system-instructions-card").first
+    if sys_btn.count() == 0:
+        raise RuntimeError("未找到 Playground 的 System Instructions 入口 (.system-instructions-card)")
+    sys_btn.click()
+    page.wait_for_timeout(400)
+    box = page.locator(
+        'textarea[aria-label*="System" i], .cdk-overlay-pane textarea, ms-system-instructions textarea'
+    ).first
+    box.wait_for(state="visible", timeout=10000)
+    box.fill(system_instruction)
+    page.wait_for_timeout(200)
+    close_btn = page.locator(
+        '.cdk-overlay-pane button[aria-label*="Close" i], ms-system-instructions button[aria-label*="Close" i]'
+    ).first
+    if close_btn.count() > 0 and close_btn.is_visible():
+        close_btn.click()
+    else:
+        page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
 
 
 def _aistudio_tune_playground_max(page, thinking_level: str = "max", max_output: bool = True) -> dict:
-    """尽量将 AI Studio Playground 的 Thinking level 调到最高可用挡位，并将 Output length 拉满。"""
+    """按指定思考等级调整 AI Studio Playground 的 Thinking Level（防 high 误中 Extra High），并按需拉满 Output length。"""
     applied: dict = {}
-    try:
-        _aistudio_ensure_settings_panel_open(page)
-        tl_mode = (thinking_level or "").strip().lower()
-        if tl_mode and tl_mode != "default":
-            tl = page.locator('mat-select[aria-label="Thinking Level"]').first
-            if tl.count() > 0 and tl.is_visible():
-                tl.click(timeout=5000)
-                page.wait_for_timeout(300)
-                chosen = page.evaluate(
-                    """(mode) => {
-                        const opts = Array.from(document.querySelectorAll('.cdk-overlay-pane mat-option')).filter(o => {
-                            const dis = o.getAttribute('aria-disabled') === 'true' || o.classList.contains('mdc-list-item--disabled');
-                            const txt = (o.innerText || '').trim();
-                            return !dis && !/\\bpaid\\b/i.test(txt);
-                        });
-                        if (!opts.length) return '';
-                        let target = null;
-                        if (mode === 'max' || mode === 'high' || mode === 'extra high' || mode === 'xhigh') {
-                            // 封印 Extra High：免費池優先選 High，其次選 Medium，絕不選 Extra High（防 403 權限拒絕與分鐘級卡頓）
-                            target = opts.find(o => /^high$/i.test((o.innerText || '').trim()))
-                                  || opts.find(o => /medium/i.test(o.innerText || ''))
-                                  || opts[0];
-                        } else {
-                            target = opts.find(o => (o.innerText || '').toLowerCase().includes(mode));
-                        }
-                        if (!target) return '';
-                        const label = (target.innerText || '').replace(/\\s+/g, ' ').trim();
-                        target.click();
-                        return label;
-                    }""",
-                    tl_mode,
-                )
-                if chosen:
-                    applied["thinking_level"] = chosen
+    tl_mode = (thinking_level or "").strip().lower().replace("-", "_").replace(" ", "_")
+    alias_map = {
+        "max": "extra_high",
+        "extra_high": "extra_high",
+        "extra": "extra_high",
+        "high": "high",
+        "medium": "medium",
+        "med": "medium",
+        "low": "low",
+        "minimal": "minimal",
+        "min": "minimal",
+    }
+    if tl_mode in ("", "default", "keep"):
+        tl_norm = ""
+    else:
+        tl_norm = alias_map.get(tl_mode, tl_mode)
+
+    if tl_norm:
+        tl = page.locator('mat-select[aria-label="Thinking Level"]').first
+        if tl.count() > 0 and tl.is_visible():
+            cur_tl = re.sub(r"\s+", " ", (tl.inner_text() or "")).strip().lower()
+            already_match = (
+                (tl_norm == "extra_high" and "extra" in cur_tl and "high" in cur_tl)
+                or (tl_norm == "high" and "high" in cur_tl and "extra" not in cur_tl)
+                or (tl_norm in ("medium", "low", "minimal") and tl_norm in cur_tl)
+            )
+            if already_match:
+                applied["thinking_level"] = cur_tl
+            else:
+                tl.hover()
+                _human_pause(page, 250, 450)
+                tl.click()
+                _human_pause(page, 500, 800)
+                opts = page.locator(".cdk-overlay-pane mat-option")
+                target_opt = None
+                target_label = ""
+                candidates: list[tuple[str, object]] = []
+                for idx in range(opts.count()):
+                    opt = opts.nth(idx)
+                    if opt.get_attribute("aria-disabled") == "true":
+                        continue
+                    label = re.sub(r"\s+", " ", (opt.inner_text() or "")).strip()
+                    if not label or re.search(r"\bpaid\b", label, re.IGNORECASE):
+                        continue
+                    candidates.append((label, opt))
+                low_cands = [(lbl.lower(), lbl, o) for lbl, o in candidates]
+                if tl_norm == "extra_high":
+                    pick = next((x for x in low_cands if re.search(r"extra\s*high", x[0])), None) or next((x for x in low_cands if x[0] == "high"), None) or (low_cands[-1] if low_cands else None)
+                elif tl_norm == "high":
+                    pick = next((x for x in low_cands if x[0] == "high"), None) or next((x for x in low_cands if "high" in x[0] and "extra" not in x[0]), None) or (low_cands[-1] if low_cands else None)
+                elif tl_norm in ("medium", "low"):
+                    pick = next((x for x in low_cands if x[0] == tl_norm), None) or next((x for x in low_cands if tl_norm in x[0]), None)
+                elif tl_norm == "minimal":
+                    pick = next((x for x in low_cands if "minimal" in x[0]), None) or next((x for x in low_cands if x[0] == "low"), None) or (low_cands[0] if low_cands else None)
+                else:
+                    plain = tl_norm.replace("_", " ")
+                    pick = next((x for x in low_cands if x[0] == plain), None) or next((x for x in low_cands if plain in x[0]), None)
+
+                if pick:
+                    target_label, target_opt = pick[1], pick[2]
+                    target_opt.click()
+                    applied["thinking_level"] = target_label
                 else:
                     page.keyboard.press("Escape")
-                page.wait_for_timeout(250)
-    except Exception:
-        pass
+                _human_pause(page, 550, 900)
 
     if max_output:
-        max_set = page.evaluate(
-            """() => {
-                let outInp = document.querySelector('input[name="maxOutputTokens"], input[aria-label="Maximum output tokens"]');
-                if (!outInp || outInp.getBoundingClientRect().height <= 0) {
-                    const adv = Array.from(document.querySelectorAll('button, mat-expansion-panel-header')).find(
-                        el => /advanced\\s*settings/i.test(el.innerText || '')
-                    );
-                    if (adv) adv.click();
-                }
-                return !!document.querySelector('input[name="maxOutputTokens"], input[aria-label="Maximum output tokens"]');
-            }"""
-        )
-        page.wait_for_timeout(350)
-        if max_set:
-            new_val = page.evaluate(
-                """() => {
-                    const outInp = document.querySelector('input[name="maxOutputTokens"], input[aria-label="Maximum output tokens"]');
-                    if (!outInp || outInp.getBoundingClientRect().height <= 0) return '';
-                    const maxVal = outInp.max || '1048576';
-                    if (outInp.value !== maxVal) {
-                        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-                        setter.call(outInp, maxVal);
-                        outInp.dispatchEvent(new Event('input', { bubbles: true }));
-                        outInp.dispatchEvent(new Event('change', { bubbles: true }));
-                        outInp.dispatchEvent(new Event('blur', { bubbles: true }));
-                    }
-                    return outInp.value;
-                }"""
-            )
-            if new_val:
-                applied["max_output_tokens"] = new_val
-            page.wait_for_timeout(200)
+        out_inp = page.locator('input[name="maxOutputTokens"], input[aria-label="Maximum output tokens"]').first
+        if out_inp.count() > 0 and out_inp.is_visible():
+            max_val = out_inp.get_attribute("max") or ""
+            if max_val and (out_inp.input_value() or "") != max_val:
+                out_inp.click()
+                _human_pause(page, 200, 380)
+                out_inp.fill(max_val)
+                applied["max_output_tokens"] = max_val
+                _human_pause(page, 350, 600)
     return applied
 
 
 def _aistudio_click_run(page, prompt_box) -> None:
-    """精确点击主运行按钮，避开 button.rerun-button。"""
-    clicked = page.evaluate(
-        """() => {
-            const btns = Array.from(document.querySelectorAll('button'));
-            for (const b of btns) {
-                if (b.classList.contains('rerun-button')) continue;
-                if (b.disabled || b.getAttribute('aria-disabled') === 'true') continue;
-                const rect = b.getBoundingClientRect();
-                if (rect.width <= 0 || rect.height <= 0) continue;
-                const txt = (b.innerText || '').trim();
-                if (/^Run\\b/i.test(txt)) {
-                    b.click();
-                    return true;
-                }
-            }
-            return false;
-        }"""
-    )
-    if not clicked:
-        prompt_box.press("Control+Enter")
+    """用 Playwright 原生指针 hover + click 主运行按钮（isTrusted=true，模拟真人移动鼠标按下），降级 Ctrl+Enter。"""
+    run_btns = page.locator("ms-run-button button:not(.rerun-button), button:has-text('Run'):not(.rerun-button)")
+    for i in range(run_btns.count()):
+        btn = run_btns.nth(i)
+        try:
+            if not btn.is_visible() or btn.is_disabled():
+                continue
+            txt = (btn.inner_text() or "").strip()
+            if re.match(r"^Run\b", txt, re.IGNORECASE):
+                btn.scroll_into_view_if_needed()
+                btn.hover()
+                _human_pause(page, 350, 600)
+                btn.click()
+                return
+        except Exception:
+            continue
+    prompt_box.press("Control+Enter")
 
 
 def _aistudio_playground_is_running(page) -> bool:
@@ -1026,16 +1237,12 @@ def _aistudio_playground_is_running(page) -> bool:
                     if (rect.width <= 0 || rect.height <= 0) continue;
                     const txt = (b.innerText || '').trim();
                     const aria = (b.getAttribute('aria-label') || '').trim();
-                    if (/editing/i.test(aria) || /editing/i.test(txt)) continue;
                     if (/\\b(Stop|Cancel)\\b/i.test(txt) || /\\b(Stop|Cancel)\\b/i.test(aria)) return true;
                 }
                 const modelTurns = Array.from(document.querySelectorAll('[data-turn-role="Model"]'));
                 const last = modelTurns[modelTurns.length - 1];
                 if (last) {
-                    const rawThoughtPanels = Array.from(last.querySelectorAll('mat-expansion-panel')).filter(
-                        el => !el.closest('ms-code-block') && !el.querySelector('ms-code-block, pre, code')
-                    );
-                    const thoughtEls = Array.from(last.querySelectorAll('ms-thought-chunk, .thought-container')).concat(rawThoughtPanels);
+                    const thoughtEls = Array.from(last.querySelectorAll('ms-thought-chunk, mat-expansion-panel'));
                     const thoughtSet = new Set(thoughtEls);
                     const finalCmarks = Array.from(last.querySelectorAll('ms-cmark-node')).filter(
                         n => !Array.from(thoughtSet).some(t => t.contains(n)) && (n.innerText || '').trim().length > 0
@@ -1073,22 +1280,60 @@ def _aistudio_has_final_output(page, min_turns: int = 0) -> bool:
                         if (lastTurn !== last && !lastTurn.contains(last)) return false;
                     }
                 }
-                const rawThoughtPanels = Array.from(last.querySelectorAll('mat-expansion-panel')).filter(
-                    el => !el.closest('ms-code-block') && !el.querySelector('ms-code-block, pre, code')
-                );
-                const thoughtEls = Array.from(last.querySelectorAll('ms-thought-chunk, .thought-container')).concat(rawThoughtPanels);
+                const thoughtEls = Array.from(last.querySelectorAll('ms-thought-chunk, mat-expansion-panel'));
                 const thoughtSet = new Set(thoughtEls);
                 const finalCmarks = Array.from(last.querySelectorAll('ms-cmark-node')).filter(
                     n => !Array.from(thoughtSet).some(t => t.contains(n)) && (n.innerText || '').trim().length > 0
                 );
                 const hasMedia = last.querySelectorAll('img[src^="blob:"], video[src^="blob:"]').length > 0;
-                const hasCode = last.querySelectorAll('ms-code-block, pre, code').length > 0;
-                const hasError = last.querySelector('.error, mat-error') || /Thinking level is unsupported|Model error/i.test(last.innerText || '');
-                return finalCmarks.length > 0 || hasMedia || hasCode || Boolean(hasError);
+                return finalCmarks.length > 0 || hasMedia;
             }""",
             min_turns,
         )
     )
+
+
+def _aistudio_extract_turn_error(page, min_turns: int = 0) -> str:
+    """检测 AI Studio 最后一轮 Model Turn 是否输出了错误卡片（便于立即 Fast-Fail，避免空等 180s）。"""
+    raw = page.evaluate(
+        """(minTurns) => {
+            const allTurns = Array.from(document.querySelectorAll('ms-chat-turn'));
+            if (minTurns > 0 && allTurns.length <= minTurns) return '';
+            const modelTurns = Array.from(document.querySelectorAll('[data-turn-role="Model"]'));
+            const last = modelTurns[modelTurns.length - 1];
+            if (!last) return '';
+            const hasCmark = last.querySelectorAll('ms-cmark-node').length > 0;
+            const hasMedia = last.querySelectorAll('img[src^="blob:"], video[src^="blob:"]').length > 0;
+            if (hasCmark || hasMedia) return '';
+            const errNode = last.querySelector('.model-error, .error-message, [class*="error" i]');
+            const icons = Array.from(last.querySelectorAll('mat-icon, .material-symbols-outlined, .material-icons'));
+            const hasErrIcon = icons.some(ic => (ic.innerText || '').trim().toLowerCase() === 'error');
+            const txt = (errNode?.innerText || last.innerText || '').trim();
+            if (hasErrIcon || errNode || /权限遭拒|permission denied|quota|internal error|something went wrong|rate limit/i.test(txt)) {
+                return txt.replace(/^(?:edit|more_vert|Model\\s*\\d{1,2}:\\d{2}|error)\\s*/gim, '').trim() || txt;
+            }
+            return '';
+        }""",
+        min_turns,
+    )
+    return raw.strip() if isinstance(raw, str) else ""
+
+
+def _aistudio_output_signature(page) -> tuple[int, int]:
+    """返回最后一条 Model Turn 的字符数与媒体数量，用于流式静止确认防提前截断。"""
+    res = page.evaluate(
+        """() => {
+            const turns = Array.from(document.querySelectorAll('[data-turn-role="Model"]'));
+            const last = turns[turns.length - 1];
+            if (!last) return [0, 0];
+            const len = (last.innerText || '').length;
+            const media = last.querySelectorAll('img[src^="blob:"], video[src^="blob:"]').length;
+            return [len, media];
+        }"""
+    )
+    if isinstance(res, list) and len(res) >= 2:
+        return int(res[0] or 0), int(res[1] or 0)
+    return 0, 0
 
 
 def _save_data_url(data_url: str, out_dir: Path, prefix: str, default_ext: str = ".bin") -> str:
@@ -1154,13 +1399,9 @@ def _aistudio_extract_playground_result(page, download_dir: str = "") -> dict:
             const cmarkNodes = Array.from(last.querySelectorAll('ms-cmark-node')).filter(
                 n => !Array.from(thoughtSet).some(t => t.contains(n)) && !(n.parentElement && n.parentElement.closest('ms-cmark-node'))
             );
-            // 过滤嵌套节点：仅保留顶层 ms-cmark-node，防止父节点与子节点 innerText 重复输出两次
-            const topCmarks = cmarkNodes.filter(
-                n => !cmarkNodes.some(other => other !== n && other.contains(n))
-            );
             let text = '';
-            if (topCmarks.length) {
-                text = topCmarks.map(n => (n.innerText || '').trim()).filter(Boolean).join('\\n\\n');
+            if (cmarkNodes.length) {
+                text = cmarkNodes.map(n => (n.innerText || '').trim()).filter(Boolean).join('\\n\\n');
             } else {
                 const tc = last.querySelector('.turn-content');
                 text = ((tc ? tc.innerText : last.innerText) || '').trim();
@@ -1200,6 +1441,7 @@ def _aistudio_run_music(
     async_send: bool,
     timeout_sec: int,
     t0: float,
+    _return_handle: bool = False,
 ) -> dict:
     """在 AI Studio /new_music (Lyria) 工作台生成完整歌曲并可选导出 MP3。"""
     box = page.locator('textarea[aria-label="Prompt input"]').first
@@ -1210,9 +1452,7 @@ def _aistudio_run_music(
         box.wait_for(state="visible", timeout=15000)
 
     before_count = page.locator('audio[src^="data:audio/"]').count()
-    box.click()
-    box.fill(prompt)
-    page.wait_for_timeout(350)
+    _human_fill(page, box, prompt)
 
     gen_btn = page.locator('button.ctrl-enter-submits:has-text("Generate"), button.ctrl-enter-submits').first
     gen_btn.wait_for(state="visible", timeout=10000)
@@ -1220,13 +1460,17 @@ def _aistudio_run_music(
 
     if async_send:
         page.wait_for_timeout(1000)
-        return {
+        out = {
             "status": "dispatched",
             "entry": "aistudio-music",
             "model": model,
             "url": page.url,
             "elapsed_sec": round(time.time() - t0, 2),
         }
+        if _return_handle:
+            out["_page"] = page
+            out["_before_count"] = before_count
+        return out
 
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
@@ -1268,6 +1512,7 @@ def _aistudio_run_tts(
     async_send: bool,
     timeout_sec: int,
     t0: float,
+    _return_handle: bool = False,
 ) -> dict:
     """在 AI Studio /generate-speech (TTS) 工作台合成语音并可选导出 WAV。"""
     box = page.locator('textarea[aria-label="Speech block text"]').first
@@ -1278,9 +1523,7 @@ def _aistudio_run_tts(
         box.wait_for(state="visible", timeout=15000)
 
     before_count = page.locator('audio[src^="data:audio/"]').count()
-    box.click()
-    box.fill(prompt)
-    page.wait_for_timeout(350)
+    _human_fill(page, box, prompt)
 
     run_btn = page.locator("button.ctrl-enter-submits").first
     run_btn.wait_for(state="visible", timeout=10000)
@@ -1288,13 +1531,17 @@ def _aistudio_run_tts(
 
     if async_send:
         page.wait_for_timeout(1000)
-        return {
+        out = {
             "status": "dispatched",
             "entry": "aistudio-tts",
             "model": model,
             "url": page.url,
             "elapsed_sec": round(time.time() - t0, 2),
         }
+        if _return_handle:
+            out["_page"] = page
+            out["_before_count"] = before_count
+        return out
 
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
@@ -1341,6 +1588,9 @@ def execute_playground(
     thinking_level: str = "max",
     max_output: bool = True,
     include_thoughts: bool = False,
+    title: str = "",
+    bring_to_front: bool = True,
+    _return_handle: bool = False,
 ) -> dict:
     """在 AI Studio Playground 全工作台执行对话/生图/生视频/Lyria音乐/TTS配音/Deep Research。"""
     t0 = time.time()
@@ -1373,13 +1623,14 @@ def execute_playground(
         new_tab=new_tab,
         tab_url_hint=tab_url_hint,
         required_path=required_path,
+        bring_to_front=bring_to_front,
     )
 
     cur_url = page.url or ""
     if "/new_music" in cur_url or model_id.startswith("lyria"):
-        return _aistudio_run_music(page, prompt, model_id or nav_model, download_dir, async_send, timeout_sec, t0)
+        return _aistudio_run_music(page, prompt, model_id or nav_model, download_dir, async_send, timeout_sec, t0, _return_handle=_return_handle)
     if "/generate-speech" in cur_url or "tts" in model_id:
-        return _aistudio_run_tts(page, prompt, model_id or nav_model, download_dir, async_send, timeout_sec, t0)
+        return _aistudio_run_tts(page, prompt, model_id or nav_model, download_dir, async_send, timeout_sec, t0, _return_handle=_return_handle)
 
     before_turns = page.locator("ms-chat-turn").count()
     is_fresh_session = before_turns == 0 and "/new_chat" in cur_url
@@ -1391,9 +1642,7 @@ def execute_playground(
         active_model = _short_model_name((card.inner_text() or "") if card.count() > 0 else (model_id or nav_model))
 
     if sys_text:
-        ok = _aistudio_set_system_instruction(page, sys_text)
-        if not ok:
-            prompt = f"[System Instructions]\n{sys_text}\n\n[User Prompt]\n{prompt}"
+        _aistudio_set_system_instruction(page, sys_text)
 
     if _is_media_playground_model(active_model or model_id):
         tuned = {}
@@ -1403,9 +1652,8 @@ def execute_playground(
     attached_files = _aistudio_attach_files(page, file_paths) if file_paths else []
 
     prompt_box = page.locator('textarea[aria-label="Enter a prompt"]').first
-    prompt_box.wait_for(state="attached", timeout=15000)
-    prompt_box.fill(prompt)
-    page.wait_for_timeout(250)
+    prompt_box.wait_for(state="visible", timeout=15000)
+    _human_fill(page, prompt_box, prompt)
     _aistudio_click_run(page, prompt_box)
 
     if async_send:
@@ -1414,19 +1662,33 @@ def execute_playground(
             if "/new_chat" not in (page.url or "") or page.locator("ms-chat-turn").count() > before_turns:
                 break
             page.wait_for_timeout(300)
-        _save_last_session("aistudio", page.url)
-        return {
+        if _return_handle:
+            _save_last_session("aistudio", page.url)
+            drive_id = _extract_aistudio_drive_id(page.url)
+            set_title = ""
+        else:
+            set_title = _aistudio_set_prompt_title(page, title) if title else ""
+            _save_last_session("aistudio", page.url)
+            drive_id = _extract_aistudio_drive_id(page.url)
+        out = {
             "status": "dispatched",
             "entry": "aistudio-playground",
             "model": active_model,
             "url": page.url,
+            "drive_file_id": drive_id or None,
+            "title": set_title or None,
             "attached_files": attached_files,
             "elapsed_sec": round(time.time() - t0, 2),
         }
+        if _return_handle:
+            out["_page"] = page
+            out["_before_turns"] = before_turns
+        return out
 
     deadline = time.time() + timeout_sec
     started = False
     stable_ticks = 0
+    last_sig = (-1, -1)
     while time.time() < deadline:
         running = _aistudio_playground_is_running(page)
         turn_count = page.locator("ms-chat-turn").count()
@@ -1434,29 +1696,37 @@ def execute_playground(
         announcer_txt = (announcer.first.inner_text() or "") if announcer.count() > 0 else ""
         if running or turn_count > before_turns:
             started = True
+        if started and not running:
+            turn_err = _aistudio_extract_turn_error(page, min_turns=before_turns)
+            if turn_err:
+                raise RuntimeError(f"AI Studio 返回错误: {turn_err}")
         has_output = _aistudio_has_final_output(page, min_turns=before_turns)
-        if started and "response ready" in announcer_txt.lower() and not running and has_output:
-            break
-        if started and not running and has_output:
+        cur_sig = _aistudio_output_signature(page)
+        if started and not running and has_output and cur_sig == last_sig:
             stable_ticks += 1
-            if stable_ticks >= 4:
+            need_ticks = 2 if "response ready" in announcer_txt.lower() else 4
+            if stable_ticks >= need_ticks:
                 break
         else:
             stable_ticks = 0
+        last_sig = cur_sig
         page.wait_for_timeout(500)
     else:
         raise TimeoutError("等待 AI Studio Playground 输出超时。")
 
     extracted = _aistudio_extract_playground_result(page, download_dir=download_dir)
-    if "/new_chat" in (page.url or ""):
-        page.wait_for_timeout(1200)
+    _aistudio_wait_saved_url(page, timeout_sec=5.0)
+    set_title = _aistudio_set_prompt_title(page, title) if title else ""
     _save_last_session("aistudio", page.url)
+    drive_id = _extract_aistudio_drive_id(page.url)
     thoughts_raw = extracted.get("thoughts", "") or ""
     return {
         "status": "ok",
         "entry": "aistudio-playground",
         "model": active_model,
         "url": page.url,
+        "drive_file_id": drive_id or None,
+        "title": set_title or None,
         "text": extracted.get("text", ""),
         "thoughts": thoughts_raw if include_thoughts else "",
         "thoughts_chars": len(thoughts_raw),
@@ -1816,7 +2086,7 @@ def execute_flow_usage(browser) -> dict:
         raw = re.sub(r"\s+", " ", (dialog.inner_text() or "")).strip()
         credits_m = re.search(r"([\d,]+)\s*(?:个\s*Google Flow\s*点数|Google Flow\s*credits?)", raw, re.IGNORECASE)
         reset_m = re.search(
-            r"(?:重置时间[:：]\s*|Resets?\s+|Credits?\s+refresh(?:\s+daily\s+at)?|点数将于|點數將於|刷新时间[:：]|每日)\s+([^\n]+?)(?=\s+(?:刷新|重置|升级|升級|person|Upgrade|退出|Sign\s*out|frame_spark|可见水印|隐私权|Privacy)|$)",
+            r"(?:重置时间[:：]\s*|Resets?\s+)([^\n]+?)(?=\s+(?:升级|person|Upgrade|退出|Sign\s*out|frame_spark|可见水印|隐私权|Privacy)|$)",
             raw,
             re.IGNORECASE,
         )
@@ -1966,10 +2236,21 @@ def _flow_collect_media_urls(page) -> list[str]:
     return page.evaluate(
         """() => {
             const urls = [];
-            for (const el of document.querySelectorAll('img[src*="flow-content.google"], img[src*="/asb/"], img[src^="blob:"], video[src*="flow-content.google"], video[src*="/asb/"], video source[src*="flow-content.google"], video source[src*="/asb/"]')) {
+            const nodes = document.querySelectorAll(
+                'img[src*="flow-content.google"], img[src*="flow.google.com/asb/"], img.image[src], ' +
+                'video[src*="flow-content.google"], video[src*="flow.google.com/asb/"], video[src], ' +
+                'video source[src*="flow-content.google"], video source[src*="flow.google.com/asb/"], video source[src]'
+            );
+            for (const el of nodes) {
                 const src = el.getAttribute('src') || el.currentSrc || '';
-                if (!src) continue;
-                if (el.tagName === 'IMG' && (el.naturalWidth === 0 || el.naturalHeight === 0)) continue;
+                if (!src || src.startsWith('data:')) continue;
+                if (el.tagName === 'IMG') {
+                    const isFlowSrc = src.includes('flow-content.google') || src.includes('/asb/');
+                    if (el.naturalWidth === 0 || el.naturalHeight === 0) continue;
+                    // 排除用户头像等小图标（仅保留大图或 Flow 专属资源路径）
+                    if (!isFlowSrc && el.naturalWidth < 256 && el.naturalHeight < 256) continue;
+                    if (el.classList && el.classList.contains('gb_2')) continue;
+                }
                 urls.push(src);
             }
             return Array.from(new Set(urls));
@@ -1990,7 +2271,12 @@ def _flow_download_latest(page, media_urls: list[str], download_dir: str, resolu
             if more.count() > 0:
                 more.click()
                 page.wait_for_timeout(300)
-                dl_item = page.locator('.cdk-overlay-pane [role="menuitem"]:has-text("下载"), .cdk-overlay-pane button:has-text("下载")').first
+                dl_item = page.locator(
+                    '.cdk-overlay-pane [role="menuitem"]:has-text("下载"), '
+                    '.cdk-overlay-pane button:has-text("下载"), '
+                    '.cdk-overlay-pane [role="menuitem"]:has-text("Download"), '
+                    '.cdk-overlay-pane button:has-text("Download")'
+                ).first
                 if dl_item.count() > 0:
                     dl_item.hover()
                     page.wait_for_timeout(350)
@@ -2033,6 +2319,8 @@ def execute_flow(
     download_dir: str = "",
     async_send: bool = False,
     timeout_sec: int = 240,
+    bring_to_front: bool = True,
+    _return_handle: bool = False,
 ) -> dict:
     """在 Google Flow (flow.google.com) 使用独立点数池生成图片（Nano Banana 2.1 为 0 点）或视频（Omni 1.2 Flash / Veo 3.1 - Lite）。"""
     t0 = time.time()
@@ -2043,15 +2331,18 @@ def execute_flow(
         for p in ctx.pages:
             if project_url in (p.url or ""):
                 page = p
-                page.bring_to_front()
+                if bring_to_front:
+                    page.bring_to_front()
                 break
         if page is None:
             page = ctx.new_page()
-            page.bring_to_front()
+            if bring_to_front:
+                page.bring_to_front()
             page.goto(project_url, wait_until="domcontentloaded", timeout=30000)
     else:
         page = ctx.new_page()
-        page.bring_to_front()
+        if bring_to_front:
+            page.bring_to_front()
         page.goto("https://flow.google.com/", wait_until="domcontentloaded", timeout=30000)
         new_proj = page.locator('button:has-text("新建项目"), button:has-text("New project")').first
         new_proj.wait_for(state="visible", timeout=25000)
@@ -2060,7 +2351,7 @@ def execute_flow(
 
     box = page.locator('div.ProseMirror[aria-label="您希望创作什么？"], div.ProseMirror[role="textbox"]').first
     box.wait_for(state="visible", timeout=25000)
-    page.wait_for_timeout(600)
+    _human_pause(page, 1000, 1700)
 
     _flow_ensure_direct_mode(page)
     estimated_credits = _flow_configure(
@@ -2075,9 +2366,7 @@ def execute_flow(
 
     before_urls = set(_flow_collect_media_urls(page))
     box = page.locator('div.ProseMirror[aria-label="您希望创作什么？"], div.ProseMirror[role="textbox"]').first
-    box.click()
-    box.fill(prompt)
-    page.wait_for_timeout(200)
+    _human_fill(page, box, prompt)
 
     gen_btn = page.locator('button[aria-label="开始生成"], button.generate-icon-button').first
     gen_btn.wait_for(state="visible", timeout=10000)
@@ -2085,14 +2374,19 @@ def execute_flow(
 
     if async_send:
         page.wait_for_timeout(1500)
-        return {
+        out = {
             "status": "dispatched",
             "entry": "flow",
             "media": media,
             "estimated_credits": estimated_credits,
             "project_url": page.url,
+            "url": page.url,
             "elapsed_sec": round(time.time() - t0, 2),
         }
+        if _return_handle:
+            out["_page"] = page
+            out["_before_urls"] = before_urls
+        return out
 
     deadline = time.time() + timeout_sec
     new_urls: list[str] = []
@@ -2118,6 +2412,530 @@ def execute_flow(
         "project_url": page.url,
         "media_urls": new_urls,
         "saved_files": saved_files,
+        "elapsed_sec": round(time.time() - t0, 2),
+    }
+
+
+def _unpack_json_from_text(text: str, dest_dir: Path | str) -> list[str]:
+    """从模型回复正文提取 {相对路径: 文件内容} JSON 对象并安全解包落盘，省去手动下载 Blob。"""
+    raw = (text or "").strip()
+    if not raw:
+        return []
+    candidates: list[str] = []
+    # 1. 优先提取 fenced ```json ... ``` 代码块（从后往前找最完整的一个）
+    for m in reversed(list(re.finditer(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", raw, re.IGNORECASE))):
+        candidates.append(m.group(1).strip())
+    # 2. 兜底提取最外层 { ... }
+    first_b = raw.find("{")
+    last_b = raw.rfind("}")
+    if first_b != -1 and last_b > first_b:
+        candidates.append(raw[first_b : last_b + 1].strip())
+
+    parsed_obj = None
+    for cand in candidates:
+        try:
+            obj = json.loads(cand)
+            if isinstance(obj, dict) and obj and all(isinstance(k, str) and isinstance(v, str) for k, v in obj.items()):
+                parsed_obj = obj
+                break
+        except Exception:
+            continue
+
+    if not parsed_obj:
+        return []
+
+    base_dir = Path(dest_dir).expanduser().resolve()
+    base_dir.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    for rel_path, content in parsed_obj.items():
+        if not rel_path.strip():
+            continue
+        target = _safe_rel_dest(base_dir, rel_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        written.append(str(target))
+    return written
+
+
+def _is_concrete_session_url(url: str) -> bool:
+    """判断 URL 是否是具体会话/项目页（非空白首页/new_chat），可作为通道 B 的独立标签页证据。"""
+    u = (url or "").strip()
+    if not u.startswith("https://"):
+        return False
+    if re.search(r"aistudio\.google\.com/(?:app/)?prompts/(?!new_chat\b)[^/?#]+", u):
+        return True
+    if re.search(r"aistudio\.google\.com/(?:app/)?(?:new_music|generate-speech|apps/[^/?#]+)", u):
+        return True
+    if re.search(r"gemini\.google\.com/app/[^/?#]+", u):
+        return True
+    if re.search(r"flow\.google\.com/(?:[^/]+/)?project/[^/?#]+", u):
+        return True
+    return False
+
+
+def _roster_lookup_role(roster_file: str, role: str) -> dict:
+    """读取 .web-team.json 中指定角色的已有记录（不存在返回空字典）。"""
+    r_key = (role or "").strip()
+    if not r_key:
+        return {}
+    path = Path(roster_file or ".web-team.json").expanduser().resolve()
+    if not path.exists():
+        return {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+        roster = loaded.get("roster") if isinstance(loaded, dict) else {}
+        info = roster.get(r_key) if isinstance(roster, dict) else {}
+        return dict(info) if isinstance(info, dict) else {}
+    except Exception:
+        return {}
+
+
+def _resolve_task_path(raw: str, base_dir: Path) -> str:
+    if not (raw or "").strip():
+        return ""
+    p = Path(raw).expanduser()
+    return str(p.resolve() if p.is_absolute() else (base_dir / p).resolve())
+
+
+def execute_wave(
+    browser,
+    tasks: list[dict],
+    roster_file: str = ".web-team.json",
+    project: str = "",
+    project_dir: str = ".",
+    timeout_sec: int = 360,
+    poll_interval_sec: float = 1.5,
+    stagger_sec: float = 3.5,
+) -> dict:
+    """
+    高速并发波次引擎：单次调用内将多个员工任务并发发射至独立标签页，
+    然后在 Python 进程内后台静默轮询全部完成、自动落盘/解包 JSON 并回写 .web-team.json。
+    """
+    t0 = time.time()
+    if not isinstance(tasks, list) or not tasks:
+        raise ValueError("wave 任务列表 tasks 不能为空。")
+
+    base_dir = Path(project_dir or ".").expanduser().resolve()
+    roster_path = _resolve_task_path(roster_file or ".web-team.json", base_dir)
+
+    seen_roles: set[str] = set()
+    for idx, task in enumerate(tasks):
+        if not isinstance(task, dict):
+            raise ValueError(f"wave 第 {idx + 1} 项任务必须是 JSON 对象。")
+        r_name = str(task.get("role") or f"worker_{idx + 1}").strip()
+        if r_name in seen_roles:
+            raise ValueError(f"wave 中存在重复角色 '{r_name}'，同一波次内每个角色只能出现一次。")
+        seen_roles.add(r_name)
+
+    pending: list[dict] = []
+    results: list[dict] = []
+
+    # 阶段 1：极速并发发射所有员工任务（每个角色严格绑定独立标签页）
+    for idx, raw_task in enumerate(tasks):
+        task = dict(raw_task)
+        role = str(task.get("role") or f"worker_{idx + 1}").strip()
+        site = str(task.get("site") or "aistudio").strip().lower()
+        model = str(task.get("model") or "").strip()
+        prompt = str(task.get("prompt") or "")
+        prompt_file = str(task.get("prompt_file") or "").strip()
+        if not prompt and prompt_file:
+            pf = Path(_resolve_task_path(prompt_file, base_dir))
+            prompt = pf.read_text(encoding="utf-8")
+        if not prompt and site != "build":
+            results.append({"role": role, "site": site, "status": "error", "error": "缺少 prompt 或 prompt_file"})
+            continue
+
+        existing_role = _roster_lookup_role(roster_path, role)
+        role_url = str(task.get("tab_url_hint") or task.get("project_url") or existing_role.get("url") or "").strip()
+        # 角色尚无专属会话 URL 时强制开独立新标签页，杜绝串页污染
+        force_new_tab = not bool(role_url) or bool(task.get("new_tab"))
+        files_resolved = [_resolve_task_path(f, base_dir) for f in (task.get("files") or []) if str(f).strip()]
+        sys_file_resolved = _resolve_task_path(str(task.get("system_file") or ""), base_dir)
+        out_file_resolved = _resolve_task_path(str(task.get("out_file") or ""), base_dir)
+        download_dir_resolved = _resolve_task_path(str(task.get("download_dir") or ""), base_dir)
+        unpack_dir_resolved = _resolve_task_path(str(task.get("unpack_json_dir") or ""), base_dir)
+        folder_resolved = _resolve_task_path(str(task.get("folder") or task.get("code_folder") or ""), base_dir)
+        github_repo = str(task.get("github") or task.get("github_repo") or "").strip()
+        title_str = str(task.get("title") or "").strip()
+        thinking_level = str(task.get("thinking_level") or "high").strip()
+
+        try:
+            if site in ("aistudio", "playground", "lyria", "tts"):
+                eff_model = model or ("lyria" if site == "lyria" else ("tts" if site == "tts" else "neon"))
+                dispatched = execute_playground(
+                    browser,
+                    prompt=prompt,
+                    model=eff_model,
+                    system_instruction=str(task.get("system") or task.get("system_instruction") or ""),
+                    system_file=sys_file_resolved,
+                    files=files_resolved or None,
+                    new_tab=force_new_tab,
+                    tab_url_hint="" if force_new_tab else role_url,
+                    async_send=True,
+                    timeout_sec=int(task.get("timeout_sec") or timeout_sec),
+                    download_dir=download_dir_resolved,
+                    thinking_level=thinking_level,
+                    max_output=not bool(task.get("no_max_output")),
+                    include_thoughts=bool(task.get("include_thoughts")),
+                    title=title_str,
+                    bring_to_front=True,
+                    _return_handle=True,
+                )
+            elif site in ("gemini_task", "gemini", "gemini_chat", "task", "chat"):
+                eff_entry = "chat" if site in ("gemini_chat", "chat") else str(task.get("entry") or "task")
+                dispatched = execute_ask(
+                    browser,
+                    prompt=prompt,
+                    entry=eff_entry,
+                    model=model or ("hydrogen" if force_new_tab else ""),
+                    tool=task.get("tool"),
+                    thinking=task.get("thinking"),
+                    new_tab=force_new_tab,
+                    tab_url_hint="" if force_new_tab else role_url,
+                    async_send=True,
+                    timeout_sec=int(task.get("timeout_sec") or timeout_sec),
+                    files=files_resolved or None,
+                    code_folder=folder_resolved,
+                    github_repo=github_repo,
+                    bring_to_front=True,
+                    _return_handle=True,
+                )
+            elif site == "flow":
+                dispatched = execute_flow(
+                    browser,
+                    prompt=prompt,
+                    media=str(task.get("media") or "image"),
+                    model=model or "Nano Banana 2.1",
+                    aspect=str(task.get("aspect") or "16:9"),
+                    count=int(task.get("count") or 1),
+                    resolution=str(task.get("resolution") or ""),
+                    video_mode=str(task.get("video_mode") or ""),
+                    project_url="" if force_new_tab else role_url,
+                    download_dir=download_dir_resolved,
+                    async_send=True,
+                    timeout_sec=int(task.get("timeout_sec") or timeout_sec),
+                    bring_to_front=True,
+                    _return_handle=True,
+                )
+            elif site == "build":
+                # Build 涉及整站生成与 ZIP 下载，保持独立同步调用或异步发射
+                res_b = execute_build(
+                    browser,
+                    prompt=prompt,
+                    app_url=str(task.get("app_url") or role_url),
+                    mode=str(task.get("mode") or "max"),
+                    model=model or "neon",
+                    framework=str(task.get("framework") or ""),
+                    download_dir=download_dir_resolved,
+                    extract=bool(task.get("extract", True)),
+                    async_send=bool(task.get("async_send", False)),
+                    timeout_sec=int(task.get("timeout_sec") or max(timeout_sec, 300)),
+                )
+                execute_roster(
+                    action="set",
+                    roster_file=roster_path,
+                    role=role,
+                    title=title_str or str(task.get("role_title") or ""),
+                    site="build",
+                    model=model or "neon",
+                    url=str(res_b.get("app_url") or ""),
+                    duty=str(task.get("duty") or ""),
+                    status="done" if res_b.get("status") == "ok" else "running",
+                    project=project,
+                )
+                results.append({"role": role, "site": "build", **res_b})
+                continue
+            else:
+                raise ValueError(f"wave 不支持的站点类型: {site}")
+
+            page_obj = dispatched.pop("_page", None)
+            dispatched_url = str(dispatched.get("url") or dispatched.get("project_url") or "")
+            drive_id = str(dispatched.get("drive_file_id") or _extract_aistudio_drive_id(dispatched_url) or "")
+            execute_roster(
+                action="set",
+                roster_file=roster_path,
+                role=role,
+                title=title_str or str(task.get("role_title") or ""),
+                site=site,
+                model=str(dispatched.get("model") or model),
+                thinking_level=thinking_level if site in ("aistudio", "playground") else "",
+                url=dispatched_url,
+                drive_file_id=drive_id,
+                duty=str(task.get("duty") or ""),
+                status="running",
+                project=project,
+            )
+            pending.append({
+                "role": role,
+                "site": site,
+                "entry": str(dispatched.get("entry") or site),
+                "model": str(dispatched.get("model") or model),
+                "page": page_obj,
+                "url": dispatched_url,
+                "drive_file_id": drive_id,
+                "title": title_str,
+                "before_turns": dispatched.get("_before_turns", 0),
+                "before_count": dispatched.get("_before_count", 0),
+                "before_urls": dispatched.get("_before_urls", set()),
+                "out_file": out_file_resolved,
+                "download_dir": download_dir_resolved,
+                "unpack_json_dir": unpack_dir_resolved,
+                "save_as": str(task.get("save_as") or "").strip(),
+                "media": str(task.get("media") or "image"),
+                "resolution": str(task.get("resolution") or ""),
+                "include_thoughts": bool(task.get("include_thoughts")),
+                "started_at": time.time(),
+                "stable_ticks": 0,
+                "last_text": "",
+                "last_change_at": time.time(),
+                "has_started": False,
+            })
+            # 错峰拟人节流：派完一个 Tab 后保留随机人手切换停顿，避免瞬间连点多站触发风控
+            if idx < len(tasks) - 1 and float(stagger_sec) > 0:
+                time.sleep(float(stagger_sec) * random.uniform(0.85, 1.35))
+        except Exception as exc:
+            execute_roster(
+                action="set",
+                roster_file=roster_path,
+                role=role,
+                site=site,
+                model=model,
+                status="failed",
+                project=project,
+            )
+            results.append({"role": role, "site": site, "status": "error", "error": str(exc)})
+
+    # 阶段 2：单线程后台静默轮询全部待回收标签页（不抢焦点、零 LLM 往返）
+    deadline = time.time() + max(30, int(timeout_sec))
+    while pending and time.time() < deadline:
+        still_pending: list[dict] = []
+        for item in pending:
+            page = item["page"]
+            entry = item["entry"]
+            role = item["role"]
+            try:
+                if page is None or page.is_closed():
+                    raise RuntimeError("目标标签页已关闭")
+
+                if entry == "aistudio-playground":
+                    running = _aistudio_playground_is_running(page)
+                    turn_count = page.locator("ms-chat-turn").count()
+                    if running or turn_count > item["before_turns"]:
+                        item["has_started"] = True
+                    if item["has_started"] and not running:
+                        turn_err = _aistudio_extract_turn_error(page, min_turns=item["before_turns"])
+                        if turn_err:
+                            raise RuntimeError(f"AI Studio 返回错误: {turn_err}")
+                    has_output = _aistudio_has_final_output(page, min_turns=item["before_turns"])
+                    announcer = page.locator(".cdk-live-announcer-element")
+                    announcer_txt = (announcer.first.inner_text() or "") if announcer.count() > 0 else ""
+                    cur_sig = _aistudio_output_signature(page)
+                    done_now = False
+                    if item["has_started"] and not running and has_output and cur_sig == item.get("last_sig"):
+                        item["stable_ticks"] += 1
+                        need_ticks = 2 if "response ready" in announcer_txt.lower() else 3
+                        if item["stable_ticks"] >= need_ticks:
+                            done_now = True
+                    else:
+                        item["stable_ticks"] = 0
+                    item["last_sig"] = cur_sig
+
+                    if not done_now:
+                        still_pending.append(item)
+                        continue
+
+                    extracted = _aistudio_extract_playground_result(page, download_dir=item["download_dir"])
+                    _aistudio_wait_saved_url(page, timeout_sec=5.0)
+                    if item["title"]:
+                        _aistudio_set_prompt_title(page, item["title"])
+                    final_url = page.url or item["url"]
+                    drive_id = _extract_aistudio_drive_id(final_url) or item["drive_file_id"]
+                    text_body = extracted.get("text", "") or ""
+                    rec: dict = {
+                        "role": role,
+                        "site": item["site"],
+                        "entry": entry,
+                        "status": "ok",
+                        "model": item["model"],
+                        "url": final_url,
+                        "drive_file_id": drive_id or None,
+                        "title": item["title"] or None,
+                        "text_chars": len(text_body),
+                        "saved_files": extracted.get("saved_files", []),
+                        "elapsed_sec": round(time.time() - item["started_at"], 2),
+                    }
+                    if item["out_file"]:
+                        p_out = Path(item["out_file"])
+                        p_out.parent.mkdir(parents=True, exist_ok=True)
+                        p_out.write_text(text_body, encoding="utf-8")
+                        rec["saved_text_file"] = str(p_out)
+                    if item["unpack_json_dir"]:
+                        rec["unpacked_files"] = _unpack_json_from_text(text_body, item["unpack_json_dir"])
+                    if not item["out_file"] and not rec.get("unpacked_files"):
+                        rec["text_preview"] = text_body[:600]
+                    execute_roster(
+                        action="set",
+                        roster_file=roster_path,
+                        role=role,
+                        url=final_url,
+                        drive_file_id=drive_id,
+                        status="done",
+                        project=project,
+                    )
+                    results.append(rec)
+
+                elif entry in ("aistudio-music", "aistudio-tts"):
+                    audios = page.locator('audio[src^="data:audio/"]')
+                    composing = entry == "aistudio-music" and page.locator('button:has-text("Stop composing")').count() > 0
+                    if audios.count() <= item["before_count"] or composing:
+                        still_pending.append(item)
+                        continue
+                    audio_info = page.evaluate(
+                        """() => {
+                            const list = Array.from(document.querySelectorAll('audio[src^="data:audio/"]'));
+                            const last = list[list.length - 1];
+                            return last ? { src: last.src, duration: last.duration || null } : null;
+                        }"""
+                    )
+                    saved_files: list[str] = []
+                    if item["download_dir"] and audio_info and audio_info.get("src"):
+                        default_ext = ".mp3" if entry == "aistudio-music" else ".wav"
+                        prefix = item["save_as"] or (f"{role}_audio")
+                        out_p = _save_data_url(audio_info["src"], Path(item["download_dir"]).resolve(), Path(prefix).stem, Path(prefix).suffix or default_ext)
+                        if item["save_as"]:
+                            final_p = Path(item["download_dir"]).resolve() / item["save_as"]
+                            if final_p != Path(out_p):
+                                shutil.move(out_p, str(final_p))
+                                out_p = str(final_p)
+                        saved_files.append(out_p)
+                    final_url = page.url or item["url"]
+                    execute_roster(action="set", roster_file=roster_path, role=role, url=final_url, status="done", project=project)
+                    results.append({
+                        "role": role,
+                        "site": item["site"],
+                        "entry": entry,
+                        "status": "ok",
+                        "model": item["model"],
+                        "url": final_url,
+                        "duration_sec": audio_info.get("duration") if audio_info else None,
+                        "saved_files": saved_files,
+                        "elapsed_sec": round(time.time() - item["started_at"], 2),
+                    })
+
+                elif entry == "flow":
+                    cur_urls = _flow_collect_media_urls(page)
+                    new_urls = [u for u in cur_urls if u not in item["before_urls"]]
+                    if not new_urls:
+                        still_pending.append(item)
+                        continue
+                    saved_files = (
+                        _flow_download_latest(
+                            page,
+                            new_urls,
+                            download_dir=item["download_dir"],
+                            resolution=item["resolution"],
+                            media=item["media"],
+                        )
+                        if item["download_dir"]
+                        else []
+                    )
+                    if item["save_as"] and len(saved_files) == 1:
+                        src_f = Path(saved_files[0])
+                        dst_f = src_f.parent / item["save_as"]
+                        if dst_f != src_f:
+                            shutil.move(str(src_f), str(dst_f))
+                            saved_files = [str(dst_f)]
+                    final_url = page.url or item["url"]
+                    execute_roster(action="set", roster_file=roster_path, role=role, url=final_url, status="done", project=project)
+                    results.append({
+                        "role": role,
+                        "site": "flow",
+                        "entry": "flow",
+                        "status": "ok",
+                        "model": item["model"],
+                        "url": final_url,
+                        "media_urls": new_urls,
+                        "saved_files": saved_files,
+                        "elapsed_sec": round(time.time() - item["started_at"], 2),
+                    })
+
+                else:
+                    # Gemini Web (task / chat)
+                    if page.locator("model-response").count() <= item["before_count"]:
+                        still_pending.append(item)
+                        continue
+                    st = page.evaluate(DOM_STATUS_EVAL_JS)
+                    running = bool(st.get("running", False))
+                    text_body = st.get("text") or st.get("answer") or ""
+                    if text_body != item["last_text"]:
+                        item["last_text"] = text_body
+                        item["last_change_at"] = time.time()
+                    has_payload = bool(text_body) or bool(st.get("images") or [])
+                    done_now = False
+                    if not running and has_payload:
+                        item["stable_ticks"] += 1
+                        if item["stable_ticks"] >= 2:
+                            done_now = True
+                    elif running and has_payload and st.get("hasActionToolbar") and (time.time() - item["last_change_at"]) >= 15.0:
+                        done_now = True
+                    else:
+                        item["stable_ticks"] = 0
+
+                    if not done_now:
+                        still_pending.append(item)
+                        continue
+
+                    final_url = st.get("url") or page.url or item["url"]
+                    rec = {
+                        "role": role,
+                        "site": item["site"],
+                        "entry": entry,
+                        "status": "ok",
+                        "model": st.get("model") or item["model"],
+                        "url": final_url,
+                        "text_chars": len(text_body),
+                        "waiting_for_user": st.get("waiting_for_user") or "",
+                        "elapsed_sec": round(time.time() - item["started_at"], 2),
+                    }
+                    if item["out_file"]:
+                        p_out = Path(item["out_file"])
+                        p_out.parent.mkdir(parents=True, exist_ok=True)
+                        p_out.write_text(text_body, encoding="utf-8")
+                        rec["saved_text_file"] = str(p_out)
+                    if item["unpack_json_dir"]:
+                        rec["unpacked_files"] = _unpack_json_from_text(text_body, item["unpack_json_dir"])
+                    if not item["out_file"] and not rec.get("unpacked_files"):
+                        rec["text_preview"] = text_body[:600]
+                    execute_roster(action="set", roster_file=roster_path, role=role, url=final_url, status="done", project=project)
+                    results.append(rec)
+            except Exception as exc:
+                execute_roster(action="set", roster_file=roster_path, role=role, status="failed", project=project)
+                results.append({"role": role, "site": item["site"], "status": "error", "error": str(exc)})
+
+        pending = still_pending
+        if pending:
+            time.sleep(max(0.4, float(poll_interval_sec)))
+
+    for item in pending:
+        execute_roster(action="set", roster_file=roster_path, role=item["role"], status="timeout", project=project)
+        results.append({
+            "role": item["role"],
+            "site": item["site"],
+            "status": "timeout",
+            "url": item["url"],
+            "error": f"等待超过 {timeout_sec}s 未完成（标签页仍在后台运行，可稍后用 fetch 或同 role 续查）",
+        })
+
+    ok_count = sum(1 for r in results if r.get("status") == "ok")
+    return {
+        "status": "ok" if ok_count == len(results) else ("partial" if ok_count > 0 else "failed"),
+        "entry": "wave",
+        "project": project,
+        "roster_file": roster_path,
+        "total": len(results),
+        "succeeded": ok_count,
+        "failed": len(results) - ok_count,
+        "results": results,
         "elapsed_sec": round(time.time() - t0, 2),
     }
 
@@ -2162,7 +2980,7 @@ def run_daemon(port_override: int | None = None, bind_port: int = DAEMON_PORT) -
     class ReusableTCPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
         allow_reuse_address = True
 
-    with sync_playwright() as p:
+    with _get_sync_playwright()() as p:
         print(f"[daemon] 正在连接外部 Chrome CDP: {ws_url}", flush=True)
         browser = p.chromium.connect_over_cdp(ws_url, timeout=60000)
         server = ReusableTCPServer((DAEMON_HOST, bind_port), Handler)
@@ -2195,6 +3013,8 @@ def run_daemon(port_override: int | None = None, bind_port: int = DAEMON_PORT) -
                         async_send=body.get("async_send", False),
                         timeout_sec=body.get("timeout_sec", 180),
                         files=body.get("files"),
+                        code_folder=body.get("code_folder", ""),
+                        github_repo=body.get("github_repo", ""),
                     )
                 elif path == "/fetch":
                     box["result"] = execute_fetch(browser, tab_url_hint=body.get("tab_url_hint", ""))
@@ -2216,6 +3036,18 @@ def run_daemon(port_override: int | None = None, bind_port: int = DAEMON_PORT) -
                         thinking_level=body.get("thinking_level", "max"),
                         max_output=body.get("max_output", True),
                         include_thoughts=body.get("include_thoughts", False),
+                        title=body.get("title", ""),
+                    )
+                elif path == "/wave":
+                    box["result"] = execute_wave(
+                        browser,
+                        tasks=body["tasks"],
+                        roster_file=body.get("roster_file", ".web-team.json"),
+                        project=body.get("project", ""),
+                        project_dir=body.get("project_dir", "."),
+                        timeout_sec=body.get("timeout_sec", 360),
+                        poll_interval_sec=body.get("poll_interval_sec", 1.5),
+                        stagger_sec=body.get("stagger_sec", 3.5),
                     )
                 elif path == "/attach":
                     box["result"] = execute_attach(
@@ -2287,7 +3119,7 @@ def _exec_cdp(port: int | None, path: str, payload: dict, local_fn) -> dict:
     if res is not None:
         return res
     ws_url = get_cdp_ws_url(port)
-    with sync_playwright() as p:
+    with _get_sync_playwright()() as p:
         browser = p.chromium.connect_over_cdp(ws_url, timeout=5000)
         return local_fn(browser)
 
@@ -2372,6 +3204,388 @@ def execute_harvest(
     }
 
 
+DEFAULT_PLAYBOOKS_DIR = Path(__file__).resolve().parent.parent / "references" / "playbooks"
+_SLUG_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _validate_playbook_slug(name: str) -> str:
+    """校验编队卡名称仅允许字母/数字/下划线/连字符，严防路径穿越。"""
+    raw = (name or "").strip()
+    if raw.lower().endswith(".md"):
+        raw = raw[:-3]
+    if not raw or not _SLUG_RE.match(raw):
+        raise ValueError(f"非法编队卡名称（仅支持 [a-zA-Z0-9_-]）: {name!r}")
+    return raw
+
+
+_AUDIT_IGNORE_DIRS = frozenset({".git", ".venv", "venv", "node_modules", "__pycache__"})
+_ASSET_REF_RE = re.compile(
+    r"""['"]((?:\./)?assets/[a-zA-Z0-9_./-]+\.(?:png|jpg|jpeg|webp|svg|mp3|wav|ogg))['"]"""
+)
+_IMAGE_EXTS = frozenset({".png", ".jpg", ".jpeg", ".webp"})
+_AUDIO_EXTS = frozenset({".mp3", ".wav", ".ogg"})
+_CODE_EXTS = frozenset({".html", ".htm", ".js", ".mjs", ".ts", ".css"})
+
+
+def execute_roster(
+    action: str = "list",
+    roster_file: str = ".web-team.json",
+    role: str = "",
+    title: str = "",
+    site: str = "",
+    model: str = "",
+    thinking_level: str = "",
+    tab_id: str = "",
+    url: str = "",
+    drive_file_id: str = "",
+    duty: str = "",
+    status: str = "",
+    project: str = "",
+    project_dir: str = ".",
+    min_roles: int = 2,
+) -> dict:
+    """管理项目根目录 `.web-team.json` 一页一员工花名册（含双通道跨角色 tab_id/url 冲突拦截与交付审计门禁）。"""
+    path = Path(roster_file or ".web-team.json").expanduser().resolve()
+    data: dict = {"project": "", "updated_at": "", "roster": {}}
+    if path.exists():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                data["project"] = str(loaded.get("project") or "")
+                data["updated_at"] = str(loaded.get("updated_at") or "")
+                if isinstance(loaded.get("roster"), dict):
+                    data["roster"] = loaded["roster"]
+        except Exception:
+            pass
+
+    if action == "list":
+        return {
+            "status": "ok",
+            "entry": "roster",
+            "action": "list",
+            "file": str(path),
+            "project": data["project"],
+            "count": len(data["roster"]),
+            "roster": data["roster"],
+        }
+
+    now_iso = time.strftime("%Y-%m-%dT%H:%M:%S")
+    if action == "set":
+        r_key = (role or "").strip()
+        if not r_key:
+            raise ValueError("roster set 必须提供 --role")
+        entry = dict(data["roster"].get(r_key) or {})
+        if title:
+            entry["title"] = title.strip()
+        if site:
+            entry["site"] = site.strip()
+        if model:
+            entry["model"] = model.strip()
+        if thinking_level:
+            entry["thinking_level"] = thinking_level.strip()
+        if tab_id:
+            parsed_tab_id = int(tab_id) if str(tab_id).strip().isdigit() else str(tab_id).strip()
+            for other_role, other_info in data["roster"].items():
+                if other_role != r_key and isinstance(other_info, dict) and other_info.get("tab_id") == parsed_tab_id:
+                    raise ValueError(
+                        f"ROLE_TAB_CONFLICT: tab_id={parsed_tab_id} 已绑定给角色 '{other_role}'，"
+                        f"严禁多个角色共用同一个标签页！请先调用 tab_new 为 '{r_key}' 创建新标签页。"
+                    )
+            entry["tab_id"] = parsed_tab_id
+        if url:
+            clean_url = url.strip()
+            if _is_concrete_session_url(clean_url):
+                for other_role, other_info in data["roster"].items():
+                    if other_role != r_key and isinstance(other_info, dict) and str(other_info.get("url") or "").strip() == clean_url:
+                        raise ValueError(
+                            f"ROLE_URL_CONFLICT: 会话 URL={clean_url} 已绑定给角色 '{other_role}'，"
+                            f"严禁多个角色共用同一会话！请为 '{r_key}' 新开独立标签页。"
+                        )
+            entry["url"] = clean_url
+            auto_drive = _extract_aistudio_drive_id(clean_url)
+            if auto_drive and not drive_file_id:
+                entry["drive_file_id"] = auto_drive
+        if drive_file_id:
+            entry["drive_file_id"] = drive_file_id.strip()
+        if duty:
+            entry["duty"] = duty.strip()
+        if status:
+            entry["status"] = status.strip()
+        elif "status" not in entry:
+            entry["status"] = "ready"
+        entry["updated_at"] = now_iso
+        data["roster"][r_key] = entry
+        if project:
+            data["project"] = project.strip()
+        data["updated_at"] = now_iso
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return {
+            "status": "ok",
+            "entry": "roster",
+            "action": "set",
+            "file": str(path),
+            "project": data["project"],
+            "role": r_key,
+            "count": len(data["roster"]),
+            "roster": data["roster"],
+        }
+
+    if action == "remove":
+        r_key = (role or "").strip()
+        if not r_key:
+            raise ValueError("roster remove 必须提供 --role")
+        removed = data["roster"].pop(r_key, None)
+        data["updated_at"] = now_iso
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return {
+            "status": "ok" if removed is not None else "not_found",
+            "entry": "roster",
+            "action": "remove",
+            "file": str(path),
+            "role": r_key,
+            "count": len(data["roster"]),
+            "roster": data["roster"],
+        }
+
+    if action == "clear":
+        data["roster"] = {}
+        data["updated_at"] = now_iso
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return {
+            "status": "ok",
+            "entry": "roster",
+            "action": "clear",
+            "file": str(path),
+            "count": 0,
+            "roster": {},
+        }
+
+    if action == "audit":
+        p_dir = Path(project_dir or ".").expanduser().resolve()
+        roster = data["roster"]
+        errors: list[str] = []
+
+        if len(roster) < max(1, int(min_roles)):
+            errors.append(
+                f"INSUFFICIENT_ROLES: 当前仅登记 {len(roster)} 个角色，多员工协作至少需 {int(min_roles)} 个独立角色"
+            )
+
+        seen_tabs: dict[str, str] = {}
+        seen_urls: dict[str, str] = {}
+        has_image_role = False
+        has_audio_role = False
+        for r_name, info in roster.items():
+            if not isinstance(info, dict):
+                continue
+            tid = info.get("tab_id")
+            r_url = str(info.get("url") or "").strip()
+            has_tid = tid not in (None, "")
+            has_concrete_url = _is_concrete_session_url(r_url)
+
+            if not has_tid and not has_concrete_url:
+                errors.append(
+                    f"MISSING_TAB_OR_URL: 角色 '{r_name}' 缺少 tab_id（通道 A）且缺少独立会话 url（通道 B），未确认实际开启独立 Chrome 标签页"
+                )
+            if has_tid:
+                tid_key = str(tid)
+                if tid_key in seen_tabs:
+                    errors.append(
+                        f"DUPLICATE_TAB_ID: 角色 '{r_name}' 与 '{seen_tabs[tid_key]}' 违规共用同一 tab_id={tid_key}"
+                    )
+                else:
+                    seen_tabs[tid_key] = r_name
+            if has_concrete_url:
+                if r_url in seen_urls:
+                    errors.append(
+                        f"DUPLICATE_SESSION_URL: 角色 '{r_name}' 与 '{seen_urls[r_url]}' 违规共用同一会话 url={r_url}"
+                    )
+                else:
+                    seen_urls[r_url] = r_name
+
+            site_low = str(info.get("site") or "").lower()
+            model_low = str(info.get("model") or "").lower()
+            if site_low == "flow" or any(k in model_low for k in ("nano", "image", "omni", "veo")):
+                has_image_role = True
+            if any(k in model_low for k in ("lyria", "tts", "music", "speech")):
+                has_audio_role = True
+
+        real_images = 0
+        real_audios = 0
+        referenced_assets: set[str] = set()
+        if p_dir.is_dir():
+            for root_str, dirs, files in os.walk(p_dir):
+                dirs[:] = [d for d in dirs if d not in _AUDIT_IGNORE_DIRS]
+                root_p = Path(root_str)
+                for fname in files:
+                    fpath = root_p / fname
+                    ext = fpath.suffix.lower()
+                    try:
+                        fsize = fpath.stat().st_size
+                    except OSError:
+                        fsize = 0
+                    if ext in _IMAGE_EXTS and fsize > 512:
+                        real_images += 1
+                    if ext in _AUDIO_EXTS and fsize > 512:
+                        real_audios += 1
+                    if ext in _CODE_EXTS:
+                        try:
+                            text_src = fpath.read_text(encoding="utf-8", errors="ignore")
+                            for m in _ASSET_REF_RE.finditer(text_src):
+                                referenced_assets.add(m.group(1).lstrip("./"))
+                        except OSError:
+                            pass
+
+        if has_image_role and real_images == 0:
+            errors.append(
+                "MISSING_FLOW_IMAGES: 花名册包含视觉美术角色，但项目目录未落盘任何真实图片(>512B)，严禁用 Canvas 伪造替代 Flow 外包生图"
+            )
+        if has_audio_role and real_audios == 0:
+            errors.append(
+                "MISSING_AUDIO_FILES: 花名册包含配乐/配音角色，但项目目录未落盘任何真实音频(>512B)，严禁用 WebAudio 振荡器伪造替代 Lyria/TTS 外包音频"
+            )
+
+        missing_refs = sorted(
+            rel for rel in referenced_assets if not (p_dir / rel).is_file() or (p_dir / rel).stat().st_size == 0
+        )
+        if missing_refs:
+            errors.append(
+                f"MISSING_REFERENCED_ASSETS: 源码引用了 {missing_refs} 但磁盘不存在有效文件（疑似本地降级造假未完成下载）"
+            )
+
+        passed = len(errors) == 0
+        return {
+            "status": "ok" if passed else "failed",
+            "entry": "roster",
+            "action": "audit",
+            "passed": passed,
+            "file": str(path),
+            "project_dir": str(p_dir),
+            "count": len(roster),
+            "real_images": real_images,
+            "real_audios": real_audios,
+            "checked_assets_count": len(referenced_assets),
+            "errors": errors,
+            "roster": roster,
+        }
+
+    raise ValueError(f"不支持的 roster action: {action}")
+
+
+def _extract_playbook_meta(md_path: Path) -> dict:
+    title = md_path.stem
+    scenarios = ""
+    for line in md_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        s = line.strip()
+        if s.startswith("# ") and title == md_path.stem:
+            title = s[2:].strip()
+        elif "适用场景" in s and not scenarios:
+            scenarios = re.sub(r"^>\s*\*\*适用场景\*\*[：:]\s*", "", s).strip()
+        if title != md_path.stem and scenarios:
+            break
+    return {"name": md_path.stem, "title": title, "scenarios": scenarios, "path": str(md_path)}
+
+
+def execute_playbook(
+    action: str = "list",
+    name: str = "",
+    title: str = "",
+    scenarios: str = "",
+    content: str = "",
+    from_file: str = "",
+    playbooks_dir: str | Path | None = None,
+) -> dict:
+    """查阅或 AI 自主沉淀新增主流工作编队卡（references/playbooks/*.md）。"""
+    using_default_dir = playbooks_dir is None
+    pb_dir = Path(playbooks_dir).expanduser().resolve() if playbooks_dir is not None else DEFAULT_PLAYBOOKS_DIR.resolve()
+
+    if action == "list":
+        items: list[dict] = []
+        if pb_dir.is_dir():
+            for md_file in sorted(pb_dir.glob("*.md")):
+                items.append(_extract_playbook_meta(md_file))
+        return {
+            "status": "ok",
+            "entry": "playbook",
+            "action": "list",
+            "dir": str(pb_dir),
+            "count": len(items),
+            "playbooks": items,
+        }
+
+    slug = _validate_playbook_slug(name)
+    target = pb_dir / f"{slug}.md"
+
+    if action == "show":
+        if not target.is_file():
+            raise FileNotFoundError(f"未找到编队卡: {slug} ({target})")
+        meta = _extract_playbook_meta(target)
+        return {
+            "status": "ok",
+            "entry": "playbook",
+            "action": "show",
+            "name": slug,
+            "title": meta["title"],
+            "path": str(target),
+            "text": target.read_text(encoding="utf-8"),
+        }
+
+    if action == "add":
+        body = content
+        if from_file:
+            src_f = Path(from_file).expanduser().resolve()
+            if not src_f.is_file():
+                raise FileNotFoundError(f"编队卡源文件不存在: {src_f}")
+            body = src_f.read_text(encoding="utf-8")
+        body = (body or "").strip()
+        if not body and not (title or scenarios):
+            raise ValueError("playbook add 至少需要提供 --content / --from-file 或 --title / --scenarios")
+
+        final_title = (title or slug).strip()
+        final_scenarios = (scenarios or "通用协作任务").strip()
+        if body.startswith("# "):
+            final_md = body + "\n"
+        else:
+            lines = [f"# {final_title} (`{slug}`)", "", f"> **适用场景**：{final_scenarios}", ""]
+            if body:
+                lines.append(body)
+            else:
+                lines.extend([
+                    "## 团队花名册（1 Tab = 1 员工）",
+                    "",
+                    "| role | 岗位名称 | 站点渠道 | 推荐模型 | 思考等级 | 核心职责与交付物 |",
+                    "| :--- | :--- | :--- | :--- | :--- | :--- |",
+                    "| `director` | 项目总监 | `aistudio` (Playground) | `gemini-4-neon` | `high` | 拆解需求、设定契约与审查成果 |",
+                    "| `executor` | 核心执行员 | `gemini_task` | `gemini-4-hydrogen` | — | 在 Debian 12 沙盒离线落地并用 Python `zipfile` 打包 |",
+                ])
+            final_md = "\n".join(lines) + "\n"
+
+        pb_dir.mkdir(parents=True, exist_ok=True)
+        target.write_text(final_md, encoding="utf-8")
+
+        synced_global = ""
+        if using_default_dir:
+            global_pb_dir = Path.home() / ".gemini" / "config" / "skills" / "gemini-web-agent" / "references" / "playbooks"
+            if global_pb_dir.is_dir() and global_pb_dir.resolve() != pb_dir:
+                global_target = global_pb_dir / f"{slug}.md"
+                global_target.write_text(final_md, encoding="utf-8")
+                synced_global = str(global_target)
+
+        return {
+            "status": "ok",
+            "entry": "playbook",
+            "action": "add",
+            "name": slug,
+            "title": final_title,
+            "path": str(target),
+            "synced_global_path": synced_global or None,
+        }
+
+    raise ValueError(f"不支持的 playbook action: {action}")
+
+
 def _print_result(
     res: dict,
     raw: bool = False,
@@ -2387,6 +3601,74 @@ def _print_result(
         return
     if as_json:
         print(json.dumps(res, ensure_ascii=False, indent=2))
+        return
+    if res.get("entry") == "roster":
+        if res.get("action") == "audit":
+            if res.get("passed"):
+                print(
+                    f"ok | audit=passed | roles={res.get('count', 0)} | "
+                    f"imgs={res.get('real_images', 0)} | audios={res.get('real_audios', 0)} | "
+                    f"checked_assets={res.get('checked_assets_count', 0)} | dir={res.get('project_dir', '')}"
+                )
+            else:
+                errs = res.get("errors") or []
+                print(f"failed | audit=failed | errors={len(errs)} | dir={res.get('project_dir', '')}")
+                for err in errs:
+                    print(f"- ERROR: {err}")
+            return
+        head = f"ok | roster({res.get('action')}) | count={res.get('count', 0)}"
+        if res.get("project"):
+            head += f" | project={res['project']}"
+        head += f" | file={res.get('file', '')}"
+        print(head)
+        for r_key, info in (res.get("roster") or {}).items():
+            title_s = f"({info['title']})" if info.get("title") else ""
+            site_s = info.get("site") or "-"
+            model_s = info.get("model") or "-"
+            tl_s = f"({info['thinking_level']})" if info.get("thinking_level") else ""
+            tab_s = info.get("tab_id") if info.get("tab_id") is not None else "-"
+            st_s = info.get("status") or "-"
+            url_s = f" | {info['url']}" if info.get("url") else ""
+            print(f"- {r_key}{title_s} | {site_s}:{model_s}{tl_s} | tab={tab_s} | {st_s}{url_s}")
+        return
+    if res.get("entry") == "wave":
+        head = (
+            f"{res.get('status', 'ok')} | wave | ok={res.get('succeeded', 0)}/{res.get('total', 0)} "
+            f"| elapsed={res.get('elapsed_sec', 0)}s | roster={res.get('roster_file', '')}"
+        )
+        print(head)
+        for item in res.get("results") or []:
+            parts = [f"- {item.get('role', '?')} [{item.get('site', '?')}] -> {item.get('status', '?')}"]
+            if item.get("elapsed_sec") is not None:
+                parts.append(f"{item['elapsed_sec']}s")
+            if item.get("drive_file_id"):
+                parts.append(f"drive={item['drive_file_id']}")
+            if item.get("saved_text_file"):
+                parts.append(f"out={item['saved_text_file']}")
+            if item.get("unpacked_files"):
+                parts.append(f"unpacked={len(item['unpacked_files'])}")
+            if item.get("saved_files"):
+                parts.append(f"files={','.join(Path(str(x)).name for x in item['saved_files'])}")
+            if item.get("url"):
+                parts.append(f"url={item['url']}")
+            if item.get("error"):
+                parts.append(f"err={item['error']}")
+            print(" | ".join(parts))
+        return
+    if res.get("entry") == "playbook":
+        act = res.get("action")
+        if act == "list":
+            print(f"ok | playbooks | count={res.get('count', 0)} | dir={res.get('dir', '')}")
+            for pb in res.get("playbooks") or []:
+                sc = f" — {pb['scenarios']}" if pb.get("scenarios") else ""
+                print(f"- {pb['name']}: {pb.get('title', pb['name'])}{sc}")
+            return
+        if act == "show":
+            print(f"ok | playbook={res.get('name')} | path={res.get('path')}")
+            print("---")
+            print(res.get("text", "").rstrip())
+            return
+        print(f"ok | playbook(add)={res.get('name')} | path={res.get('path')}")
         return
     if "current_usage" in res or "weekly_usage" in res or "credits" in res:
         print(_format_compact_usage(res))
@@ -2407,8 +3689,17 @@ def _print_result(
         meta_parts.append(f"matched={res['matched_count']}")
     if res.get("saved_files"):
         meta_parts.append(f"files={','.join(str(x) for x in res['saved_files'])}")
+    if res.get("unpacked_files"):
+        meta_parts.append(f"unpacked={len(res['unpacked_files'])}")
     if res.get("attached_files"):
         meta_parts.append(f"attached={','.join(str(x) for x in res['attached_files'])}")
+    if res.get("imported_code"):
+        imp = res["imported_code"]
+        imp_tag = imp.get("github_repo") or imp.get("code_folder") or ""
+        if imp_tag:
+            meta_parts.append(f"code={imp_tag}")
+    if res.get("drive_file_id"):
+        meta_parts.append(f"drive={res['drive_file_id']}")
     if res.get("extracted_dir"):
         meta_parts.append(f"dir={res['extracted_dir']}")
     elif res.get("zip_path"):
@@ -2431,25 +3722,42 @@ def _add_json_flag(p) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="外部 Chrome Gemini / AI Studio / Google Flow 调用工具（CDP 备用通道）")
+    parser = argparse.ArgumentParser(description="外部 Chrome Gemini / AI Studio / Google Flow 高速调度工具（CDP 优先引擎）")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_daemon = sub.add_parser("daemon", help="启动常驻 CDP 桥接服务")
+    p_daemon = sub.add_parser("daemon", help="启动常驻 CDP 桥接服务（默认优先连接专用 AI Chrome 9229）")
     p_daemon.add_argument("--port", type=int, default=None)
 
-    p_ask = sub.add_parser("ask", help="在 gemini.google.com 发起异步任务或对话（默认 task 模式）")
-    p_ask.add_argument("--prompt", "-p", required=True, help="提问或任务描述")
+    p_wave = sub.add_parser("wave", help="一键并发波次调度：单命令多 Tab 并发派发、后台静默等待、自动落盘/解包并更新花名册")
+    p_wave.add_argument("--spec", "-s", required=True, help="波次任务清单 JSON 文件路径（支持 [...] 或 {project, tasks:[...]}）")
+    p_wave.add_argument("--roster-file", default=".web-team.json", help="花名册 JSON 路径（默认 ./.web-team.json）")
+    p_wave.add_argument("--project", default="", help="项目名称（覆盖 spec 内 project）")
+    p_wave.add_argument("--project-dir", default=".", help="相对路径解析根目录（默认当前目录）")
+    p_wave.add_argument("--timeout", type=int, default=360, help="整波次最大等待超时秒数（默认 360）")
+    p_wave.add_argument("--poll-interval", type=float, default=1.5, help="后台状态轮询间隔秒数（默认 1.5）")
+    p_wave.add_argument("--stagger", type=float, default=3.5, help="各 Tab 错峰派单间隔秒数（默认 3.5，防过快点击触发风控）")
+    _add_json_flag(p_wave)
+    p_wave.add_argument("--port", type=int, default=None)
+
+    p_ask = sub.add_parser("ask", help="在 gemini.google.com 发起异步任务或对话（默认 task 模式，支持文件夹/GitHub 导入）")
+    p_ask.add_argument("--prompt", "-p", default="", help="提问或任务描述")
+    p_ask.add_argument("--prompt-file", default="", help="从本地文件读取长 Prompt（避免命令行转义）")
     p_ask.add_argument("--entry", choices=["", "chat", "task"], default="", help="入口: task(默认) | chat(对话；传 --tool/--thinking 时自动切 chat)")
     p_ask.add_argument("--model", "-m", default="", help="模型: hydrogen(新会话默认) | neon | carbon | auto（复用会话不传则保持原模型）")
     p_ask.add_argument("--tool", "-t", default=None, help="对话模式工具: Deep Research | Canvas | 制作图片 | 制作视频 | 制作音乐")
     p_ask.add_argument("--thinking", default=None, help="思考等级: 低 | 中 | 高")
     p_ask.add_argument("--file", dest="files", action="append", default=[], help="无弹窗上传本地附件（可多次传入）")
+    p_ask.add_argument("--folder", default="", help="通过 More uploads -> Import code 上传整个本地代码文件夹（兼容自动 ZIP 兜底）")
+    p_ask.add_argument("--github", default="", help="通过 More uploads -> Import code 导入 GitHub 仓库或分支 URL")
+    p_ask.add_argument("--role", default="", help="绑定 .web-team.json 员工角色名（自动隔离独立标签页并回写 URL）")
+    p_ask.add_argument("--roster-file", default=".web-team.json", help="配合 --role 使用的花名册路径")
     p_ask.add_argument("--reuse-tab", action="store_true", help="显式复用已有标签页继续对话（默认已优先复用）")
     p_ask.add_argument("--new-chat", action="store_true", help="强制新开一个空白对话窗口")
     p_ask.add_argument("--tab-hint", default="", help="指定复用的会话 URL 或片段")
     p_ask.add_argument("--async-send", action="store_true", help="异步发射：发包拿到会话 URL 后立即返回不等待完成")
     p_ask.add_argument("--timeout", type=int, default=180, help="同步等待超时秒数")
     p_ask.add_argument("--out-file", default="", help="将正文直接写入本地文件，stdout 仅返回极简回执")
+    p_ask.add_argument("--unpack-json-dir", default="", help="自动从回答中提取 {相对路径: 内容} JSON 并解包落盘")
     p_ask.add_argument("--raw", action="store_true", help="仅输出纯文本回答")
     _add_json_flag(p_ask)
     p_ask.add_argument("--port", type=int, default=None)
@@ -2467,20 +3775,29 @@ def main() -> None:
     p_usage.add_argument("--port", type=int, default=None)
 
     p_pg = sub.add_parser("playground", help="在 AI Studio Playground (对话/生图/生视频/Lyria音乐/TTS配音/Research) 运行")
-    p_pg.add_argument("--prompt", "-p", required=True, help="输入提示词或配音文本")
+    p_pg.add_argument("--prompt", "-p", default="", help="输入提示词或配音文本")
+    p_pg.add_argument("--prompt-file", default="", help="从本地文件读取长 Prompt（避免命令行转义）")
     p_pg.add_argument(
         "--model",
         "-m",
         default="",
         help="模型别名或ID: hydrogen(新会话默认) | neon | argon | nano2.1 | omni1.2 | lyria | tts | research 等（复用不传则保持原模型）",
     )
+    p_pg.add_argument("--title", default="", help="设置 AI Studio 会话标题（同步至 Google Drive 便于下游 Gemini Task 直接拉取）")
+    p_pg.add_argument("--role", default="", help="绑定 .web-team.json 员工角色名（自动隔离独立标签页并回写 URL 与 Drive ID）")
+    p_pg.add_argument("--roster-file", default=".web-team.json", help="配合 --role 使用的花名册路径")
     p_pg.add_argument("--system", default="", help="系统指令 (System Instructions)")
     p_pg.add_argument("--system-file", default="", help="从本地文件读取文本并写入 System Instructions（如世界观设定 .md/.txt）")
     p_pg.add_argument("--file", dest="files", action="append", default=[], help="无弹窗上传本地文件（可多次传入，支持 txt/md/pdf/docx/图片/音视频）")
-    p_pg.add_argument("--thinking-level", default="high", help="思考等级: high(默认推荐，兼具深度与速度) | medium | low | default(保留默认)；注意: extra-high 已封印防卡死")
+    p_pg.add_argument(
+        "--thinking-level",
+        default="max",
+        help="思考等级: max/extra_high(最高) | high | medium | low | minimal(极速) | default(保留默认)",
+    )
     p_pg.add_argument("--no-max-output", action="store_true", help="不自动将 Output length 拉满至模型上限(1048576)")
     p_pg.add_argument("--with-thoughts", action="store_true", help="在输出中附带模型完整思考链（默认省略以省 Token）")
     p_pg.add_argument("--out-file", default="", help="将生成的文本/代码直接写入本地文件，stdout 仅返回回执")
+    p_pg.add_argument("--unpack-json-dir", default="", help="自动从回答中提取 {相对路径: 内容} JSON 并解包落盘")
     p_pg.add_argument("--download-dir", default="", help="将生成的图片(PNG)/视频(MP4)/音乐(MP3)/配音(WAV)落盘到指定目录")
     p_pg.add_argument("--reuse-tab", action="store_true", help="显式复用已有 AI Studio 标签页继续对话（默认已优先复用）")
     p_pg.add_argument("--new-chat", action="store_true", help="强制新开一个 AI Studio 对话窗口")
@@ -2523,6 +3840,8 @@ def main() -> None:
     p_flow.add_argument("--count", type=int, default=1, choices=[1, 2, 3, 4], help="生成数量（默认 1，节省点数）")
     p_flow.add_argument("--resolution", default="", help="视频分辨率 (360p|720p) 或图片下载清晰度 (1K|2K)")
     p_flow.add_argument("--video-mode", default="", choices=["", "ingredients", "frames"], help="视频模式: ingredients(素材) | frames(帧)")
+    p_flow.add_argument("--role", default="", help="绑定 .web-team.json 员工角色名（自动复用该角色的 Flow 项目 URL 并回写）")
+    p_flow.add_argument("--roster-file", default=".web-team.json", help="配合 --role 使用的花名册路径")
     p_flow.add_argument("--project-url", default="", help="复用已有 Flow 项目 URL (/project/...)")
     p_flow.add_argument("--download-dir", default="", help="生成后自动下载媒体到指定目录")
     p_flow.add_argument("--async-send", action="store_true", help="提交后立即返回 project_url")
@@ -2539,10 +3858,116 @@ def main() -> None:
     p_harvest.add_argument("--copy", dest="copy_only", action="store_true", help="仅复制而不移动/删除源下载文件")
     _add_json_flag(p_harvest)
 
+    p_roster = sub.add_parser("roster", help="管理当前工程 .web-team.json 一页一员工花名册（纯本地零浏览器依赖）")
+    p_roster.add_argument("action", choices=["list", "set", "remove", "clear", "audit"], help="操作类型: list | set | remove | clear | audit")
+    p_roster.add_argument("--file", default=".web-team.json", help="花名册 JSON 路径（默认 ./.web-team.json）")
+    p_roster.add_argument("--role", default="", help="员工角色标识（如 director / coder / artist / qa）")
+    p_roster.add_argument("--title", default="", help="岗位中文名称")
+    p_roster.add_argument("--site", default="", help="站点渠道（aistudio / gemini_task / build / flow）")
+    p_roster.add_argument("--model", "-m", default="", help="模型名或 ID")
+    p_roster.add_argument("--thinking-level", default="", help="思考等级（minimal/low/medium/high/extra_high）")
+    p_roster.add_argument("--tab-id", default="", help="Chrome 标签页 ID（通道 A）")
+    p_roster.add_argument("--url", default="", help="会话或项目 URL（通道 B 唯一标识）")
+    p_roster.add_argument("--drive-file-id", default="", help="AI Studio 自动同步的 Google Drive 文件 ID")
+    p_roster.add_argument("--duty", default="", help="一句话职责说明")
+    p_roster.add_argument("--status", default="", help="状态（ready / running / done / blocked）")
+    p_roster.add_argument("--project", default="", help="所属项目名称")
+    p_roster.add_argument("--project-dir", default=".", help="audit 时校验真实落盘资产与源码的项目目录")
+    p_roster.add_argument("--min-roles", type=int, default=2, help="audit 时要求的最少独立员工角色数（默认 2）")
+    _add_json_flag(p_roster)
+
+    p_pb = sub.add_parser("playbook", help="查阅或由 AI 自主沉淀新增主流工作编队卡（references/playbooks/*.md）")
+    p_pb.add_argument("action", choices=["list", "show", "add"], help="操作类型: list | show | add")
+    p_pb.add_argument("--name", default="", help="编队卡短名 slug（如 web_fullstack_app）")
+    p_pb.add_argument("--title", default="", help="编队卡中文标题（add 时使用）")
+    p_pb.add_argument("--scenarios", default="", help="适用场景描述（add 时使用）")
+    p_pb.add_argument("--content", default="", help="编队卡 Markdown 正文内容（add 时使用）")
+    p_pb.add_argument("--from-file", default="", help="从本地 Markdown 文件导入正文（add 时使用）")
+    p_pb.add_argument("--raw", action="store_true", help="show 时仅输出原始 Markdown 正文")
+    _add_json_flag(p_pb)
+
     args = parser.parse_args()
 
     if args.cmd == "daemon":
         run_daemon(port_override=args.port)
+        return
+
+    if args.cmd == "wave":
+        spec_path = Path(args.spec).expanduser().resolve()
+        if not spec_path.is_file():
+            parser.error(f"wave 任务清单文件不存在: {args.spec}")
+        raw_spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        if isinstance(raw_spec, list):
+            tasks = raw_spec
+            spec_project = ""
+        elif isinstance(raw_spec, dict) and isinstance(raw_spec.get("tasks"), list):
+            tasks = raw_spec["tasks"]
+            spec_project = str(raw_spec.get("project") or "")
+        else:
+            parser.error("wave --spec JSON 必须是任务数组 [...] 或包含 tasks 数组的对象。")
+        eff_project = args.project or spec_project
+        payload = {
+            "tasks": tasks,
+            "roster_file": str(Path(args.roster_file).expanduser().resolve()),
+            "project": eff_project,
+            "project_dir": str(Path(args.project_dir).expanduser().resolve()),
+            "timeout_sec": args.timeout,
+            "poll_interval_sec": args.poll_interval,
+            "stagger_sec": args.stagger,
+        }
+        res = _exec_cdp(
+            args.port,
+            "/wave",
+            payload,
+            lambda b: execute_wave(
+                b,
+                tasks=tasks,
+                roster_file=payload["roster_file"],
+                project=eff_project,
+                project_dir=payload["project_dir"],
+                timeout_sec=args.timeout,
+                poll_interval_sec=args.poll_interval,
+                stagger_sec=args.stagger,
+            ),
+        )
+        _print_result(res, False, as_json=args.as_json)
+        if res.get("succeeded", 0) == 0 and res.get("total", 0) > 0:
+            sys.exit(1)
+        return
+
+    if args.cmd == "roster":
+        res = execute_roster(
+            action=args.action,
+            roster_file=args.file,
+            role=args.role,
+            title=args.title,
+            site=args.site,
+            model=args.model,
+            thinking_level=args.thinking_level,
+            tab_id=args.tab_id,
+            url=args.url,
+            drive_file_id=args.drive_file_id,
+            duty=args.duty,
+            status=args.status,
+            project=args.project,
+            project_dir=args.project_dir,
+            min_roles=args.min_roles,
+        )
+        _print_result(res, False, as_json=args.as_json)
+        if args.action == "audit" and not res.get("passed", True):
+            sys.exit(2)
+        return
+
+    if args.cmd == "playbook":
+        res = execute_playbook(
+            action=args.action,
+            name=args.name,
+            title=args.title,
+            scenarios=args.scenarios,
+            content=args.content,
+            from_file=args.from_file,
+        )
+        _print_result(res, getattr(args, "raw", False), ("text",), as_json=args.as_json)
         return
 
     if args.cmd == "harvest":
@@ -2558,18 +3983,33 @@ def main() -> None:
         return
 
     if args.cmd == "ask":
-        new_tab = bool(args.new_chat and not args.reuse_tab and not args.tab_hint)
+        prompt_text = args.prompt
+        if not prompt_text and args.prompt_file:
+            prompt_text = Path(args.prompt_file).expanduser().resolve().read_text(encoding="utf-8")
+        if not prompt_text:
+            parser.error("ask 必须提供 --prompt 或 --prompt-file")
+        tab_hint = args.tab_hint
+        new_tab = bool(args.new_chat and not args.reuse_tab and not tab_hint)
+        if args.role and not tab_hint:
+            role_info = _roster_lookup_role(args.roster_file, args.role)
+            if role_info.get("url") and not args.new_chat:
+                tab_hint = str(role_info["url"])
+                new_tab = False
+            else:
+                new_tab = True
         payload = {
-            "prompt": args.prompt,
+            "prompt": prompt_text,
             "entry": args.entry,
             "model": args.model,
             "tool": args.tool,
             "thinking": args.thinking,
             "new_tab": new_tab,
-            "tab_url_hint": args.tab_hint,
+            "tab_url_hint": tab_hint,
             "async_send": args.async_send,
             "timeout_sec": args.timeout,
             "files": args.files,
+            "code_folder": args.folder,
+            "github_repo": args.github,
         }
         res = _exec_cdp(
             args.port,
@@ -2577,18 +4017,33 @@ def main() -> None:
             payload,
             lambda b: execute_ask(
                 b,
-                prompt=args.prompt,
+                prompt=prompt_text,
                 entry=args.entry,
                 model=args.model,
                 tool=args.tool,
                 thinking=args.thinking,
                 new_tab=new_tab,
-                tab_url_hint=args.tab_hint,
+                tab_url_hint=tab_hint,
                 async_send=args.async_send,
                 timeout_sec=args.timeout,
                 files=args.files,
+                code_folder=args.folder,
+                github_repo=args.github,
             ),
         )
+        if args.role:
+            execute_roster(
+                action="set",
+                roster_file=args.roster_file,
+                role=args.role,
+                site="gemini_task" if (args.entry or "task") == "task" else "gemini_chat",
+                model=str(res.get("model") or args.model),
+                url=str(res.get("url") or ""),
+                status="running" if args.async_send else "done",
+            )
+        if args.unpack_json_dir:
+            body_txt = str(res.get("answer") or res.get("text") or "")
+            res["unpacked_files"] = _unpack_json_from_text(body_txt, args.unpack_json_dir)
         res = _write_text_output(res, args.out_file)
         _print_result(res, args.raw, ("answer", "url"), as_json=args.as_json)
         return
@@ -2611,7 +4066,7 @@ def main() -> None:
                 res["flow"] = call_daemon("/flow-usage", {})
             else:
                 ws_url = get_cdp_ws_url(args.port)
-                with sync_playwright() as p:
+                with _get_sync_playwright()() as p:
                     browser = p.chromium.connect_over_cdp(ws_url, timeout=5000)
                     res = execute_usage(browser)
                     res["flow"] = execute_flow_usage(browser)
@@ -2626,21 +4081,35 @@ def main() -> None:
         return
 
     if args.cmd == "playground":
-        new_tab = bool(args.new_chat and not args.reuse_tab and not args.tab_hint)
+        prompt_text = args.prompt
+        if not prompt_text and args.prompt_file:
+            prompt_text = Path(args.prompt_file).expanduser().resolve().read_text(encoding="utf-8")
+        if not prompt_text:
+            parser.error("playground 必须提供 --prompt 或 --prompt-file")
+        tab_hint = args.tab_hint
+        new_tab = bool(args.new_chat and not args.reuse_tab and not tab_hint)
+        if args.role and not tab_hint:
+            role_info = _roster_lookup_role(args.roster_file, args.role)
+            if role_info.get("url") and not args.new_chat:
+                tab_hint = str(role_info["url"])
+                new_tab = False
+            else:
+                new_tab = True
         payload = {
-            "prompt": args.prompt,
+            "prompt": prompt_text,
             "model": args.model,
             "system_instruction": args.system,
             "system_file": args.system_file,
             "files": args.files,
             "new_tab": new_tab,
-            "tab_url_hint": args.tab_hint,
+            "tab_url_hint": tab_hint,
             "async_send": args.async_send,
             "timeout_sec": args.timeout,
             "download_dir": args.download_dir,
             "thinking_level": args.thinking_level,
             "max_output": not args.no_max_output,
             "include_thoughts": args.with_thoughts,
+            "title": args.title,
         }
         res = _exec_cdp(
             args.port,
@@ -2648,21 +4117,38 @@ def main() -> None:
             payload,
             lambda b: execute_playground(
                 b,
-                prompt=args.prompt,
+                prompt=prompt_text,
                 model=args.model,
                 system_instruction=args.system,
                 system_file=args.system_file,
                 files=args.files,
                 new_tab=new_tab,
-                tab_url_hint=args.tab_hint,
+                tab_url_hint=tab_hint,
                 async_send=args.async_send,
                 timeout_sec=args.timeout,
                 download_dir=args.download_dir,
                 thinking_level=args.thinking_level,
                 max_output=not args.no_max_output,
                 include_thoughts=args.with_thoughts,
+                title=args.title,
             ),
         )
+        if args.role:
+            execute_roster(
+                action="set",
+                roster_file=args.roster_file,
+                role=args.role,
+                title=args.title,
+                site="aistudio",
+                model=str(res.get("model") or args.model),
+                thinking_level=args.thinking_level,
+                url=str(res.get("url") or ""),
+                drive_file_id=str(res.get("drive_file_id") or ""),
+                status="running" if args.async_send else "done",
+            )
+        if args.unpack_json_dir:
+            body_txt = str(res.get("text") or res.get("answer") or "")
+            res["unpacked_files"] = _unpack_json_from_text(body_txt, args.unpack_json_dir)
         res = _write_text_output(res, args.out_file)
         _print_result(res, args.raw, ("text", "url"), as_json=args.as_json)
         return
@@ -2722,6 +4208,11 @@ def main() -> None:
         return
 
     if args.cmd == "flow":
+        project_url = args.project_url
+        if args.role and not project_url:
+            role_info = _roster_lookup_role(args.roster_file, args.role)
+            if role_info.get("url"):
+                project_url = str(role_info["url"])
         payload = {
             "prompt": args.prompt,
             "media": args.media,
@@ -2730,7 +4221,7 @@ def main() -> None:
             "count": args.count,
             "resolution": args.resolution,
             "video_mode": args.video_mode,
-            "project_url": args.project_url,
+            "project_url": project_url,
             "download_dir": args.download_dir,
             "async_send": args.async_send,
             "timeout_sec": args.timeout,
@@ -2748,12 +4239,22 @@ def main() -> None:
                 count=args.count,
                 resolution=args.resolution,
                 video_mode=args.video_mode,
-                project_url=args.project_url,
+                project_url=project_url,
                 download_dir=args.download_dir,
                 async_send=args.async_send,
                 timeout_sec=args.timeout,
             ),
         )
+        if args.role:
+            execute_roster(
+                action="set",
+                roster_file=args.roster_file,
+                role=args.role,
+                site="flow",
+                model=args.model or "Nano Banana 2.1",
+                url=str(res.get("project_url") or res.get("url") or ""),
+                status="running" if args.async_send else "done",
+            )
         _print_result(res, False, as_json=args.as_json)
 
 

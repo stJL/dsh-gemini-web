@@ -137,6 +137,112 @@ def _fetch_blob_as_data_url(tab_id: int, blob_url: str) -> str:
         return ""
 
 
+def _aistudio_attach_files_agentlimb(tab_id: int, files: list[str], timeout_sec: int = 60) -> list[str]:
+    """在 Google AI Studio 通过 DataTransfer 注入无弹窗上传本地文件，自动处理初次许可弹窗并等待解析。"""
+    if not files:
+        return []
+    from urllib.parse import unquote, urlparse
+    valid_paths: list[Path] = []
+    for f in files:
+        raw = str(f).strip().strip("'\"")
+        if raw.startswith("file://"):
+            raw = unquote(urlparse(raw).path)
+        p = Path(raw).expanduser().resolve()
+        if p.is_file():
+            valid_paths.append(p)
+        else:
+            sys.stderr.write(f"⚠️ [Gemini Web Agent] 待挂载文件不存在，跳过: {f} (解析路径: {p})\n")
+    if not valid_paths:
+        return []
+
+    import mimetypes
+
+    # 1. 自动处理可能弹出的 "Start creating with media in Google AI Studio" (Acknowledge) 协议弹窗
+    dismiss_js = """(() => {
+      const ackBtns = Array.from(document.querySelectorAll("button")).filter(
+        b => /acknowledge/i.test((b.innerText || '').trim())
+      );
+      ackBtns.forEach(b => b.click());
+      return { clicked: ackBtns.length };
+    })()"""
+    try:
+        agentlimb_client.eval_js(dismiss_js, tab_id=tab_id)
+    except Exception:
+        pass
+
+    attached_names: list[str] = []
+    for p in valid_paths:
+        fname = p.name
+        try:
+            content_bytes = p.read_bytes()
+        except Exception as e:
+            sys.stderr.write(f"⚠️ [Gemini Web Agent] 读取文件失败: {p} ({e})\n")
+            continue
+
+        b64 = base64.b64encode(content_bytes).decode("ascii")
+        mime_type, _ = mimetypes.guess_type(str(p))
+        if not mime_type:
+            mime_type = "text/plain" if p.suffix.lower() in (
+                ".md", ".txt", ".json", ".py", ".cpp", ".hpp", ".h", ".c", ".ts", ".js", ".log", ".yml", ".yaml"
+            ) else "application/octet-stream"
+
+        upload_js = f"""(async (fname, b64, mimeType) => {{
+          const inp = document.querySelector("ms-add-media-button input[type=file], input.file-input");
+          if (!inp) return {{ ok: false, error: "file input not found" }};
+
+          // 自动点掉 Acknowledge 弹窗
+          const ack = Array.from(document.querySelectorAll("button")).find(b => /acknowledge/i.test(b.innerText || ''));
+          if (ack) {{ ack.click(); await new Promise(r => setTimeout(r, 200)); }}
+
+          const binary = atob(b64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+          const file = new File([bytes], fname, {{ type: mimeType }});
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          inp.files = dt.files;
+
+          inp.dispatchEvent(new Event("change", {{ bubbles: true }}));
+          inp.dispatchEvent(new Event("input", {{ bubbles: true }}));
+          return {{ ok: true, name: fname, size: file.size }};
+        }})({json.dumps(fname)}, {json.dumps(b64)}, {json.dumps(mime_type)})"""
+
+        try:
+            res = agentlimb_client.eval_js(upload_js, tab_id=tab_id)
+            if res.get("result", {}).get("result", {}).get("ok"):
+                attached_names.append(fname)
+        except Exception as e:
+            sys.stderr.write(f"⚠️ [Gemini Web Agent] 上传文件 {fname} 异常: {e}\n")
+
+    if not attached_names:
+        return []
+
+    # 2. 等待网页端解析与 Tokenization 完成
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        check_js = """(() => {
+          const container = document.querySelector(".prompt-box-container, ms-prompt-box, footer");
+          const text = (container ? container.innerText : '') || '';
+          return {
+            text: text,
+            isLoading: /loading/i.test(text) || /uploading/i.test(text)
+          };
+        })()"""
+        try:
+            c_res = agentlimb_client.eval_js(check_js, tab_id=tab_id).get("result", {}).get("result", {})
+            c_text = c_res.get("text", "")
+            is_loading = c_res.get("isLoading", False)
+            all_seen = all(name in c_text for name in attached_names)
+            if all_seen and not is_loading:
+                break
+        except Exception:
+            pass
+        time.sleep(0.5)
+
+    return attached_names
+
+
 def _extract_and_save_code(text: str, task: str, download_dir: str = "") -> list[str]:
     """统一提取文本中的代码块并保存到本地工作区（KISS 简洁版，杜绝截断与重复代码）"""
     if not text:
@@ -642,6 +748,7 @@ def run_agent_task(
     new_chat: bool = False,
     download_dir: str = "",
     keep_tab: bool = False,
+    files: list[str] | None = None,
 ) -> dict:
     t0 = time.time()
     st = agentlimb_client.get_status()
@@ -889,22 +996,26 @@ def run_agent_task(
               }}
 
               // 檢查页面整體 Run 按鈕是否有 Stop/Cancel 標記
-              const runBtn = document.querySelector('button.ctrl-enter-submits');
+              const runBtn = document.querySelector('button.ctrl-enter-submits') || Array.from(document.querySelectorAll('button')).find(b => /^Run\b/i.test((b.innerText || '').trim()));
               const runBtnTxt = (runBtn?.innerText || '').trim();
               const runBtnAria = (runBtn?.getAttribute('aria-label') || '').trim();
-              if (/\\b(Stop|Cancel)\\b/i.test(runBtnTxt) || /\\b(Stop|Cancel)\\b/i.test(runBtnAria)) {{
-                running = true;
-              }}
+              const isStop = /\\b(Stop|Cancel)\\b/i.test(runBtnTxt) || /\\b(Stop|Cancel)\\b/i.test(runBtnAria);
+              const spinner = document.querySelector('mat-spinner, mat-progress-bar, .spinner, .loading');
+              running = Boolean(isStop || spinner);
 
-              // 如果尚未產生任何輸出，且有思考或轉圈中，判定為 running
-              if (!hasOutput && (isThinking || modelTurns.length > 0)) {{
-                running = true;
+              const lastModelTurn = modelTurns.length > 0 ? modelTurns[modelTurns.length - 1] : null;
+              if (lastModelTurn) {{
+                try {{ lastModelTurn.scrollIntoView({{ block: 'nearest', behavior: 'instant' }}); }} catch(e) {{}}
+                const rawTurnText = (lastModelTurn.innerText || lastModelTurn.textContent || '').trim();
+                const cleanTurnText = rawTurnText.replace(/(more_vert|thumb_up|thumb_down|edit|\\d+(\\.\\d+)?s)/g, '').trim();
+                if (cleanTurnText.length > 0) {{
+                  hasOutput = true;
+                }}
               }}
 
               const errorEls = Array.from(document.querySelectorAll('.error, mat-error, .snack-bar-container, [data-test-id*="error"]'));
               const errorMessages = errorEls.map(e => (e.innerText || '').trim()).filter(Boolean).join(' ');
               const announcer = document.querySelector('.cdk-live-announcer-element')?.innerText || '';
-              const lastModelTurn = modelTurns.length > 0 ? modelTurns[modelTurns.length - 1] : null;
 
               return {{
                 running: running,
@@ -1142,6 +1253,15 @@ def run_agent_task(
         ready = wait_for_selector(tab_id, 'textarea[aria-label="Enter a prompt"]', timeout=15.0)
         if not ready:
             return {"ok": False, "error": "AI Studio 页面加载超时（未找到输入框）"}
+
+        # 若有本地文件上传需求，在初次尝试前挂载到 AI Studio
+        if files:
+            attached_ok = _aistudio_attach_files_agentlimb(tab_id, files)
+            if attached_ok:
+                sys.stderr.write(f"📁 [Gemini Web Agent] 成功挂载本地文件至 AI Studio: {', '.join(attached_ok)}\n")
+            else:
+                sys.stderr.write(f"⚠️ [Gemini Web Agent] 本地文件挂载未能成功完成\n")
+            sys.stderr.flush()
 
         # 初次尝试
         success, output, files, err = _attempt_run(initial_model_id)
@@ -1469,6 +1589,7 @@ if __name__ == "__main__":
     p_task.add_argument("--fallback-ladder", default="", help="自定义降级阶梯序列 (逗號分隔或JSON列表，最多5級)")
     p_task.add_argument("--download-dir", default="", help="多模態下載目錄")
     p_task.add_argument("--keep-tab", action="store_true", help="执行完畢後保留浏览器标签页不关闭")
+    p_task.add_argument("--file", dest="files", action="append", default=[], help="待上傳的本機檔案路徑（可多次傳入）")
 
     # 如果傳入了 usage 子命令
     if len(sys.argv) > 1 and sys.argv[1] == "usage":
@@ -1518,6 +1639,7 @@ if __name__ == "__main__":
             new_chat=args.new_chat,
             download_dir=args.download_dir,
             keep_tab=args.keep_tab,
+            files=getattr(args, "files", []) or [],
         )
         print(json.dumps(res, ensure_ascii=False))
         sys.exit(0)

@@ -34,11 +34,16 @@ export function buildDynamicCardGuidance(): string {
 - 回复 调整参数（如「改用 Flash Lite」、「改用 Argon」等）：按您的要求调整后直接发包
 - 回复 「取消」：中止外部调度，改由本地作答
 
-【核心判断铁律】：
-1. 智能/定时模式（默认）：执行模型必须以二级列表「  - 」在下一行缩进展示完整阶梯序列（即「- 🧠 执行模型：${policyLabel}\\n  - ${ladderStr}」），严禁挤在同一行，严禁擅自缩水只输出单个模型，严禁输出未经渲染的 HTML 标签（如 <br>）！
+【核心参数化动态组装铁律】：
+1. 🧠 执行模型【绝对禁止使用写死/硬编码的旧模板字符串与严禁抄袭历史对话】：
+   🚨【历史惯性斩断令】：本轮输出时，严禁直接复制或参考本对话中上一轮助手输出的旧确认卡！无论上一轮输出了什么顺序，当前轮次必须 100% 严格以【当前系统生效之确认卡配置】中的最新阶梯序列为准进行重新输出！
+   在智能/定时模式下，必须 100% 实时原样读取上方【当前系统生效之确认卡配置】中的实际阶梯序列：
+   「- 🧠 执行模型：${policyLabel}\\n  - ${ladderStr}」
+   ⚠️ 特别注意：当前用户配置的第一个节点为【${ladderStr.split(' -> ')[0]}】，无论其为模型名还是域名（如 gemini.google.com），都是用户的明确意图，绝对严禁按常理将其挪到末尾，必须完整、一字不差地逐字原样完整输出「${ladderStr}」，严禁从任何历史对话或旧文档中抄写写死的默认序列，严禁擅自缩水只输出单个模型，严禁输出未经渲染的 HTML 标签（如 <br>）！
 2. 严格模式：仅当用户配置或指定严格模式时，执行模型才显示单个模型（如「- 🧠 执行模型：（严格模式）\\n  - ${cfg.defaultModel || 'gemini-4-hydrogen'}」）。
 3. 渠道变化：若为多媒体生图/视频任务，渠道设为 Google Flow（flow），模型设为 gemini-nano-banana-2.1；若用户指定官网渠道，渠道设为 gemini.google.com，模型设为 Auto。
-4. 用户指定模型绝对优先：若用户输入明确指定了模型（如「用 Flash Lite」），执行模型必须 100% 原样采用用户指定的模型，严禁擅自升级！`
+4. 用户指定模型绝对优先：若用户输入明确指定了模型（如「用 Flash Lite」），执行模型必须 100% 原样采用用户指定的模型，严禁擅自升级！
+5. 挂载本地文件（条件项）：若用户需求涉及分析本地文件、日志、论文 PDF、代码文件或输入了 @文件，【绝对禁止调用本地 read、cat、bash 工具自行读取】！你必须直接在第 1 步确认卡中添加「- 📁 挂载文件：[文件名]」，并在第 2 步正式发包时将文件路径填入 files 数组参数中，全权交由外部 Google 网页端 1M 超长上下文直接吞吐！若无文件需求，则完全不输出此行。`
 }
 
 export function apply(ctx: any) {
@@ -82,7 +87,7 @@ export function apply(ctx: any) {
 ${buildDynamicCardGuidance()}
 
 1. 🎯【用户指定模型绝对优先】：若用户指定了具体模型（如「用 Gemini 3.5 Flash Lite」、「用 Argon」），确认卡与发包必须 100% 采用该模型，严禁擅自升级或替换！只有用户完全未指定时才采用系统默认阶梯。
-2. 🛑【明令禁止本地擅自代劳与 Subagent 劫持】：严禁在本地自行编写答案，严禁调用 subagent 消耗付费额度！
+2. 🛑【明令禁止本地擅自代劳、Subagent 劫持与本地 read 工具拦截】：严禁在本地自行编写答案，严禁调用 read、cat、bash 等本地工具预先读取文件，严禁调用 subagent 消耗付费额度！当用户要求分析本地文件或输入了 @文件 时，直接将该文件路径放入确认卡并交给外部网页端挂载分析！
 3. 📦【调用完成后的展示义务】：调用完成后，必须完整呈现降级流程通知、落地文件超链接以及核心架构说明与代码！`
         },
         parameters: {
@@ -121,6 +126,11 @@ ${buildDynamicCardGuidance()}
               type: 'boolean',
               description: '是否开启全新对话窗口（若为 true 则重置为全新聊天室，默认为 false 延续对话）',
             },
+            files: {
+              type: 'array',
+              items: { type: 'string' },
+              description: '待上传至 Google 网页端分析的本地文件、图片、日志或论文 PDF 绝对/相对路径列表（选填，支持多文件）',
+            },
           },
         },
         output: {
@@ -145,6 +155,7 @@ ${buildDynamicCardGuidance()}
             timeoutSec: args.timeout_sec,
             newChat: args.new_chat,
             sessionId: sessionId,
+            files: args.files,
           })
           if (!res.ok) {
             if (res.error?.includes('CONGESTION_HALT')) {

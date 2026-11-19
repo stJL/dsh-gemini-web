@@ -9,14 +9,23 @@
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import sys
+import time
+import urllib.request
 import venv
 from pathlib import Path
+
+# 专用 AI Chrome 独立 Profile 配置（与用户日常 Chrome 彻底隔离，永不碰默认 User Data）
+AI_CHROME_DEFAULT_PORT = 9229
+AI_CHROME_PROFILE_DIRNAME = ".gemini-web-chrome"
+AI_CHROME_SHORTCUT_BASENAME = "Gemini AI Chrome"
 
 # 支持 AgentLimb 扩展与 Chrome DevTools Protocol (CDP) 的 Chromium 家族注册表
 CHROMIUM_LINUX_APP_DIRS = (
@@ -55,16 +64,43 @@ CHROMIUM_LINUX_BINS = (
 )
 
 
+def get_ai_chrome_profile_dir(home: Path | None = None, custom_dir: str = "") -> Path:
+    """返回专用 AI Chrome 独立 User Data 目录（与日常 Chrome 物理隔离，一次登录永久免弹窗）。"""
+    if (custom_dir or "").strip():
+        return Path(custom_dir).expanduser().resolve()
+    env_dir = (os.environ.get("GEMINI_WEB_CHROME_DIR") or "").strip()
+    if env_dir:
+        return Path(env_dir).expanduser().resolve()
+    return ((home or Path.home()) / AI_CHROME_PROFILE_DIRNAME).resolve()
+
+
+def probe_cdp_http(port: int | str, timeout_sec: float = 1.2) -> dict | None:
+    """绕过系统代理探测指定端口的 Chrome CDP /json/version；就绪返回 JSON 字典，否则 None。"""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    req = urllib.request.Request(f"http://127.0.0.1:{port}/json/version", method="GET")
+    try:
+        with opener.open(req, timeout=timeout_sec) as resp:
+            if resp.status == 200:
+                return json.loads(resp.read().decode("utf-8", errors="replace"))
+    except Exception:
+        return None
+    return None
+
+
 def iter_devtools_active_port_files(
     sys_name: str | None = None,
     home: Path | None = None,
     env: dict[str, str] | None = None,
 ) -> list[Path]:
-    """跨平台返回所有 Chromium 系浏览器可能的 DevToolsActivePort 路径（含 Linux XDG/Snap/Flatpak）。"""
+    """跨平台返回所有 Chromium 系浏览器可能的 DevToolsActivePort 路径（优先专用 AI Chrome 独立目录）。"""
     sys_low = (sys_name or platform.system()).lower()
     home_dir = home or Path.home()
     env_map = env if env is not None else os.environ
     candidates: list[Path] = []
+
+    # 最高优先级：专用独立 AI Chrome Profile（免弹窗、不干扰日常 Chrome）
+    ai_profile = get_ai_chrome_profile_dir(home=home_dir)
+    candidates.append(ai_profile / "DevToolsActivePort")
 
     if sys_low.startswith("win"):
         local_app = Path(env_map.get("LOCALAPPDATA") or (home_dir / "AppData" / "Local"))
@@ -567,3 +603,220 @@ def find_windows_servers_via_win32() -> list[dict]:
         })
 
     return candidates
+
+
+def _resolve_desktop_dir(sys_name: str | None = None, home: Path | None = None) -> Path:
+    """跨平台定位用户桌面目录（Windows 兼容 OneDrive 重定向桌面）。"""
+    sys_low = (sys_name or platform.system()).lower()
+    home_dir = home or Path.home()
+    if sys_low.startswith("win"):
+        try:
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", "[Environment]::GetFolderPath('Desktop')"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=3,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                p = Path(proc.stdout.strip())
+                if p.exists():
+                    return p
+        except Exception:
+            pass
+    desktop = home_dir / "Desktop"
+    return desktop if desktop.exists() else home_dir
+
+
+def create_ai_chrome_shortcut(
+    chrome_exe: str,
+    profile_dir: Path | str,
+    port: int = AI_CHROME_DEFAULT_PORT,
+    desktop_dir: Path | str | None = None,
+    sys_name: str | None = None,
+) -> dict:
+    """跨平台创建专用 AI Chrome 桌面快捷方式（独立 --user-data-dir 与固定 CDP 端口，绝不碰日常 Chrome）。"""
+    if not chrome_exe:
+        raise FileNotFoundError("未找到本机 Chromium/Chrome 可执行文件，无法创建专用 AI Chrome 快捷方式。")
+    sys_low = (sys_name or platform.system()).lower()
+    prof = Path(profile_dir).expanduser().resolve()
+    prof.mkdir(parents=True, exist_ok=True)
+    desk = Path(desktop_dir).expanduser().resolve() if desktop_dir else _resolve_desktop_dir(sys_name=sys_low)
+    desk.mkdir(parents=True, exist_ok=True)
+
+    chrome_args = (
+        f'--remote-debugging-port={int(port)} '
+        f'--user-data-dir="{prof}" '
+        '--no-first-run --no-default-browser-check'
+    )
+    launch_cmd = f'"{chrome_exe}" {chrome_args}'
+
+    if sys_low.startswith("win"):
+        lnk_path = desk / f"{AI_CHROME_SHORTCUT_BASENAME}.lnk"
+        # 通过 PowerShell WScript.Shell 创建原生 Windows .lnk 快捷方式
+        ps_exe = chrome_exe.replace("'", "''")
+        ps_args = chrome_args.replace("'", "''")
+        ps_lnk = str(lnk_path).replace("'", "''")
+        ps_work = str(Path(chrome_exe).parent).replace("'", "''")
+        ps_script = (
+            "$ws = New-Object -ComObject WScript.Shell; "
+            f"$s = $ws.CreateShortcut('{ps_lnk}'); "
+            f"$s.TargetPath = '{ps_exe}'; "
+            f"$s.Arguments = '{ps_args}'; "
+            f"$s.WorkingDirectory = '{ps_work}'; "
+            f"$s.IconLocation = '{ps_exe},0'; "
+            "$s.Description = 'Gemini Web Agent 专用独立 Chrome (CDP 高速免弹窗)'; "
+            "$s.Save()"
+        )
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_script],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        )
+        if proc.returncode != 0 or not lnk_path.exists():
+            # 兜底生成 .bat 启动脚本，确保跨环境可靠可用
+            bat_path = desk / f"{AI_CHROME_SHORTCUT_BASENAME}.bat"
+            bat_path.write_text(f'@echo off\r\nstart "" {launch_cmd}\r\n', encoding="utf-8")
+            return {
+                "created": True,
+                "shortcut_path": str(bat_path),
+                "format": "bat",
+                "profile_dir": str(prof),
+                "port": int(port),
+                "launch_command": launch_cmd,
+                "warning": (proc.stderr or "").strip() or None,
+            }
+        return {
+            "created": True,
+            "shortcut_path": str(lnk_path),
+            "format": "lnk",
+            "profile_dir": str(prof),
+            "port": int(port),
+            "launch_command": launch_cmd,
+        }
+
+    if sys_low == "darwin":
+        cmd_path = desk / f"{AI_CHROME_SHORTCUT_BASENAME}.command"
+        cmd_path.write_text(
+            "#!/bin/bash\n"
+            f'"{chrome_exe}" --remote-debugging-port={int(port)} '
+            f'--user-data-dir="{prof}" --no-first-run --no-default-browser-check &\n',
+            encoding="utf-8",
+        )
+        cmd_path.chmod(cmd_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        return {
+            "created": True,
+            "shortcut_path": str(cmd_path),
+            "format": "command",
+            "profile_dir": str(prof),
+            "port": int(port),
+            "launch_command": launch_cmd,
+        }
+
+    desktop_file = desk / "gemini-ai-chrome.desktop"
+    desktop_file.write_text(
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        f"Name={AI_CHROME_SHORTCUT_BASENAME}\n"
+        "Comment=Gemini Web Agent 专用独立 Chrome (CDP 高速免弹窗)\n"
+        f'Exec="{chrome_exe}" --remote-debugging-port={int(port)} --user-data-dir="{prof}" --no-first-run --no-default-browser-check\n'
+        "Icon=google-chrome\n"
+        "Terminal=false\n"
+        "Categories=Network;WebBrowser;Development;\n",
+        encoding="utf-8",
+    )
+    desktop_file.chmod(desktop_file.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return {
+        "created": True,
+        "shortcut_path": str(desktop_file),
+        "format": "desktop",
+        "profile_dir": str(prof),
+        "port": int(port),
+        "launch_command": launch_cmd,
+    }
+
+
+def launch_ai_chrome(
+    chrome_exe: str,
+    profile_dir: Path | str,
+    port: int = AI_CHROME_DEFAULT_PORT,
+    open_urls: list[str] | None = None,
+    wait_ready_sec: float = 8.0,
+) -> dict:
+    """启动独立隔离的专用 AI Chrome 实例（绝不强杀日常 Chrome），并等待其 CDP HTTP 端口就绪。"""
+    prof = Path(profile_dir).expanduser().resolve()
+    prof.mkdir(parents=True, exist_ok=True)
+    port_int = int(port)
+
+    existing = probe_cdp_http(port_int, timeout_sec=1.0)
+    if existing:
+        return {
+            "launched": True,
+            "already_running": True,
+            "cdp_http_ready": True,
+            "port": port_int,
+            "profile_dir": str(prof),
+            "ws_url": existing.get("webSocketDebuggerUrl") or f"http://127.0.0.1:{port_int}",
+            "browser": existing.get("Browser"),
+        }
+
+    if not chrome_exe:
+        raise FileNotFoundError("未找到本机 Chromium/Chrome 可执行文件。")
+
+    is_first_profile = not (prof / "Default").exists()
+    urls = list(open_urls or [])
+    if not urls and is_first_profile:
+        urls = [
+            "https://aistudio.google.com/prompts/new_chat",
+            "https://gemini.google.com/app",
+        ]
+
+    cmd = [
+        chrome_exe,
+        f"--remote-debugging-port={port_int}",
+        f"--user-data-dir={prof}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        *urls,
+    ]
+    popen_kwargs: dict = {
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "stdin": subprocess.DEVNULL,
+    }
+    if platform.system().lower().startswith("win"):
+        popen_kwargs["creationflags"] = (
+            getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+        )
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    proc = subprocess.Popen(cmd, **popen_kwargs)
+    deadline = time.time() + max(1.0, float(wait_ready_sec))
+    ver = None
+    while time.time() < deadline:
+        ver = probe_cdp_http(port_int, timeout_sec=1.2)
+        if ver:
+            if is_first_profile:
+                # 首次创建隔离 Profile 时 Chrome 可能会在初始化后切一次主进程，短等并复核最终 wsUrl
+                time.sleep(1.5)
+                ver = probe_cdp_http(port_int, timeout_sec=1.5) or ver
+            break
+        time.sleep(0.35)
+
+    return {
+        "launched": True,
+        "already_running": False,
+        "first_run_login_needed": is_first_profile,
+        "cdp_http_ready": ver is not None,
+        "pid": proc.pid,
+        "port": port_int,
+        "profile_dir": str(prof),
+        "ws_url": (ver or {}).get("webSocketDebuggerUrl") or f"http://127.0.0.1:{port_int}",
+        "browser": (ver or {}).get("Browser"),
+    }

@@ -3,6 +3,7 @@ import { promisify } from 'node:util'
 import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { detectDualChannel, findAgentLimbScript, findCliScript } from './detector.js'
 import { loadConfig } from '../config.js'
 
@@ -22,6 +23,7 @@ export interface AgentTaskOptions {
   sessionId?: string
   newChat?: boolean
   downloadDir?: string
+  files?: string[]
 }
 
 export interface AgentTaskResult {
@@ -116,6 +118,64 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
     }
   } catch {}
 
+  // 解析并验证待上传的本地文件路径（支持 file://、~、相对路径、@ 语法，及提示词拖拽文件自动萃取）
+  const cleanAndResolvePath = (raw: string): string | null => {
+    if (!raw || typeof raw !== 'string') return null
+    let f = raw.trim().replace(/^['"‘“@]|['"’”]$/g, '').trim()
+    if (f.startsWith('file://')) {
+      try {
+        f = fileURLToPath(f)
+      } catch {
+        f = f.replace(/^file:\/\//, '')
+      }
+    }
+    if (f.startsWith('~')) {
+      f = path.join(os.homedir(), f.slice(1))
+    }
+
+    // 候选路径尝试清单：绝对路径、当前 CWD、工作区根目录
+    const candidates = [
+      path.isAbsolute(f) ? f : null,
+      path.resolve(process.cwd(), f),
+      path.resolve(path.dirname(downloadDir), f),
+    ].filter(Boolean) as string[]
+
+    for (const c of candidates) {
+      try {
+        if (fs.existsSync(c) && fs.statSync(c).isFile()) {
+          return c
+        }
+      } catch {}
+    }
+    return null
+  }
+
+  const resolvedFiles: string[] = []
+  if (options.files && Array.isArray(options.files)) {
+    for (const f of options.files) {
+      const resolved = cleanAndResolvePath(f)
+      if (resolved && !resolvedFiles.includes(resolved)) {
+        resolvedFiles.push(resolved)
+      } else {
+        console.warn(`[dsh-gemini-web] Upload file does not exist, skipped: ${f}`)
+      }
+    }
+  }
+
+  // 拖拽智能容错兜底：若 options.files 未传，自动从提示词 task 中提取已存在的本地文件路径（含 @文件名 语法）
+  if (resolvedFiles.length === 0 && options.task) {
+    const fileMatches = options.task.match(/(?:file:\/\/[^\s"'`\(\)\[\]]+|@?[\w\-./\\]+\.[a-zA-Z0-9]{1,8})/g)
+    if (fileMatches) {
+      for (const m of fileMatches) {
+        const resolved = cleanAndResolvePath(m)
+        if (resolved && !resolvedFiles.includes(resolved)) {
+          resolvedFiles.push(resolved)
+          console.log(`[dsh-gemini-web] Auto-detected local file from prompt: ${resolved}`)
+        }
+      }
+    }
+  }
+
   // 3. 通道 A: AgentLimb (零弹窗 / 免 Allow)
   if (status.activeChannel === 'agentlimb' && agentlimbScript && fs.existsSync(agentlimbScript)) {
     try {
@@ -141,6 +201,11 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
 
       if (isNewChat) args.push('--new-chat')
       if (options.entry) args.push('--entry', options.entry)
+      if (resolvedFiles.length > 0) {
+        for (const f of resolvedFiles) {
+          args.push('--file', f)
+        }
+      }
       if (isStrict) {
         args.push('--no-fallback')
       } else {
@@ -205,6 +270,11 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
       ]
       if (isNewChat) args.push('--new-chat')
       if (status.cdp.port) args.push('--port', String(status.cdp.port))
+      if (resolvedFiles.length > 0) {
+        for (const f of resolvedFiles) {
+          args.push('--file', f)
+        }
+      }
 
       const { stdout } = await execFileAsync(venv, args, {
         timeout: (timeoutSec + 30) * 1000,
