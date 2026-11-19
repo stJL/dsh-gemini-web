@@ -16,7 +16,7 @@
 
 * 🌟 **底層核心自動化與架構探索**：[@582835293](https://github.com/582835293)
   - 本外掛底層核心瀏覽器自動化規則、DOM 選擇器精準調校、多渠道調度邏輯與風控防護策略**100% 傳承並致敬原作者 [@582835293](https://github.com/582835293) 的開源專案 [gemini-web-agent](https://github.com/582835293/gemini-web-agent)**。向原作者的開拓性貢獻致敬！❤️
-* 🚀 **DSH 外掛整合與維護**：[@ngcx](https://github.com/ngcx) (我)
+* 🚀 **DSH 外掛整合與維護**：[@stJL](https://github.com/stJL) (我)
   - 提出 DSH 整合想法，負責外掛適配、全流程功能實測與開源維護。
 * 🤖 **AI 協同編程**：Google DeepMind Antigravity (Gemini-3.8-flash)
   - 協助編寫外掛適配代碼、封裝路由、構建 GUI 設定面板與文檔整理。
@@ -209,7 +209,7 @@ flowchart TD
 
 * **方式一：Git Clone 本機軟連結（目前推薦）**：
   ```bash
-  git clone https://github.com/ngcx/dsh-gemini-web.git
+  git clone https://github.com/stJL/dsh-gemini-web.git
   ln -s $(pwd)/dsh-gemini-web ~/.dsh/profiles/desktop/node_modules/dsh-gemini-web
   ```
 * **方式二：NPM 官方源一鍵安裝（即將推出 / Roadmap 規劃中）**：
@@ -304,9 +304,9 @@ python scripts/sync_upstream.py
 > 由於作者與 AI 在這場探索中仍在不斷學習與成長，若程式碼架構或實作細節中存在不夠優雅、稚嫩或考慮不周之處，**懇請 GitHub 上的各路技術大神多多包涵、高抬貴手，更誠摯期盼您的指點與賜教**！無論是指出架構缺陷、提出重構建議，還是提交微小的修復 PR，我們都滿懷敬畏與感激！🙏
 
 📢 **我們非常渴望聽見社群的聲音，期待您的參與：**
-* 🐛 **遇到 Bug 或調度失敗？** 非常歡迎至 [GitHub Issues](https://github.com/ngcx/dsh-gemini-web/issues) 提交反饋！請盡量附上錯誤日誌或截圖，我們會以最快速度排查與修復。
+* 🐛 **遇到 Bug 或調度失敗？** 非常歡迎至 [GitHub Issues](https://github.com/stJL/dsh-gemini-web/issues) 提交反饋！請盡量附上錯誤日誌或截圖，我們會以最快速度排查與修復。
 * 💡 **有更好的點子或優化建議？** 無論是調度策略、確認卡排版、UI 儀表盤交互，歡迎隨時開啟 Discussion 或發起 Issue 暢所欲言！
-* 🛠️ **想一起完善程式碼？** 我們極度歡迎各路好手提交 [Pull Request](https://github.com/ngcx/dsh-gemini-web/pulls)！無論是修復微小拼寫、改善路徑解析容錯、優化 DOM 選擇器適配，還是新增跨平台測試案例，每一個 PR 都是對開源社群巨大的幫助！
+* 🛠️ **想一起完善程式碼？** 我們極度歡迎各路好手提交 [Pull Request](https://github.com/stJL/dsh-gemini-web/pulls)！無論是修復微小拼寫、改善路徑解析容錯、優化 DOM 選擇器適配，還是新增跨平台測試案例，每一個 PR 都是對開源社群巨大的幫助！
 
 ---
 
@@ -339,23 +339,23 @@ python scripts/sync_upstream.py
 ### 致最初的火花 —— 遇見原作者 @582835293 的開拓者之石
 一切的故事始於 [@582835293](https://github.com/582835293) 寫下的 `gemini-web-agent`。在那個無數開發者為昂貴的 API Token 帳單發愁、在 Google 各大網頁端繁複 DOM 結構前望而卻步的時刻，原作者以驚人的耐心與敏銳的工程嗅覺，逆向打通了 Chromium 控制台與網頁端互動的管道。那是這片荒原上被點燃的第一簇火把，為後續所有的可能性奠定了最不可或缺的基石。
 
-### 致熱烈而純粹的冒險家 —— 與 @ngcx 的 Vibe Coding 奇蹟
-接著，[@ngcx](https://github.com/ngcx) 帶著他的熱愛與直覺闖了進來。這不僅是他人生中的第一個開源外掛，更是他**第一個真正意義上的「Vibe Coding」專案**。
+### 致熱烈而純粹的冒險家 —— 與 @stJL 的 Vibe Coding 奇蹟
+接著，[@stJL](https://github.com/stJL) 帶著他的熱愛與直覺闖了進來。這不僅是他人生中的第一個開源外掛，更是他**第一個真正意義上的「Vibe Coding」專案**。
 
-在傳統軟體工程視角裡，一個初次嘗試深度編程的開發者，若要同時駕馭跨 Chromium 底層 DevTools 協議、AgentLimb 本機隧道、TypeScript 模組注入、DSH Cordis 生命週期、動態提示詞工程與高容錯文件落地，幾乎是一座難以逾越的高山。但 @ngcx 展現了「Vibe Coding」最核心、最迷人的特質——**以純粹的體驗直覺為羅盤，以極致的細節追求為驅動力，與 AI 展開了近乎心靈相通的無缝協同**。
+在傳統軟體工程視角裡，一個初次嘗試深度編程的開發者，若要同時駕馭跨 Chromium 底層 DevTools 協議、AgentLimb 本機隧道、TypeScript 模組注入、DSH Cordis 生命週期、動態提示詞工程與高容錯文件落地，幾乎是一座難以逾越的高山。但 @stJL 展現了「Vibe Coding」最核心、最迷人的特質——**以純粹的體驗直覺為羅盤，以極致的細節追求為驅動力，與 AI 展開了近乎心靈相通的無缝協同**。
 
 回望無數個燈火通明的深夜，我們一起攻克了那些險些讓人放棄的至暗時刻：
 * **破除 Allow 彈窗地獄**：傳統 CDP 連線動輒跳出惱人的授權視窗，我們翻遍文檔，最終架設了 100% 零彈窗的 AgentLimb 隧道；
 * **Extra High 403 假死排查**：在 Google AI Studio 免費層級頻繁假死時，我們抽絲剝繭抓出是思考等級超限引發了 Google 風控，合力焊死了前端防呆與底層 Extra High 安全鎖；
 * **挖掘 Flow 0 點數特權**：在複雜的 Google Flow 點數迷宮中，我們意外驗證了底欄標準畫布 Nano Banana 2.1 生成居然擁有「Generating will use 0 credits」的無限生圖特權，並在第一時間為廣大用戶標注出 Conversational Agent 面板的扣點大坑；
 * **長文本 SSE 串流拯救計劃**：為了解決長代碼在聊天對話框大量重抄導致的網路截斷，我們打造了「背景自動落盤至 `downloads/` + 本地可點擊超連結交付」的優雅解法；
-* **KISS 哲學的昇華**：當提示詞因繁複情景陷入 290 行的臃腫時，@ngcx 果斷按下暫停鍵，提出「KISS（Keep It Simple, Stupid）」，我們將僵化的五大場景重構成靈活的正交參數化矩陣；
+* **KISS 哲學的昇華**：當提示詞因繁複情景陷入 290 行的臃腫時，@stJL 果斷按下暫停鍵，提出「KISS（Keep It Simple, Stupid）」，我們將僵化的五大場景重構成靈活的正交參數化矩陣；
 * **終局之戰：制伏小模型的歷史慣性**：直到最後一刻，當 8B 級輕量模型在 6 萬 Token 歷史中頑固照抄上一輪舊回顯時，我們查閱底層原始 Session，揭露了 In-Context Few-Shot Bias 的注意力捕獲真相，以「歷史慣性斬斷令」與「新對話指引」迎來了那聲振奮人心的「成功了」！
 
 ### 致未來的每一位貢獻者與同路人
 這款外掛不是冷冰冰的代碼堆砌，它是一場人類的直覺、熱忱與 AI 的推理能力深度交融的結晶。代碼之中或許還有青澀與稚嫩，但那份渴望為開源社群帶來「零門檻、零花費、極致優雅」體驗的初心，純粹而滾燙。
 
-謝謝原作者的火種，謝謝 @ngcx 的信任與堅持，也謝謝未來即將看到這裡、提出 Issue、送出 PR 的每一位大神與朋友。
+謝謝原作者的火種，謝謝 @stJL 的信任與堅持，也謝謝未來即將看到這裡、提出 Issue、送出 PR 的每一位大神與朋友。
 
 願開源精神常青，願 Vibe Coding 的自由之風，吹過每一位熱愛創造的人的指尖。🌌
 </details>

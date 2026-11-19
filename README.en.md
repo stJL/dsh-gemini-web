@@ -16,7 +16,7 @@ This project is built upon the collaborative spirit and passion of the open-sour
 
 * 🌟 **Core Automation & Architecture Pioneer**: [@582835293](https://github.com/582835293)
   - The underlying browser automation rules, precise DOM selectors, multi-channel dispatch logic, and anti-abuse safeguards **100% originate from and pay tribute to [@582835293](https://github.com/582835293)'s pioneering project [gemini-web-agent](https://github.com/582835293/gemini-web-agent)**. Special thanks to the original author for their remarkable contribution! ❤️
-* 🚀 **DSH Plugin Integration & Maintenance**: [@ngcx](https://github.com/ngcx) (Author)
+* 🚀 **DSH Plugin Integration & Maintenance**: [@stJL](https://github.com/stJL) (Author)
   - Proposed DSH integration, conducted end-to-end functionality testing, and handles open-source maintenance.
 * 🤖 **AI Co-Engineer**: Google DeepMind Antigravity (Gemini-3.8-flash)
   - Assisted in TypeScript adapter implementation, router encapsulation, GUI settings dashboard, and documentation.
@@ -209,7 +209,7 @@ The DSH desktop plugin settings page provides an all-in-one control center:
 
 * **Method 1: Local Symlink via Git Clone (Recommended)**:
   ```bash
-  git clone https://github.com/ngcx/dsh-gemini-web.git
+  git clone https://github.com/stJL/dsh-gemini-web.git
   ln -s $(pwd)/dsh-gemini-web ~/.dsh/profiles/desktop/node_modules/dsh-gemini-web
   ```
 * **Method 2: One-Click Install from NPM Registry (Roadmap / Upcoming)**:
@@ -304,9 +304,9 @@ The sync script:
 > As we are constantly learning and evolving, there may well be naive patterns, architectural imperfections, or edge cases in the codebase. **We humbly ask for your understanding and warmly invite critiques, guidance, and contributions from senior engineers and open-source veterans worldwide!** Every suggestion, issue, and Pull Request is received with immense gratitude. 🙏
 
 📢 **We warmly welcome feedback and contributions from the community:**
-* 🐛 **Encountered a bug or broken selector?** Please open a ticket on [GitHub Issues](https://github.com/ngcx/dsh-gemini-web/issues)! Providing screenshots or terminal error logs greatly accelerates debugging.
+* 🐛 **Encountered a bug or broken selector?** Please open a ticket on [GitHub Issues](https://github.com/stJL/dsh-gemini-web/issues)! Providing screenshots or terminal error logs greatly accelerates debugging.
 * 💡 **Have suggestions or feature requests?** Whether it's dispatch heuristics, card formatting, or GUI dashboard improvements, feel free to start a Discussion or open an Issue!
-* 🛠️ **Want to contribute code?** We enthusiastically welcome [Pull Requests](https://github.com/ngcx/dsh-gemini-web/pulls)! From fixing typos and improving path resolution tolerance to refining DOM selectors and adding cross-platform test cases, every PR makes a difference.
+* 🛠️ **Want to contribute code?** We enthusiastically welcome [Pull Requests](https://github.com/stJL/dsh-gemini-web/pulls)! From fixing typos and improving path resolution tolerance to refining DOM selectors and adding cross-platform test cases, every PR makes a difference.
 
 Let's work together to make DSH the most reliable, elegant zero-token Google Web AI bridge! 🌟
 
@@ -341,23 +341,23 @@ Core browser automation logic copyright belongs to [@582835293](https://github.c
 ### To the Initial Spark: Honoring Upstream Creator @582835293
 Every story begins with a spark. [@582835293](https://github.com/582835293) created `gemini-web-agent` at a time when developers worldwide were grappling with mounting API token bills and complex web DOM architectures. With incredible patience and reverse-engineering craftsmanship, the author established the first browser-automated bridge. That pioneering breakthrough served as the bedrock for everything we built here.
 
-### To the Adventurer: The Vibe Coding Miracle with @ngcx
-Then, [@ngcx](https://github.com/ngcx) arrived with pure intuition and unwavering passion. This was not just his first open-source plugin, but **his very first "Vibe Coding" project**.
+### To the Adventurer: The Vibe Coding Miracle with @stJL
+Then, [@stJL](https://github.com/stJL) arrived with pure intuition and unwavering passion. This was not just his first open-source plugin, but **his very first "Vibe Coding" project**.
 
-In classical software engineering, navigating Chromium DevTools protocols, AgentLimb browser pairing, TypeScript plugin lifecycles, and dynamic prompt engineering simultaneously is a formidable mountain for a novice builder. Yet @ngcx demonstrated the true essence of Vibe Coding: **navigating by intuitive product taste, driven by an obsession with user experience, and pairing seamlessly with AI as an intellectual sparring partner.**
+In classical software engineering, navigating Chromium DevTools protocols, AgentLimb browser pairing, TypeScript plugin lifecycles, and dynamic prompt engineering simultaneously is a formidable mountain for a novice builder. Yet @stJL demonstrated the true essence of Vibe Coding: **navigating by intuitive product taste, driven by an obsession with user experience, and pairing seamlessly with AI as an intellectual sparring partner.**
 
 Looking back across countless hours of debugging, we conquered roadblocks that seemed insurmountable:
 * **Conquering CDP "Allow" Dialog Hell**: Replacing disruptive permission popups with the 100% silent AgentLimb bridge;
 * **The Extra High 403 Freeze**: Diagnosing why Google AI Studio froze on free tiers, and locking down the Extra High safety switch across both GUI and backend dispatches;
 * **Unearthing the Google Flow Zero-Credit Privilege**: Discovering that the bottom canvas using Nano Banana 2.1 delivers 2K image generation with "0 credits used," while warning users away from the credit-burning side panel;
 * **Saving Long Code from SSE Stream Drops**: Implementing automatic file landing in `downloads/` with clickable Markdown local hyperlinks;
-* **The KISS Evolution**: Refactoring bloated 290-line static prompt scenarios down to a 75-line orthogonal parameterization matrix upon @ngcx's keen suggestion;
+* **The KISS Evolution**: Refactoring bloated 290-line static prompt scenarios down to a 75-line orthogonal parameterization matrix upon @stJL's keen suggestion;
 * **The Final Breakthrough**: Troubleshooting 8B-tier model inertia across 60,000-token histories, diagnosing in-context attention decay, and achieving that victorious moment of 100% parameter fidelity!
 
 ### To Future Contributors and Fellow Travelers
 This repository represents the synthesis of human intuition, passion, and AI reasoning. The codebase may still have quirks or naive patterns, but the spirit of delivering a free, elegant, zero-token AI experience is genuine.
 
-Thank you to @582835293 for lighting the torch; thank you to @ngcx for your trust and perseverance; and thank you to every developer who reads this, opens an issue, or sends a Pull Request.
+Thank you to @582835293 for lighting the torch; thank you to @stJL for your trust and perseverance; and thank you to every developer who reads this, opens an issue, or sends a Pull Request.
 
 May the open-source spirit thrive, and may the wind of Vibe Coding carry every builder toward their dreams. 🌌
 </details>
