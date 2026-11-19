@@ -1508,47 +1508,36 @@ window.__ModuleLoader__.load({
               ])
             ]),
 
-            // 設定 3.1: 任務超時時間調整框（直接跟在策略下方，自定義模式顯式高亮聚焦）
-            h('div', {
+            // 設定 3.1: 任務超時時間調整框（僅在自定義超時模式時顯式展開，其餘智慧與嚴格模式隱藏以防困惑）
+            config.thinkingPolicy === 'custom' ? h('div', {
               className: 'gw-setting-row',
-              style: config.thinkingPolicy === 'custom'
-                ? {
-                    background: 'rgba(99, 102, 241, 0.08)',
-                    borderLeft: '3px solid #6366f1',
-                    paddingLeft: '12px',
-                    borderRadius: '4px',
-                    marginTop: '-4px',
-                    marginBottom: '4px'
-                  }
-                : { marginTop: '-4px' }
+              style: {
+                background: 'rgba(99, 102, 241, 0.08)',
+                borderLeft: '3px solid #6366f1',
+                paddingLeft: '12px',
+                borderRadius: '4px',
+                marginTop: '-4px',
+                marginBottom: '4px'
+              }
             }, [
               h('div', { className: 'gw-setting-info' }, [
                 h('div', { style: { fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' } }, [
                   h('span', null, t('timeout_title')),
-                  config.thinkingPolicy === 'custom'
-                    ? h('span', { style: { fontSize: 10, background: '#6366f1', color: '#fff', padding: '1px 6px', borderRadius: 4 } }, t('timeout_active_badge'))
-                    : (config.thinkingPolicy === 'strict'
-                        ? h('span', { style: { fontSize: 10, background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', padding: '1px 6px', borderRadius: 4 } }, t('timeout_strict_badge'))
-                        : h('span', { style: { fontSize: 10, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '1px 6px', borderRadius: 4 } }, t('timeout_adaptive_badge')))
+                  h('span', { style: { fontSize: 10, background: '#6366f1', color: '#fff', padding: '1px 6px', borderRadius: 4 } }, t('timeout_active_badge'))
                 ]),
-                h('div', { style: { fontSize: 11, opacity: 0.6 } },
-                  config.thinkingPolicy === 'custom'
-                    ? t('timeout_custom_hint')
-                    : (config.thinkingPolicy === 'strict'
-                        ? t('timeout_strict_hint')
-                        : t('timeout_adaptive_hint')))
+                h('div', { style: { fontSize: 11, opacity: 0.6 } }, t('timeout_custom_hint'))
               ]),
               h('div', { className: 'gw-setting-ctrl', style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
                 h('input', {
                   type: 'number',
                   className: 'gw-input',
-                  style: { width: 85, borderColor: config.thinkingPolicy === 'custom' ? '#6366f1' : undefined },
+                  style: { width: 85, borderColor: '#6366f1' },
                   value: config.timeoutSec || 180,
                   onChange: (e) => updateConfig({ timeoutSec: parseInt(e.target.value, 10) || 180 })
                 }),
                 h('span', { style: { fontSize: 12, opacity: 0.7 } }, t('sec_unit'))
               ])
-            ]),
+            ]) : null,
 
             // 設定 4: 思考等級 (Thinking Level)
             h('div', { className: 'gw-setting-row' }, [
