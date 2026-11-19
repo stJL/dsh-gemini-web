@@ -197,10 +197,6 @@ The DSH desktop plugin settings page provides an all-in-one control center:
    - Mode Toggle: Adaptive Ladder Mode vs Strict Mode.
    - Thinking Level Configuration: `high` / `medium` / `low`.
 
-<!-- [Image 3 - DSH Plugin Settings Dashboard] -->
-<!-- Screenshot hint: DSH Settings -> Gemini Web panel full screenshot showing channel indicators, quota monitors, and the fallback ladder table -->
-![DSH Plugin Settings Dashboard](docs/images/settings_dashboard.png)
-
 ---
 
 ## 🛠️ Installation & Deployment Guide

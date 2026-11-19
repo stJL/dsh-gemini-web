@@ -197,10 +197,6 @@ flowchart TD
    - 模式切換：智能階梯模式 vs 嚴格模式。
    - 思考等級配置：`high` / `medium` / `low`。
 
-<!-- [圖片 3 - DSH 外掛設定大盤] -->
-<!-- 截圖提示：DSH 設定 -> Gemini 網頁端面板完整截圖（展示通道燈號、三大站點額度與階梯降級排序列表） -->
-![DSH 外掛設定大盤](docs/images/settings_dashboard.png)
-
 ---
 
 ## 🛠️ 安裝與部署指南
