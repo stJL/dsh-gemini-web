@@ -162,36 +162,113 @@ def _run_gemini_web_task(
         if not ready:
             return {"ok": False, "error": "Gemini 官網頁面載入逾時（未找到輸入框）"}
 
-        # 0. 智能模型對齊與切換 (Auto, 4 Hydrogen, 4 Neon)
-        target_mode_keyword = "Hydrogen"
+        # 0. 未雨綢繆：動態能級探測與全自動解鎖選模 (完全適應未來 Gemini 5、各類會員階層與無選單模式)
         ml = (model or "").lower()
-        if "neon" in ml or "argon" in ml:
-            target_mode_keyword = "Neon"
-        elif "flash" in ml or "lite" in ml:
-            target_mode_keyword = "Auto"
-        elif "hydrogen" in ml:
-            target_mode_keyword = "Hydrogen"
+        if any(k in ml for k in ("argon", "neon", "pro", "ultra", "complex", "code", "deeper", "reason")):
+            target_intent = "reasoning"
+        elif any(k in ml for k in ("hydrogen", "flash", "everyday", "balanced")):
+            target_intent = "balanced"
+        else:
+            target_intent = "auto"
 
-        switch_mode_js = f"""(() => {{
-            const picker = Array.from(document.querySelectorAll('button')).find(b => (b.getAttribute('aria-label') || '').includes('Open mode picker'));
-            if (!picker) return false;
-            const current = (picker.getAttribute('aria-label') || '').toLowerCase();
-            if (current.includes({json.dumps(target_mode_keyword.lower())})) return true;
-            picker.click();
-            setTimeout(() => {{
-                const items = Array.from(document.querySelectorAll('[data-mode-id]'));
-                const target = items.find(i => i.innerText.includes({json.dumps(target_mode_keyword)}));
-                if (target && !target.querySelector('[data-mat-icon-name="lock"]')) {{
-                    target.dispatchEvent(new MouseEvent('mousedown', {{ bubbles: true }}));
-                    target.dispatchEvent(new MouseEvent('mouseup', {{ bubbles: true }}));
-                    target.click();
-                }}
-            }}, 200);
-            return true;
-        }})()"""
+        switch_mode_js = r"""(async (intent) => {
+            const wait = ms => new Promise(r => setTimeout(r, ms));
+            const picker = Array.from(document.querySelectorAll('button')).find(b => 
+                (b.getAttribute('aria-label') || '').includes('Open mode picker') ||
+                (b.getAttribute('aria-label') || '').includes('選擇模型') ||
+                (b.getAttribute('aria-label') || '').includes('模式')
+            );
+            if (!picker) return { ok: true, activeModel: 'Auto (預設通道)', reason: 'no_picker' };
+
+            const currentPickerLabel = (picker.getAttribute('aria-label') || '') + ' ' + (picker.innerText || '');
+
+            // 確保選單已開啟
+            if (picker.getAttribute('aria-expanded') !== 'true') {
+                picker.click();
+            }
+
+            // 等待項目載入 (最多 600ms)
+            let items = [];
+            for (let i = 0; i < 6; i++) {
+                await wait(100);
+                items = Array.from(document.querySelectorAll('[data-mode-id]'));
+                if (items.length > 0) break;
+            }
+
+            if (items.length === 0) {
+                if (picker.getAttribute('aria-expanded') === 'true') picker.click();
+                return { ok: true, activeModel: currentPickerLabel, reason: 'no_items' };
+            }
+
+            const unlocked = [];
+            for (const item of items) {
+                const isLocked = Boolean(
+                    item.querySelector('[data-mat-icon-name="lock"]') || 
+                    (item.getAttribute('data-mode-id') || '').includes('upsell') ||
+                    item.getAttribute('aria-disabled') === 'true'
+                );
+                const text = (item.innerText || '').trim();
+                if (!isLocked && text) {
+                    unlocked.push({ el: item, text: text });
+                }
+            }
+
+            if (unlocked.length === 0) {
+                if (picker.getAttribute('aria-expanded') === 'true') picker.click();
+                return { ok: true, activeModel: currentPickerLabel, reason: 'all_locked' };
+            }
+
+            // 智能評分器 (Scorer)：版本號權重 (5 > 4 > 3) + 能級語意權重
+            function score(opt, targetIntent) {
+                let s = 0;
+                const full = opt.text.toLowerCase();
+                const verMatch = full.match(/\b(\d+)\b/);
+                if (verMatch) {
+                    s += parseInt(verMatch[1], 10) * 100;
+                }
+                if (targetIntent === 'reasoning') {
+                    if (/deeper|analysis|neon|argon|ultra|pro|code|complex/i.test(full)) s += 150;
+                    else if (/everyday|hydrogen|balanced/i.test(full)) s += 50;
+                    else if (/auto/i.test(full)) s += 10;
+                } else if (targetIntent === 'balanced') {
+                    if (/everyday|hydrogen|balanced|flash/i.test(full)) s += 150;
+                    else if (/auto/i.test(full)) s += 80;
+                    else if (/deeper|neon/i.test(full)) s += 40;
+                } else {
+                    if (/auto/i.test(full)) s += 150;
+                    else if (/everyday|hydrogen/i.test(full)) s += 80;
+                    else s += 40;
+                }
+                return s;
+            }
+
+            unlocked.sort((a, b) => score(b, intent) - score(a, intent));
+            const best = unlocked[0];
+            const lines = best.text.split('\n');
+            const bestModelName = (lines.length > 1 ? lines[1] : lines[0]).trim();
+            const coreName = bestModelName.replace(/^\d+\s*/, '').toLowerCase();
+
+            // 若目前選中的模型即為最佳可用模型，關閉選單退出
+            if (currentPickerLabel.toLowerCase().includes(coreName)) {
+                if (picker.getAttribute('aria-expanded') === 'true') picker.click();
+                return { ok: true, switched: false, activeModel: bestModelName, score: score(best, intent) };
+            }
+
+            // 點擊切換至最佳解鎖模型
+            best.el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            best.el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+            best.el.click();
+            await wait(250);
+
+            return { ok: true, switched: true, activeModel: bestModelName, score: score(best, intent) };
+        })(""" + json.dumps(target_intent) + ")"
+
+        detected_web_model = "Auto"
         try:
-            agentlimb_client.eval_js(switch_mode_js, tab_id=tab_id)
-            time.sleep(0.4)
+            p_res = agentlimb_client.eval_js(switch_mode_js, tab_id=tab_id)
+            p_val = p_res.get("result", {}).get("result", {})
+            if p_val.get("activeModel"):
+                detected_web_model = p_val.get("activeModel")
         except Exception:
             pass
 
@@ -354,7 +431,7 @@ def _run_gemini_web_task(
         return {
             "ok": success,
             "site": "gemini",
-            "model": "gemini.google.com (官網通道)",
+            "model": f"gemini.google.com ({detected_web_model})",
             "fell_back": False,
             "output": final_text,
             "files": saved_files,
@@ -1057,7 +1134,6 @@ def run_agent_task(
 
             if not success:
                 # 終極備援：跨站點無縫降級至 gemini.google.com 官網免費通道
-                fallback_chain.append("gemini.google.com (官網備援通道)")
                 web_res = _run_gemini_web_task(
                     task=task,
                     model=initial_model_id,
@@ -1072,7 +1148,8 @@ def run_agent_task(
                     output = web_res.get("output", "")
                     files = web_res.get("files", [])
                     err = ""
-                    active_model = "gemini.google.com (官網通道)"
+                    active_model = web_res.get("model", "gemini.google.com (官網通道)")
+                    fallback_chain.append(active_model)
                     fell_back = True
                 else:
                     err = "CONGESTION_HALT: Google AI Studio 與 Gemini 官網免費池全數高負載壅塞。"
