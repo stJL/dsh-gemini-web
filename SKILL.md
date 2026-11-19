@@ -72,9 +72,10 @@ description: >-
    **核心格式规范**：
    - 标题统一为 `### 🌐 Gemini Web Agent`（无括号与额外后缀）
    - 第二行保留具体任务描述反馈（例如：`检测到您欲调用外部 Google 网页端实现并发任务，相关配置如下：`）
-   - `🚪 入口模式：chat`（保持极简，无额外括号）
-   - `⚙️ 推演配置：Thinking 设为 high`（按设定动态显示 high/medium，无多余冗余解释）
-   - `🔄 话题隔离：new_chat: true（预设开启全新独立对话）`
+   - **【防塌陷排版铁律】**：各项必须严格以 Markdown 无序列表符号 `- ` 开头（如 `- 🎯 ...`），严禁省略 `- ` 导致 Markdown 引擎将多行折叠合并为单行！
+   - `- 🚪 入口模式：chat`（保持极简，无额外括号）
+   - `- ⚙️ 推演配置：Thinking 设为 high`（按设定动态显示 high/medium，无多余冗余解释）
+   - `- 🔄 话题隔离：new_chat: true（预设开启全新独立对话）`
    - **完全不显示预估成本项**
 
    **全部四大情景标准模板**：
@@ -85,12 +86,12 @@ description: >-
      ### 🌐 Gemini Web Agent
      检测到您欲调用外部 Google 网页端实现并发任务，相关配置如下：
 
-     🎯 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
-     🚪 入口模式：chat
-     🧠 执行模型：（智能/定时模式）
-     gemini-4-neon -> gemini-4-hydrogen -> gemini-3.8-flash -> gemini-3.5-flash-lite
-     ⚙️ 推演配置：Thinking 设为 high
-     🔄 话题隔离：new_chat: true（预设开启全新独立对话）
+     - 🎯 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
+     - 🚪 入口模式：chat
+     - 🧠 执行模型：（智能/定时模式）
+       gemini-4-neon -> gemini-4-hydrogen -> gemini-3.8-flash -> gemini-3.5-flash-lite
+     - ⚙️ 推演配置：Thinking 设为 high
+     - 🔄 话题隔离：new_chat: true（预设开启全新独立对话）
 
      👉 请确认是否发包执行？
      - 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行
@@ -104,12 +105,12 @@ description: >-
      ### 🌐 Gemini Web Agent
      检测到您欲调用外部 Google 网页端实现并发任务，相关配置如下：
 
-     🎯 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
-     🚪 入口模式：chat
-     🧠 执行模型：（严格模式）
-     gemini-4-hydrogen
-     ⚙️ 推演配置：Thinking 设为 high
-     🔄 话题隔离：new_chat: true（预设开启全新独立对话）
+     - 🎯 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
+     - 🚪 入口模式：chat
+     - 🧠 执行模型：（严格模式）
+       gemini-4-hydrogen
+     - ⚙️ 推演配置：Thinking 设为 high
+     - 🔄 话题隔离：new_chat: true（预设开启全新独立对话）
 
      👉 请确认是否发包执行？
      - 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行
@@ -123,11 +124,11 @@ description: >-
      ### 🌐 Gemini Web Agent
      检测到您欲调用外部 Google 网页端实现任务，相关配置如下：
 
-     🎯 执行渠道：gemini.google.com（可选择：Google AI Studio / Gemini Web）
-     🚪 入口模式：chat
-     🧠 执行模型：Auto
-     ⚙️ 推演配置：Thinking 设为 high
-     🔄 话题隔离：new_chat: true（预设开启全新独立对话）
+     - 🎯 执行渠道：gemini.google.com（可选择：Google AI Studio / Gemini Web）
+     - 🚪 入口模式：chat
+     - 🧠 执行模型：Auto
+     - ⚙️ 推演配置：Thinking 设为 high
+     - 🔄 话题隔离：new_chat: true（预设开启全新独立对话）
 
      👉 请确认是否发包执行？
      - 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行
@@ -141,11 +142,11 @@ description: >-
      ### 🌐 Gemini Web Agent
      检测到您欲调用外部 Google 网页端实现多媒体生成，相关配置如下：
 
-     🎯 执行渠道：Google Flow（flow）
-     🚪 入口模式：chat
-     🧠 执行模型：gemini-nano-banana-2.1
-     ⚙️ 推演配置：将生成数量设为 x1，分辨率设为 2K
-     🔄 话题隔离：new_chat: true（预设开启全新独立对话）
+     - 🎯 执行渠道：Google Flow（flow）
+     - 🚪 入口模式：chat
+     - 🧠 执行模型：gemini-nano-banana-2.1
+     - ⚙️ 推演配置：将生成数量设为 x1，分辨率设为 2K
+     - 🔄 话题隔离：new_chat: true（预设开启全新独立对话）
 
      👉 请确认是否发包执行？
      - 回复 「确认」 或 「1」：立即调用外部 Chrome 发包生成图像或视频

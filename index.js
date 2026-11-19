@@ -904,7 +904,7 @@ function apply(ctx) {
 【\uD83D\uDEA8 致命调用前置条件 - 第 1 步绝对禁止直接调用发包】：
 本工具严格遵循「一律先问后用」规范，无任何例外！
 在使用者提出任何需求后，你【第 1 步绝对禁止直接调用本工具发包，绝对禁止调用 ask_user_question】！
-你必须在第 1 步先在聊天中输出【\uD83C\uDF10 Gemini Web Agent】确认卡（列出执行渠道 site、入口模式 entry、执行模型 model、推演配置 thinking_level 与话题隔离 new_chat），并在此【停止当前回应】，等待用户确认！
+你必须在第 1 步先在聊天中输出【\uD83C\uDF10 Gemini Web Agent】确认卡（严格以 Markdown 列表「- 」逐行呈现执行渠道 site、入口模式 entry、执行模型 model、推演配置 thinking_level 与话题隔离 new_chat），并在此【停止当前回应】，等待用户确认！
 只有当用户在下一轮明确回复「确认」、「1」或给予明确发包授权时，才正式调用本工具发包！
 1. \uD83C\uDFAF【用户指定模型绝对优先】：若用户指定了具体模型（如「用 Gemini 3.5 Flash Lite」、「用 Argon」），确认卡与发包必须 100% 采用该模型，严禁擅自升级或替换！只有用户完全未指定时才推荐默认模型。
 2. \uD83D\uDED1【明令禁止本地擅自代劳与 Subagent 劫持】：严禁在本地自行编写答案，严禁调用 subagent 消耗付费额度！
