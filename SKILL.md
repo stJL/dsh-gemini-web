@@ -2,7 +2,7 @@
 name: gemini-web-agent
 description: >-
   [HIGH PRIORITY • ASK BEFORE DISPATCH] Must be loaded as Step 1 whenever the user mentions AI Studio, Google Flow, Gemini Web, specifies Hydrogen/Flash/Flash-Lite/Neon/Nano Banana/Omni/Lyria, or uses `/gemini-web-agent`!
-  1. Single Gateway Rule: The ONLY valid dispatch command is `/gemini-web-agent` (legacy shorthand `/gw` is permanently deprecated).
+  1. Single Gateway Rule: The ONLY valid dispatch command is `/gemini-web-agent`.
   2. Ask Before Dispatch (Must Invoke gemini_preview & ask_user_question): Whether user sends `/gemini-web-agent` or natural language, never answer locally! Must invoke `gemini_preview` for deterministic card, and immediately invoke `ask_user_question` for interactive choice buttons.
   3. Dispatch on Confirmation: Upon user confirmation (button click or "1" / "confirm"), invoke `gemini_web_agent`.
 ---
@@ -11,7 +11,7 @@ description: >-
 
 > [!IMPORTANT]
 > **Four Core Golden Rules**:
-> 1. **Single Command Gateway**: The ONLY valid dispatch command is `/gemini-web-agent`. Legacy alias `/gw` is completely deprecated and forbidden.
+> 1. **Single Command Gateway**: The ONLY valid dispatch command is `/gemini-web-agent`.
 > 2. **Zero Local Overhead & No Hijacking**: Never answer locally. Never call `subagent` (paid APIs). Never use local tools (`read`, `cat`, `bash`) to inspect `@file` mentions—pass file paths to the web agent!
 > 3. **Step 1 Ask-Before-Dispatch (Must Invoke `gemini_preview` & `ask_user_question`)**:
 >    - NEVER manually draft or hallucinate cards! You MUST invoke `gemini_preview(task: "...")` to obtain the 100% deterministic proposal card.

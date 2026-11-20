@@ -8,7 +8,7 @@ describe('Gemini Web Agent Single Gateway & Proposal Engine (v0.2.1)', () => {
       if (!raw || raw === 'help' || raw === '--help' || raw === '-h') {
         return {
           kind: 'success',
-          text: `### 🌐 Gemini Web Agent 调度门禁指南\n\n**唯一合法命令入口**：\`/gemini-web-agent <任务需求>\`（废弃简写 /gw）`,
+          text: `### 🌐 Gemini Web Agent 调度门禁指南\n\n**唯一合法命令入口**：\`/gemini-web-agent <任务需求>\``,
         }
       }
       const proposal = parseTaskToProposal(raw)
@@ -23,7 +23,6 @@ describe('Gemini Web Agent Single Gateway & Proposal Engine (v0.2.1)', () => {
     expect(resEmpty.text).toContain('Gemini Web Agent 调度门禁指南')
     expect(resEmpty.text).toContain('唯一合法命令入口')
     expect(resEmpty.text).toContain('/gemini-web-agent')
-    expect(resEmpty.text).toContain('废弃简写 /gw')
 
     const resHelp = handleCommand('help')
     expect(resHelp.kind).toBe('success')

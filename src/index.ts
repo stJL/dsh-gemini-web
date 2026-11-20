@@ -10,7 +10,7 @@ export const inject = ['tools', 'webServer', 'systemPrompt']
 
 export function buildDynamicCardGuidance(): string {
   return `【🌐 Gemini Web Agent 单一门禁与先问后用铁律】
-唯一合法调度指令：/gemini-web-agent（/gw 简写已永久废弃）。
+唯一合法调度指令：/gemini-web-agent。
 
 【核心交互流程规范】：
 当用户在对话中提到需要使用外部 Google 网页端（AI Studio / Flow / Gemini 官网）执行任务，或直接使用了 /gemini-web-agent 指令时：

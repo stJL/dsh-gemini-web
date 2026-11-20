@@ -2,7 +2,7 @@
 name: gemini-web-agent
 description: >-
   【必须最优先加载・一律先问后用】当用户提到 AI Studio, Google Flow, Gemini 网页端, 指定 Hydrogen/Flash/Flash-Lite/Neon/Nano Banana/Omni/Lyria, 或输入 `/gemini-web-agent` 时必须调用！
-  1. 单一门禁铁律：唯一合法指令为 `/gemini-web-agent`（/gw 简写已永久废弃禁用）。
+  1. 单一门禁铁律：唯一合法指令为 `/gemini-web-agent`。
   2. 先问后用（调用 gemini_preview 与 ask_user_question）：无论用户带命令或日常聊天，宿主 AI 严禁本地直接作答，必须调用 `gemini_preview` 获取确定性提案卡，并立即调用 `ask_user_question` 弹出交互选择栏供用户点击，严禁擅自发包或本地代劳！
   3. 确认后发包：待用户在选择栏点击确认或回复「1」/「确认」后，调用 `gemini_web_agent` 正式发包。
 ---
@@ -11,7 +11,7 @@ description: >-
 
 > [!IMPORTANT]
 > **四大核心调度铁律**：
-> 1. **唯一合法命令门禁**：外部 Google 算力调度的唯一合法指令是 `/gemini-web-agent`，历史缩写 `/gw` 已全面废弃禁用。
+> 1. **唯一合法命令门禁**：外部 Google 算力调度的唯一合法指令是 `/gemini-web-agent`。
 > 2. **零本地开销与严禁代劳**：严禁本地直接作答，严禁调用 `subagent`（消耗付费 API），严禁使用本地 `read`/`cat`/`bash` 预读取 `@文件`——直接将文件路径交由外部网页端解析！
 > 3. **第 1 步先问后用（必须调用 `gemini_preview` 与 `ask_user_question`）**：
 >    - 严禁自行脑补排版确认卡！必须调用 `gemini_preview(task: "...")` 获得 100% 确定性解析的提案卡；
