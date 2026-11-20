@@ -10,10 +10,11 @@ description: >-
 # Gemini Web Agent (KISS Edition)
 
 > [!IMPORTANT]
-> **Three Core Golden Rules**:
+> **Four Core Golden Rules**:
 > 1. **Zero Local Overhead & No Hijacking**: Never answer locally. Never call `subagent` (paid APIs). Never use local tools (`read`, `cat`, `bash`) to inspect `@file` mentions—pass file paths to the web agent!
 > 2. **Ask-Before-Dispatch (Step 1)**: Output the structured proposal card and **HALT immediately**. Wait for user confirmation (`1` or `confirm`).
-> 3. **Dynamic Parameterization**: 100% respect user-specified models without unauthorized "upgrades". For adaptive ladders, **dynamically mirror the active system sequence** (`【当前系统生效之确认卡配置】`)—never hardcode!
+> 3. **Per-Task Reset (Anti-Inertia)**: The confirmation cycle applies to **EVERY SINGLE TASK INDEPENDENTLY**, NOT once per session! Even if a previous task succeeded in the same chat, every new request MUST reset to Step 1 and output the card again. Never bypass the card!
+> 4. **Dynamic Parameterization**: 100% respect user-specified models without unauthorized "upgrades". For adaptive ladders, **dynamically mirror the active system sequence** (`【当前系统生效之确认卡配置】`)—never hardcode!
 
 ---
 
@@ -52,8 +53,8 @@ Resolve each card field dynamically. **Never copy-paste hardcoded static strings
 | **Channel (`site`)** | `{execution_channel}` | • Image/video ➔ `Google Flow（flow）`<br>• Gemini Web or web research ➔ `gemini.google.com（可选择：Google AI Studio / Gemini Web）`<br>• Default (coding, reasoning, files) ➔ `Google AI Studio（可选择：Google AI Studio / Gemini Web）` |
 | **Mounted Files (`files`)** | `- 📁 挂载文件：[...]` | • **CONDITIONAL**: Render ONLY if local files, logs, or `@file` are referenced (e.g. `[src/index.ts]`).<br>• **OMIT ENTIRE LINE** if no files are involved (never output empty `[]`). |
 | **Entry Mode (`entry`)** | `{entry_mode}` | • Web task/canvas ➔ `task`<br>• Default ➔ `chat` |
-| **Model Ladder (`model`)** | `{model_mode_label}`<br>`{model_ladder_or_target}` | **Evaluate in order**:<br>1. **User Specified**: If user asked for a model (e.g. "Use Flash Lite"):<br>   `- 🧠 执行模型：（用户指定）\n  - {user_model}`<br>2. **Strict Mode**: If strict mode enabled:<br>   `- 🧠 执行模型：（严格模式）\n  - {default_model}`<br>3. **Adaptive Mode**: Mirror live system prompt verbatim:<br>   `- 🧠 执行模型：（智能/定时模式）\n  - {CURRENT_DYNAMIC_LADDER}`<br>   🚨 **Rule**: Read `{CURRENT_DYNAMIC_LADDER}` directly from `【当前系统生效之确认卡配置】`. **Never copy the ladder from previous turns in the chat history!** If the active config starts with `gemini.google.com`, output `gemini.google.com` first! |
-| **Thinking Config** | `{thinking_config}` | • Flow images ➔ `将生成数量设为 x1，分辨率设为 2K`<br>• Default ➔ `Thinking 设为 {current_thinking_level}` (from system prompt, e.g. `high`) |
+| **Model Ladder (`model`)** | `{model_mode_label}`<br>`{model_ladder_or_target}` | **Channel-specific routing**:<br>1. **Gemini Web (`gemini.google.com`)**: Output `Auto (Gemini Web Native Model)`. Never output AI Studio fallback ladders!<br>2. **Google Flow (`flow`)**: Output `Nano Banana 2.1 (2K Canvas Generation)` or `Omni 1.2 / Veo (Video)`<br>3. **Google AI Studio**: Follow user-specified model, strict mode, or adaptive ladder (`{CURRENT_DYNAMIC_LADDER}`) verbatim. |
+| **Thinking Config** | `{thinking_config}` | • **Gemini Web** ➔ `Web Search Grounding (Task Mode)` or `Standard Chat Mode` (no Thinking level)<br>• **Flow images** ➔ `将生成数量设为 x1，分辨率设为 2K`<br>• **AI Studio default** ➔ `Thinking 设为 {current_thinking_level}` (from system prompt, e.g. `high`) |
 
 ---
 

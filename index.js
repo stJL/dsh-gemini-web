@@ -1017,20 +1017,25 @@ var inject = ["tools", "webServer", "systemPrompt"];
 function buildDynamicCardGuidance() {
   const cfg = loadConfig();
   const isStrict = cfg.thinkingPolicy === "strict";
-  const policyLabel = isStrict ? "（严格模式）" : "（智能/定时模式）";
+  const policyLabel = isStrict ? "（严格模式）" : "（智能/降级模式）";
   const ladderStr = !isStrict && cfg.fallbackLadder && cfg.fallbackLadder.length > 0 ? cfg.fallbackLadder.join(" -> ") : cfg.defaultModel || "gemini-4-hydrogen";
   const thinkingVal = cfg.thinkingLevel || "high";
   return `【\uD83C\uDF10 Gemini Web Agent 调度铁律与确认卡排版规范】
 在调用本工具发包前，你必须在第 1 步先在聊天中输出【\uD83C\uDF10 Gemini Web Agent】确认卡并【停止当前回应】，等待用户确认！
 严禁擅自直接发包，严禁调用 ask_user_question！
+
+\uD83D\uDEA8【多轮任务循环铁律（Multi-Turn Anti-Inertia）】：
+每个新任务都是一个全新独立的循环（Cycle），绝非整个聊天会话只确认一次！
+即使同一对话中上一轮刚刚成功执行完毕，只要用户再次发起新的任务指令（包含 /gemini-web-agent 或新的执行需求），本轮依然必须 100% 重新重置回第 1 步，必须再次输出【\uD83C\uDF10 Gemini Web Agent】确认卡并停止等待！
+绝对严禁因为历史上上一轮已经确认过就自作聪明跳过确认卡直接作答或偷跑发包！
+
 确认卡必须严格以 Markdown 列表「- 」逐行呈现（严禁丢弃「- 」导致折叠合并为一行）：
 
-【当前系统生效之确认卡配置】：
-- \uD83C\uDFAF 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
-- \uD83D\uDEAA 入口模式：chat
-- \uD83E\uDDE0 执行模型：${policyLabel}
-  - ${ladderStr}
-- ⚙️ 推演配置：Thinking 设为 ${thinkingVal}
+【通用确认卡模板】：
+- \uD83C\uDFAF 执行渠道：{execution_channel}
+- \uD83D\uDEAA 入口模式：{entry_mode}
+- \uD83E\uDDE0 执行模型：{model_section}
+- ⚙️ 推演配置：{thinking_section}
 - \uD83D\uDD04 话题隔离：new_chat: true（预设开启全新独立对话）
 
 \uD83D\uDC49 请确认是否发包执行？
@@ -1038,16 +1043,31 @@ function buildDynamicCardGuidance() {
 - 回复 调整参数（如「改用 Flash Lite」、「改用 Argon」等）：按您的要求调整后直接发包
 - 回复 「取消」：中止外部调度，改由本地作答
 
-【核心参数化动态组装铁律】：
-1. \uD83E\uDDE0 执行模型【绝对禁止使用写死/硬编码的旧模板字符串与严禁抄袭历史对话】：
-   \uD83D\uDEA8【历史惯性斩断令】：本轮输出时，严禁直接复制或参考本对话中上一轮助手输出的旧确认卡！无论上一轮输出了什么顺序，当前轮次必须 100% 严格以【当前系统生效之确认卡配置】中的最新阶梯序列为准进行重新输出！
-   在智能/定时模式下，必须 100% 实时原样读取上方【当前系统生效之确认卡配置】中的实际阶梯序列：
-   「- \uD83E\uDDE0 执行模型：${policyLabel}\\n  - ${ladderStr}」
-   ⚠️ 特别注意：当前用户配置的第一个节点为【${ladderStr.split(" -> ")[0]}】，无论其为模型名还是域名（如 gemini.google.com），都是用户的明确意图，绝对严禁按常理将其挪到末尾，必须完整、一字不差地逐字原样完整输出「${ladderStr}」，严禁从任何历史对话或旧文档中抄写写死的默认序列，严禁擅自缩水只输出单个模型，严禁输出未经渲染的 HTML 标签（如 <br>）！
-2. 严格模式：仅当用户配置或指定严格模式时，执行模型才显示单个模型（如「- \uD83E\uDDE0 执行模型：（严格模式）\\n  - ${cfg.defaultModel || "gemini-4-hydrogen"}」）。
-3. 渠道变化：若为多媒体生图/视频任务，渠道设为 Google Flow（flow），模型设为 gemini-nano-banana-2.1；若用户指定官网渠道，渠道设为 gemini.google.com，模型设为 Auto。
-4. 用户指定模型绝对优先：若用户输入明确指定了模型（如「用 Flash Lite」），执行模型必须 100% 原样采用用户指定的模型，严禁擅自升级！
-5. 挂载本地文件（条件项）：若用户需求涉及分析本地文件、日志、论文 PDF、代码文件或输入了 @文件，【绝对禁止调用本地 read、cat、bash 工具自行读取】！你必须直接在第 1 步确认卡中添加「- \uD83D\uDCC1 挂载文件：[文件名]」，并在第 2 步正式发包时将文件路径填入 files 数组参数中，全权交由外部 Google 网页端 1M 超长上下文直接吞吐！若无文件需求，则完全不输出此行。`;
+【三大切换场景与动态参数装配规则】：
+1. \uD83C\uDF10【场景 1：Gemini 官网任务】（当用户提到「Gemini 官网」、「gemini.google.com」、「task 模式」或联网调研时）：
+   - \uD83C\uDFAF 执行渠道：gemini.google.com（可选择：Google AI Studio / Gemini Web）
+   - \uD83D\uDEAA 入口模式：task（若提到 task/联网调研）或 chat（日常对话）
+   - \uD83E\uDDE0 执行模型：Auto (Gemini 官网原生模型)
+     ⚠️ 官网铁律：Gemini 官网直接由 Google 官方模型作答，绝对禁止输出 AI Studio 的模型降级阶梯！严禁输出「gemini.google.com -> gemini-4-hydrogen」等荒谬拼接！
+   - ⚙️ 推演配置：联网搜索增强 (Task 联网模式) 或 官网标准对话模式（⚠️ 官网无 Thinking 等级概念，严禁输出「Thinking 设为 high」！）
+
+2. \uD83C\uDFA8【场景 2：Google Flow 生图/视频】（当涉及 Nano Banana 2.1 生图、Omni/Veo 视频时）：
+   - \uD83C\uDFAF 执行渠道：Google Flow (flow.google.com)
+   - \uD83D\uDEAA 入口模式：canvas（底栏标准画布・0 扣点特权）
+   - \uD83E\uDDE0 执行模型：Nano Banana 2.1 (2K 高清生图)（⚠️ 生图渠道绝不输出 AI Studio 阶梯！）
+   - ⚙️ 推演配置：生成数量设为 x1，分辨率设为 2K
+
+3. \uD83E\uDDE0【场景 3：Google AI Studio 默认渠道】（代码生成、极值推演、本地大文件分析、常规编码任务）：
+   - \uD83C\uDFAF 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
+   - \uD83D\uDEAA 入口模式：chat
+   - \uD83E\uDDE0 执行模型：
+     - 若用户显式指定模型（如「用 Flash Lite」）➔ 「（用户指定）\\n  - {用户指定模型}」
+     - 若系统为严格模式 ➔ 「（严格模式）\\n  - ${cfg.defaultModel || "gemini-4-hydrogen"}」
+     - 默认智能/降级模式 ➔ 「${policyLabel}\\n  - ${ladderStr}」
+       \uD83D\uDEA8【历史惯性斩断令】：在 AI Studio 智能模式下，必须逐字原样镜像系统当前配置序列「${ladderStr}」，严禁抄袭历史旧对话！
+   - ⚙️ 推演配置：Thinking 设为 ${thinkingVal}
+
+4. \uD83D\uDCC1 挂载本地文件（条件项）：若用户需求涉及分析本地文件、日志、论文 PDF、代码文件或输入了 @文件，【绝对禁止调用本地 read、cat、bash 工具自行读取】！你必须直接在确认卡中加入「- \uD83D\uDCC1 挂载文件：[文件名]」，并在第 2 步正式发包时将文件路径填入 files 数组参数中。若无文件需求，则完全不输出此行。`;
 }
 function apply(ctx) {
   ctx.inject(["systemPrompt"], (scoped) => {
