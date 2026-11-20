@@ -38,7 +38,7 @@ REPO_SLUG = "582835293/gemini-web-agent"
 REPO_URL = f"https://github.com/{REPO_SLUG}.git"
 DEFAULT_BRANCH = "main"
 VERSION_FILE_NAME = ".skill_version.json"
-COPY_ITEMS = ("SKILL.md", "README.md", "requirements.txt", "references", "scripts")
+COPY_ITEMS = ("SKILL.md", "SKILL.zh-CN.md", "README.md", "requirements.txt", "references", "scripts")
 
 
 def detect_target_skill_dir(source_root: Path, explicit_target: str = "") -> Path:
@@ -50,6 +50,7 @@ def detect_target_skill_dir(source_root: Path, explicit_target: str = "") -> Pat
     candidates = [
         home / ".gemini" / "config" / "skills",
         home / ".gemini" / "skills",
+        home / ".dsh",
         home / ".agents" / "skills",
         home / ".claude" / "skills",
         home / ".codex" / "skills",
@@ -588,6 +589,21 @@ def main() -> None:
     synced = False
     if args.auto or args.target:
         synced = sync_skill_files(source_root, target_dir)
+        # 同步更新其他已存在的已知全局技能目录（如 ~/.dsh/gemini-web-agent 与 ~/.gemini/config/skills/gemini-web-agent）
+        home = Path.home()
+        extra_candidates = [
+            home / ".dsh" / SKILL_NAME,
+            home / ".gemini" / "config" / "skills" / SKILL_NAME,
+            home / ".gemini" / "skills" / SKILL_NAME,
+            home / ".agents" / "skills" / SKILL_NAME,
+        ]
+        for extra in extra_candidates:
+            if extra.exists() and extra.resolve() != target_dir.resolve() and extra.resolve() != source_root.resolve():
+                try:
+                    sync_skill_files(source_root, extra)
+                    _write_version_meta(extra, source_root)
+                except Exception:
+                    pass
     else:
         target_dir = source_root.resolve()
 

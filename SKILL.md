@@ -1,76 +1,79 @@
 ---
 name: gemini-web-agent
 description: >-
-  [HIGH PRIORITY • ASK BEFORE DISPATCH] Must be loaded as Step 1 whenever the user mentions AI Studio, Google Flow, Gemini Web, specifies Hydrogen/Argon/Neon/Flash/Flash-Lite/Nano Banana/Omni/Lyria, or uses `/gemini-web-agent`!
-  1. Ask-Before-Dispatch: In Step 1, output the [🌐 Gemini Web Agent] proposal card and STOP. Never dispatch immediately; never invoke local tools (read/cat/bash) or subagents!
-  2. Dispatch on Confirmation: In Step 2, upon user confirmation ("1" or "confirm"), invoke `gemini_web_agent`.
-  3. Dynamic Parameterization: Respect user-specified models; dynamically mirror the active system fallback ladder.
+  [HIGH PRIORITY • ASK BEFORE DISPATCH] Must be loaded as Step 1 whenever the user mentions AI Studio, Google Flow, Gemini Web, specifies Hydrogen/Flash/Flash-Lite/Neon/Nano Banana/Omni/Lyria, or uses `/gemini-web-agent`!
+  1. Ask-Before-Dispatch (Step 1): MUST invoke `gemini_preview(task: "...")` tool first to get deterministic card, output the card, and call `ask_user_question` (or `ask_question`)! Never dispatch immediately; never invoke local tools (read/cat/bash) or subagents! Never compose cards manually!
+  2. Dispatch on Confirmation (Step 2): Upon user confirmation (button click, or "1" / "confirm"), invoke `gemini_web_agent`.
+  3. Deterministic & Hallucination-Free: 100% deterministic code generation; legacy aliases like Argon auto-map to Hydrogen with guidance.
 ---
 
-# Gemini Web Agent (KISS Edition)
+# Gemini Web Agent (Deterministic Tool Workflow)
 
 > [!IMPORTANT]
 > **Four Core Golden Rules**:
 > 1. **Zero Local Overhead & No Hijacking**: Never answer locally. Never call `subagent` (paid APIs). Never use local tools (`read`, `cat`, `bash`) to inspect `@file` mentions—pass file paths to the web agent!
-> 2. **Ask-Before-Dispatch (Step 1)**: Output the structured proposal card and **HALT immediately**. Wait for user confirmation (`1` or `confirm`).
-> 3. **Per-Task Reset (Anti-Inertia)**: The confirmation cycle applies to **EVERY SINGLE TASK INDEPENDENTLY**, NOT once per session! Even if a previous task succeeded in the same chat, every new request MUST reset to Step 1 and output the card again. Never bypass the card!
-> 4. **Dynamic Parameterization**: 100% respect user-specified models without unauthorized "upgrades". For adaptive ladders, **dynamically mirror the active system sequence** (`【当前系统生效之确认卡配置】`)—never hardcode!
+> 2. **Step 1 Ask-Before-Dispatch (Must Invoke `gemini_preview` & `ask_user_question`)**:
+>    - NEVER manually draft or hallucinate cards! You MUST invoke `gemini_preview(task: "...")` to obtain the 100% deterministic proposal card.
+>    - Output the received card markdown in chat.
+>    - **Immediately invoke `ask_user_question`** (or `ask_question`) to present interactive choice pills:
+>      ```json
+>      {
+>        "questions": [
+>          {
+>            "id": "gemini_confirm",
+>            "question": "👉 请确认是否发包执行？",
+>            "options": [
+>              { "label": "(Recommended) 确认发包执行" },
+>              { "label": "调整参数" },
+>              { "label": "取消调度（本地作答）" }
+>            ]
+>          }
+>        ]
+>      }
+>      ```
+>    - **HALT immediately** after invoking the question tool, waiting for user click!
+> 3. **Step 2 Dispatch**: Upon user confirmation, invoke `gemini_web_agent(task: "...")` to execute.
+> 4. **Per-Task Reset (Anti-Inertia)**: The confirmation cycle applies to **EVERY SINGLE TASK INDEPENDENTLY**, NOT once per session! Even if a previous task succeeded in the same chat, every new request MUST reset to Step 1 and invoke `gemini_preview` again.
 
 ---
 
-## 1. Universal Parameterized Proposal Card
+## 💡 Channel & Model Reference
 
-In Step 1, dynamically assemble and output the following card, then **STOP**:
-
-```markdown
-### 🌐 Gemini Web Agent
-检测到您欲调用外部 Google 网页端{action_description}，相关配置如下：
-
-- 🎯 执行渠道：{execution_channel}
-- 📁 挂载文件：[{mounted_files}]
-- 🚪 入口模式：{entry_mode}
-- 🧠 执行模型：{model_mode_label}
-  - {model_ladder_or_target}
-- ⚙️ 推演配置：{thinking_config}
-- 🔄 话题隔离：new_chat: true（预设开启全新独立对话）
-
-👉 请确认是否发包执行？
-- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行
-- 回复 调整参数（如「改用 Flash Lite」、「改用 Argon」等）：按您的要求调整后直接发包
-- 回复 「取消」：中止外部调度，改由本地作答
-```
-*(If the conversation is in English, you may output equivalent English labels: `Target Site:`, `Mounted Files:`, `Entry Mode:`, `Model Ladder:`, `Thinking Config:`, `Isolation:`).*
-
----
-
-## 2. Parameter Resolution Matrix
-
-Resolve each card field dynamically. **Never copy-paste hardcoded static strings**:
-
-| Field | Placeholder | Dynamic Resolution Rules |
+| Channel | Supported Target Models | Notes |
 | :--- | :--- | :--- |
-| **Action Desc** | `{action_description}` | • Local files involved ➔ `分析本地文件`<br>• Media generation ➔ `实现多媒体生成`<br>• General coding/reasoning ➔ `实现任务` or `实现并发任务` |
-| **Channel (`site`)** | `{execution_channel}` | • Image/video ➔ `Google Flow（flow）`<br>• Gemini Web or web research ➔ `gemini.google.com（可选择：Google AI Studio / Gemini Web）`<br>• Default (coding, reasoning, files) ➔ `Google AI Studio（可选择：Google AI Studio / Gemini Web）` |
-| **Mounted Files (`files`)** | `- 📁 挂载文件：[...]` | • **CONDITIONAL**: Render ONLY if local files, logs, or `@file` are referenced (e.g. `[src/index.ts]`).<br>• **OMIT ENTIRE LINE** if no files are involved (never output empty `[]`). |
-| **Entry Mode (`entry`)** | `{entry_mode}` | • Web task/canvas ➔ `task`<br>• Default ➔ `chat` |
-| **Model Ladder (`model`)** | `{model_mode_label}`<br>`{model_ladder_or_target}` | **Channel-specific routing**:<br>1. **Gemini Web (`gemini.google.com`)**: Output `Auto (Gemini Web Native Model)`. Never output AI Studio fallback ladders!<br>2. **Google Flow (`flow`)**: Output `Nano Banana 2.1 (2K Canvas Generation)` or `Omni 1.2 / Veo (Video)`<br>3. **Google AI Studio**: Follow user-specified model, strict mode, or adaptive ladder (`{CURRENT_DYNAMIC_LADDER}`) verbatim. |
-| **Thinking Config** | `{thinking_config}` | • **Gemini Web** ➔ `Web Search Grounding (Task Mode)` or `Standard Chat Mode` (no Thinking level)<br>• **Flow images** ➔ `将生成数量设为 x1，分辨率设为 2K`<br>• **AI Studio default** ➔ `Thinking 设为 {current_thinking_level}` (from system prompt, e.g. `high`) |
+| **Google AI Studio** | `Hydrogen` (`gemini-4-hydrogen`)<br>`Flash` (`gemini-3.8-flash`)<br>`Flash Lite` (`gemini-3.5-flash-lite`)<br>`Neon` (`gemini-4-neon`) | • Best for code & reasoning: `Hydrogen`<br>• Best for rapid tasks: `Flash Lite`<br>• ⚠️ **Note**: Legacy `Argon` has been upgraded/merged into `Hydrogen`; specifying Argon will automatically map to `gemini-4-hydrogen`. |
+| **Gemini Web** | `Auto` (Native Web Model) | Managed automatically by Google official web model; no individual model alias needed. |
+| **Google Flow** | `Nano Banana 2.1`<br>`Omni 1.2 / Veo` | • 0-credit image generation: `Nano Banana 2.1`<br>• Video generation: `Omni 1.2` or `Veo` |
 
 ---
 
-## 3. Step 2 Dispatch & Tool Parameters
+## 1. Step 1: Proposal Card & Interactive Choice Bar
 
-When confirmed, invoke `gemini_web_agent`:
+When receiving any user instruction, you **MUST ONLY execute these two steps**:
 
-| Tool Argument | Description & Source |
+1. **Invoke `gemini_preview`**:
+   - Parameter: `{ "task": "<user prompt>" }`
+   - Backend code deterministically resolves target site, entry mode, model fallback ladder, and mounted files.
+2. **Output card & invoke `ask_user_question`**:
+   - Print the card Markdown returned by `gemini_preview`.
+   - Invoke `ask_user_question` with the options above so the UI presents clickable buttons.
+   - Stop and wait for user action.
+
+---
+
+## 2. Step 2: Dispatch and Parameters
+
+When confirmed (interactive button clicked, or `1` / `confirm` sent), invoke `gemini_web_agent`:
+
+| Parameter | Specification |
 | :--- | :--- |
-| `task` | User's full prompt and task description |
-| `files` | Array of file paths (pass only when files are attached, e.g. `["path/to/file.ext"]`) |
-| `model` | User-specified model alias, or empty in adaptive mode |
-| `site` | Target channel: `aistudio` (default), `flow`, or `gemini` |
-| `entry` | `chat` (default) or `task` |
+| `task` | Full user task prompt and requirements |
+| `files` | Array of local file paths (auto-extracted from task if omitted) |
+| `model` | User-specified model alias; omit in smart fallback mode |
+| `site` | Target site: `aistudio` (default), `flow`, or `gemini` |
+| `entry` | `chat` (default), `task`, or `canvas` |
 | `thinking_level` | `high` (default), `medium`, or `low` |
 | `thinking_policy` | `adaptive` (default), `strict`, or `custom` |
-| `new_chat` | `true` (default) |
+| `new_chat` | `true` (default: isolated new session) |
 
-**Output Delivery**: Present fallback notifications, clickable `file://` links, and key architectural highlights. Never recopy entire massive code files.
+**Deliverable Requirements**: Upon completion, present the fallback status notice, clickable `file://` hyperlinks to saved files, and key architectural highlights. Never reprint full long code.

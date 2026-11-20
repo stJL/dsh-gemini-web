@@ -3,71 +3,34 @@ import fs from 'node:fs'
 import { createApiRouter } from './transport/router.js'
 import { executeAgentTask, getWorkspaceDownloadDir } from './bridge/agent-executor.js'
 import { loadConfig } from './config.js'
+import { parseTaskToProposal } from './proposal.js'
 
 export const name = 'dsh-gemini-web'
 export const inject = ['tools', 'webServer', 'systemPrompt']
 
 export function buildDynamicCardGuidance(): string {
-  const cfg = loadConfig()
-  const isStrict = cfg.thinkingPolicy === 'strict'
-  const policyLabel = isStrict ? '（严格模式）' : '（智能/降级模式）'
-  const ladderStr = (!isStrict && cfg.fallbackLadder && cfg.fallbackLadder.length > 0)
-    ? cfg.fallbackLadder.join(' -> ')
-    : (cfg.defaultModel || 'gemini-4-hydrogen')
-  const thinkingVal = cfg.thinkingLevel || 'high'
+  return `【🌐 Gemini Web Agent 调度工作流与交互规范（两步走・先问后用）】
+当用户提到 /gemini-web-agent、AI Studio、Gemini 官网、Google Flow 或指定 Hydrogen/Argon/Flash 等模型时：
 
-  return `【🌐 Gemini Web Agent 调度铁律与确认卡排版规范】
-在调用本工具发包前，你必须在第 1 步先在聊天中输出【🌐 Gemini Web Agent】确认卡并【停止当前回应】，等待用户确认！
-严禁擅自直接发包，严禁调用 ask_user_question！
+【第 1 步：生成提案并呼叫交互选择栏（严禁偷跑直接发包，严禁自行脑补排版）】：
+1. 必须首先调用工具 gemini_preview(task: "...")。系统后端代码将 100% 确定性解析目标渠道、入口模式与降级阶梯，彻底消除排版幻觉与阶梯错误！
+2. 在聊天中原样输出 gemini_preview 返回的确认卡文本。
+3. 必须立即调用交互提问工具 ask_user_question（或 ask_question），呈现原生交互选择按钮供用户直接点击：
+   - questions: [{ id: "gemini_confirm", question: "👉 请确认是否发包执行？", options: [{ label: "(Recommended) 确认发包执行" }, { label: "调整参数" }, { label: "取消调度（本地作答）" }] }]
+4. 严禁直接调用 gemini_web_agent 发包，严禁在本地编写答案，严禁调用 subagent 消耗付费额度！调用提问工具后立即结束当前回应，等待用户在交互栏点击！
+
+【第 2 步：授权发包】：
+当用户在交互选择栏中点击「确认发包执行」或回复「确认」/「1」后：
+正式调用 gemini_web_agent 发包执行！
 
 🚨【多轮任务循环铁律（Multi-Turn Anti-Inertia）】：
 每个新任务都是一个全新独立的循环（Cycle），绝非整个聊天会话只确认一次！
-即使同一对话中上一轮刚刚成功执行完毕，只要用户再次发起新的任务指令（包含 /gemini-web-agent 或新的执行需求），本轮依然必须 100% 重新重置回第 1 步，必须再次输出【🌐 Gemini Web Agent】确认卡并停止等待！
-绝对严禁因为历史上上一轮已经确认过就自作聪明跳过确认卡直接作答或偷跑发包！
-
-确认卡必须严格以 Markdown 列表「- 」逐行呈现（严禁丢弃「- 」导致折叠合并为一行）：
-
-【通用确认卡模板】：
-- 🎯 执行渠道：{execution_channel}
-- 🚪 入口模式：{entry_mode}
-- 🧠 执行模型：{model_section}
-- ⚙️ 推演配置：{thinking_section}
-- 🔄 话题隔离：new_chat: true（预设开启全新独立对话）
-
-👉 请确认是否发包执行？
-- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行
-- 回复 调整参数（如「改用 Flash Lite」、「改用 Argon」等）：按您的要求调整后直接发包
-- 回复 「取消」：中止外部调度，改由本地作答
-
-【三大切换场景与动态参数装配规则】：
-1. 🌐【场景 1：Gemini 官网任务】（当用户提到「Gemini 官网」、「gemini.google.com」、「task 模式」或联网调研时）：
-   - 🎯 执行渠道：gemini.google.com（可选择：Google AI Studio / Gemini Web）
-   - 🚪 入口模式：task（若提到 task/联网调研）或 chat（日常对话）
-   - 🧠 执行模型：Auto (Gemini 官网原生模型)
-     ⚠️ 官网铁律：Gemini 官网直接由 Google 官方模型作答，绝对禁止输出 AI Studio 的模型降级阶梯！严禁输出「gemini.google.com -> gemini-4-hydrogen」等荒谬拼接！
-   - ⚙️ 推演配置：联网搜索增强 (Task 联网模式) 或 官网标准对话模式（⚠️ 官网无 Thinking 等级概念，严禁输出「Thinking 设为 high」！）
-
-2. 🎨【场景 2：Google Flow 生图/视频】（当涉及 Nano Banana 2.1 生图、Omni/Veo 视频时）：
-   - 🎯 执行渠道：Google Flow (flow.google.com)
-   - 🚪 入口模式：canvas（底栏标准画布・0 扣点特权）
-   - 🧠 执行模型：Nano Banana 2.1 (2K 高清生图)（⚠️ 生图渠道绝不输出 AI Studio 阶梯！）
-   - ⚙️ 推演配置：生成数量设为 x1，分辨率设为 2K
-
-3. 🧠【场景 3：Google AI Studio 默认渠道】（代码生成、极值推演、本地大文件分析、常规编码任务）：
-   - 🎯 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
-   - 🚪 入口模式：chat
-   - 🧠 执行模型：
-     - 若用户显式指定模型（如「用 Flash Lite」）➔ 「（用户指定）\\n  - {用户指定模型}」
-     - 若系统为严格模式 ➔ 「（严格模式）\\n  - ${cfg.defaultModel || 'gemini-4-hydrogen'}」
-     - 默认智能/降级模式 ➔ 「${policyLabel}\\n  - ${ladderStr}」
-       🚨【历史惯性斩断令】：在 AI Studio 智能模式下，必须逐字原样镜像系统当前配置序列「${ladderStr}」，严禁抄袭历史旧对话！
-   - ⚙️ 推演配置：Thinking 设为 ${thinkingVal}
-
-4. 📁 挂载本地文件（条件项）：若用户需求涉及分析本地文件、日志、论文 PDF、代码文件或输入了 @文件，【绝对禁止调用本地 read、cat、bash 工具自行读取】！你必须直接在确认卡中加入「- 📁 挂载文件：[文件名]」，并在第 2 步正式发包时将文件路径填入 files 数组参数中。若无文件需求，则完全不输出此行。`
+即使同一对话中上一轮刚刚成功执行完毕，只要用户再次发起新的任务指令，本轮依然必须 100% 重新重置回第 1 步，必须再次调用 gemini_preview 输出确认卡并调用提问工具！
+绝对严禁因为历史上上一轮已经确认过就自作聪明跳过确认卡直接作答或偷跑发包！`
 }
 
 export function apply(ctx: any) {
-  // 1. 給 Agent 注入動態提示詞段落（含當前 GUI 配置的階梯序列）
+  // 1. 給 Agent 注入動態提示詞段落（引導先問後用與確定性預覽）
   ctx.inject(['systemPrompt'], (scoped: any) => {
     let disposeSection: any = null
     const syncPrompt = () => {
@@ -91,23 +54,59 @@ export function apply(ctx: any) {
     ctx.on('gemini-web/config-updated', syncPrompt)
   })
 
-  // 2. 註冊 DSH 核心代理工具: gemini_web_agent 與 gemini-web-agent
+  // 2. 註冊 DSH 核心代理工具: gemini_preview, gemini_web_agent 與別名
   ctx.inject(['tools'], (scoped: any) => {
     try {
+      // 2.1 確定性卡片預覽與生成工具 (Plan B: 徹底終結小模型排版幻覺與奪舍)
+      const previewDef = {
+        name: 'gemini_preview',
+        get description() {
+          return `【第 1 步确定性确认卡与交互选项生成器】
+必须在第 1 步调用！输入用户的任务指令，100% 由代码确定性解析并生成标准的【🌐 Gemini Web Agent】确认卡与交互选项定义（彻底规避排版幻觉与阶梯错误）。
+在第 1 步调用本工具获取卡片后，在聊天中原样输出卡片文本，并立即调用选择栏工具 ask_user_question 呈现确认按钮供用户点击！`
+        },
+        parameters: {
+          type: 'object',
+          required: ['task'],
+          properties: {
+            task: {
+              type: 'string',
+              description: '用户提出的任务指令或提示词',
+            },
+          },
+        },
+        output: {
+          schema: {
+            type: 'string',
+            description: '确定性生成的提案卡 Markdown 文本',
+          },
+          render: (_args: any, value: any) => [{
+            type: 'text',
+            text: typeof value === 'string' ? value : (value ? JSON.stringify(value) : ''),
+          }],
+        },
+        async execute(args: any) {
+          const proposal = parseTaskToProposal(args.task, loadConfig())
+          return `${proposal.card}\n\n【下一步操作指引】：请宿主 AI 立即在当前聊天窗口中原样输出上方确认卡，并调用提问工具 ask_user_question（或 ask_question）弹出交互选择按钮：\n- questions: [{"id": "gemini_confirm", "question": "👉 请确认是否发包执行？", "options": [{"label": "(Recommended) 确认发包执行"}, {"label": "调整参数"}, {"label": "取消调度（本地作答）"}]}]\n调用提问工具后立即停止本次回应，等待用户点击按钮确认！`
+        },
+      }
+
+      scoped.tools.register(previewDef)
+      scoped.tools.register({ ...previewDef, name: 'gemini-preview' })
+
+      // 2.2 核心發包執行工具
       const toolDef = {
         name: 'gemini_web_agent',
         get description() {
-          return `【🚨 Google 外部免费算力与多模态网关 / 唯一铁律：一律先问后用】
-【🚨 致命调用前置条件 - 第 1 步绝对禁止直接调用发包】：
-本工具严格遵循「一律先问后用」规范，无任何例外！
-在使用者提出任何需求后，你【第 1 步绝对禁止直接调用本工具发包，绝对禁止调用 ask_user_question】！
-你必须在第 1 步先在聊天中输出【🌐 Gemini Web Agent】确认卡，并在此【停止当前回应】，等待用户确认！
-只有当用户在下一轮明确回复「确认」、「1」或给予明确发包授权时，才正式调用本工具发包！
+          return `【🚨 Google 外部免费算力与多模态网关 / 核心铁律：两步走・先问后用】
+【第 1 步先问后用，第 2 步授权发包】：
+在使用者提出任何需求后，第 1 步必须先调用 gemini_preview 工具确定性生成【🌐 Gemini Web Agent】确认卡，并调用 ask_user_question 呈现原生按钮供用户点击，并在此停止等待！
+只有当用户确认（点击按钮、回复「确认」或「1」）后，才在第 2 步正式调用本工具发包执行！
 
 ${buildDynamicCardGuidance()}
 
-1. 🎯【用户指定模型绝对优先】：若用户指定了具体模型（如「用 Gemini 3.5 Flash Lite」、「用 Argon」），确认卡与发包必须 100% 采用该模型，严禁擅自升级或替换！只有用户完全未指定时才采用系统默认阶梯。
-2. 🛑【明令禁止本地擅自代劳、Subagent 劫持与本地 read 工具拦截】：严禁在本地自行编写答案，严禁调用 read、cat、bash 等本地工具预先读取文件，严禁调用 subagent 消耗付费额度！当用户要求分析本地文件或输入了 @文件 时，直接将该文件路径放入确认卡并交给外部网页端挂载分析！
+1. 🎯【用户指定模型绝对优先】：若用户指定了具体模型（如「用 Gemini 3.5 Flash Lite」、「用 Argon」），必须 100% 采用该模型，严禁擅自升级或替换！
+2. 🛑【明令禁止本地擅自代劳、Subagent 劫持与本地 read 工具拦截】：严禁在本地自行编写答案，严禁调用 read、cat、bash 等本地工具预先读取文件，严禁调用 subagent 消耗付费额度！当用户要求分析本地文件或输入了 @文件 时，直接将该文件路径交由外部网页端挂载分析！
 3. 📦【调用完成后的展示义务】：调用完成后，必须完整呈现降级流程通知、落地文件超链接以及核心架构说明与代码！`
         },
         parameters: {
@@ -118,9 +117,13 @@ ${buildDynamicCardGuidance()}
               type: 'string',
               description: '交由 Gemini 网页端执行的完整任务指令、需求描述与要求',
             },
+            action: {
+              type: 'string',
+              description: '执行动作：execute (默认，正式发包执行) 或 preview (仅确定性预览并返回确认卡)',
+            },
             model: {
               type: 'string',
-              description: '指定调度的模型别名（选填，如 hydrogen, argon, flash, flash-lite 等）。注意：在第 1 步确认卡中，智能/定时模式下必须完整输出降级阶梯序列，严禁只写单个模型！',
+              description: '指定调度的模型别名（选填，如 hydrogen, argon, flash, flash-lite 等）',
             },
             site: {
               type: 'string',
@@ -164,6 +167,21 @@ ${buildDynamicCardGuidance()}
           }],
         },
         async execute(args: any, exec?: any) {
+          // 若为 preview 动作，直接执行确定性解析生成确认卡
+          if (args.action === 'preview') {
+            const proposal = parseTaskToProposal(args.task, loadConfig())
+            return proposal.card
+          }
+
+          // 自动挂载文件兜底提取：若未显式传 files，自动提取提示词中的路径或 @file
+          let filesToPass = args.files
+          if (!filesToPass || filesToPass.length === 0) {
+            const proposal = parseTaskToProposal(args.task, loadConfig())
+            if (proposal.files && proposal.files.length > 0) {
+              filesToPass = proposal.files
+            }
+          }
+
           const sessionId = exec?.agent?.id || exec?.agent?.sessionId || exec?.sessionId
           const res = await executeAgentTask({
             task: args.task,
@@ -175,7 +193,7 @@ ${buildDynamicCardGuidance()}
             timeoutSec: args.timeout_sec,
             newChat: args.new_chat,
             sessionId: sessionId,
-            files: args.files,
+            files: filesToPass,
           })
           if (!res.ok) {
             if (res.error?.includes('CONGESTION_HALT')) {

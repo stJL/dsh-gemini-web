@@ -1011,63 +1011,186 @@ function createApiRouter(ctx) {
   };
 }
 
+// src/proposal.ts
+function parseTaskToProposal(task, config) {
+  const cfg = config || loadConfig();
+  const extractedFiles = [];
+  const atRegex = /@([a-zA-Z0-9_\-\.\/]+)/g;
+  let match;
+  while ((match = atRegex.exec(task)) !== null) {
+    const f = match[1].trim();
+    if (f && !extractedFiles.includes(f)) {
+      extractedFiles.push(f);
+    }
+  }
+  const fileRegex = /\b(?:(?:\.?\.?\/)?[a-zA-Z0-9_\-]+\/)*[a-zA-Z0-9_\-]+\.(?:ts|tsx|js|jsx|py|json|md|txt|pdf|png|jpg|jpeg|gif|webp|csv|log|yaml|yml|rs|go|cpp|c|h|java|html|css|sh)\b/gi;
+  while ((match = fileRegex.exec(task)) !== null) {
+    const f = match[0].trim();
+    if (f && !f.includes("google.com") && !extractedFiles.includes(f)) {
+      extractedFiles.push(f);
+    }
+  }
+  const isAiStudio = /(?:google\s*ai\s*studio|ai\s*studio|aistudio)/i.test(task);
+  const isFlow = /(?:google\s*flow|flow\.google\.com|\bflow\b|nano\s*banana|veo|omni\s*1\.2|生图|画一张|生成图片|生成图|做视频|生成视频)/i.test(task);
+  const isGeminiWeb = /(?:gemini(?:\.google\.com)?\s*官网|gemini\s*web|gemini\s*网页|task\s*模式|task模式)/i.test(task) || !isAiStudio && /联网调研/i.test(task);
+  let site = "aistudio";
+  if (isAiStudio) {
+    site = "aistudio";
+  } else if (isFlow) {
+    site = "flow";
+  } else if (isGeminiWeb) {
+    site = "gemini";
+  }
+  let entry = "chat";
+  if (site === "flow") {
+    entry = "canvas";
+  } else if (site === "gemini") {
+    if (/(?:task\s*模式|task模式|联网调研|\btask\b)/i.test(task)) {
+      entry = "task";
+    } else {
+      entry = "chat";
+    }
+  }
+  let channel = "Google AI Studio（可选择：Google AI Studio / Gemini Web）";
+  if (site === "gemini") {
+    channel = "gemini.google.com（可选择：Google AI Studio / Gemini Web）";
+  } else if (site === "flow") {
+    channel = "Google Flow (flow.google.com)";
+  }
+  let actionDesc = "实现任务";
+  if (extractedFiles.length > 0) {
+    actionDesc = "分析本地文件";
+  } else if (site === "flow") {
+    actionDesc = "实现多媒体生成";
+  } else if (site === "gemini" && entry === "task") {
+    actionDesc = "进行联网调研与深度探索";
+  } else if (site === "aistudio" && /联网调研/i.test(task)) {
+    actionDesc = "进行联网调研与深度探索";
+  }
+  let userSpecifiedModel;
+  let userSpecifiedModelKey;
+  let modelNote = "";
+  if (/flash[- ]?lite|3\.5[- ]?flash[- ]?lite/i.test(task)) {
+    userSpecifiedModel = "gemini-3.5-flash-lite";
+    userSpecifiedModelKey = "gemini-3.5-flash-lite";
+  } else if (/3\.8[- ]?flash|\bflash\b/i.test(task) && !/flash[- ]?lite/i.test(task)) {
+    userSpecifiedModel = "gemini-3.8-flash";
+    userSpecifiedModelKey = "gemini-3.8-flash";
+  } else if (/hydrogen|gemini-4/i.test(task)) {
+    userSpecifiedModel = "gemini-4-hydrogen";
+    userSpecifiedModelKey = "gemini-4-hydrogen";
+  } else if (/argon/i.test(task)) {
+    userSpecifiedModel = "gemini-4-hydrogen";
+    userSpecifiedModelKey = "gemini-4-hydrogen";
+    modelNote = "（注：Google 已将旧 Argon 槽位升级合并至 Hydrogen 深度推理，已自动为您映射）";
+  } else if (/neon/i.test(task)) {
+    userSpecifiedModel = "gemini-4-neon";
+    userSpecifiedModelKey = "neon";
+  } else if (/nano\s*banana/i.test(task)) {
+    userSpecifiedModel = "Nano Banana 2.1";
+    userSpecifiedModelKey = "nano-banana";
+  } else if (/veo|omni/i.test(task)) {
+    userSpecifiedModel = "Omni 1.2 / Veo";
+    userSpecifiedModelKey = "omni";
+  }
+  let modelLabel = "";
+  let modelTarget = "";
+  let finalModel = undefined;
+  if (site === "flow") {
+    if (userSpecifiedModelKey === "omni") {
+      modelLabel = "Omni 1.2 / Veo (视频生成)";
+      modelTarget = "Omni 1.2 / Veo";
+      finalModel = "omni";
+    } else {
+      modelLabel = "Nano Banana 2.1 (2K 高清生图)";
+      modelTarget = "Nano Banana 2.1";
+      finalModel = "nano-banana";
+    }
+  } else if (site === "gemini") {
+    modelLabel = "Auto (Gemini 官网原生模型)";
+    modelTarget = "Google 官方原生模型";
+  } else if (userSpecifiedModel) {
+    modelLabel = "（用户指定）";
+    modelTarget = userSpecifiedModel;
+    finalModel = userSpecifiedModelKey;
+  } else {
+    const isStrict = cfg.thinkingPolicy === "strict";
+    if (isStrict) {
+      modelLabel = "（严格模式）";
+      modelTarget = cfg.defaultModel || "gemini-4-hydrogen";
+      finalModel = cfg.defaultModel;
+    } else {
+      modelLabel = "（智能/降级模式）";
+      const ladder = cfg.fallbackLadder && cfg.fallbackLadder.length > 0 ? cfg.fallbackLadder : [cfg.defaultModel || "gemini-4-hydrogen"];
+      modelTarget = ladder.join(" -> ");
+    }
+  }
+  let thinkingConfig = "";
+  if (site === "gemini") {
+    thinkingConfig = entry === "task" ? "联网搜索增强 (Task 联网模式)" : "官网标准对话模式";
+  } else if (site === "flow") {
+    thinkingConfig = "生成数量设为 x1，分辨率设为 2K";
+  } else {
+    const level = cfg.thinkingLevel || "high";
+    thinkingConfig = /联网调研/i.test(task) ? `Thinking 设为 ${level} (联网搜索增强)` : `Thinking 设为 ${level}`;
+  }
+  const filesLine = extractedFiles.length > 0 ? `- \uD83D\uDCC1 挂载文件：[${extractedFiles.join(", ")}]` : "";
+  const cardLines = [
+    "### \uD83C\uDF10 Gemini Web Agent",
+    `检测到您欲调用外部 Google 网页端${actionDesc}，相关配置如下：`,
+    "",
+    `- \uD83C\uDFAF 执行渠道：${channel}`
+  ];
+  if (filesLine) {
+    cardLines.push(filesLine);
+  }
+  cardLines.push(`- \uD83D\uDEAA 入口模式：${entry}`, `- \uD83E\uDDE0 执行模型：${modelLabel}`, `  - ${modelTarget}${modelNote ? ` ${modelNote}` : ""}`, `- ⚙️ 推演配置：${thinkingConfig}`, "- \uD83D\uDD04 话题隔离：new_chat: true（预设开启全新独立对话）", "", "\uD83D\uDC49 请确认是否发包执行？", "- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行", "- 回复 调整参数（如「改用 Flash Lite」、「改用 Hydrogen」等）：按您的要求调整后直接发包", "- 回复 「取消」：中止外部调度，改由本地作答");
+  const card = cardLines.join(`
+`);
+  const question = "\uD83D\uDC49 请确认是否发包执行？";
+  const options = [
+    "(Recommended) 确认发包执行",
+    "调整参数",
+    "取消调度（本地作答）"
+  ];
+  return {
+    site,
+    entry,
+    channel,
+    actionDesc,
+    modelLabel,
+    modelTarget,
+    model: finalModel,
+    thinkingConfig,
+    files: extractedFiles,
+    card,
+    question,
+    options
+  };
+}
+
 // src/index.ts
 var name = "dsh-gemini-web";
 var inject = ["tools", "webServer", "systemPrompt"];
 function buildDynamicCardGuidance() {
-  const cfg = loadConfig();
-  const isStrict = cfg.thinkingPolicy === "strict";
-  const policyLabel = isStrict ? "（严格模式）" : "（智能/降级模式）";
-  const ladderStr = !isStrict && cfg.fallbackLadder && cfg.fallbackLadder.length > 0 ? cfg.fallbackLadder.join(" -> ") : cfg.defaultModel || "gemini-4-hydrogen";
-  const thinkingVal = cfg.thinkingLevel || "high";
-  return `【\uD83C\uDF10 Gemini Web Agent 调度铁律与确认卡排版规范】
-在调用本工具发包前，你必须在第 1 步先在聊天中输出【\uD83C\uDF10 Gemini Web Agent】确认卡并【停止当前回应】，等待用户确认！
-严禁擅自直接发包，严禁调用 ask_user_question！
+  return `【\uD83C\uDF10 Gemini Web Agent 调度工作流与交互规范（两步走・先问后用）】
+当用户提到 /gemini-web-agent、AI Studio、Gemini 官网、Google Flow 或指定 Hydrogen/Argon/Flash 等模型时：
+
+【第 1 步：生成提案并呼叫交互选择栏（严禁偷跑直接发包，严禁自行脑补排版）】：
+1. 必须首先调用工具 gemini_preview(task: "...")。系统后端代码将 100% 确定性解析目标渠道、入口模式与降级阶梯，彻底消除排版幻觉与阶梯错误！
+2. 在聊天中原样输出 gemini_preview 返回的确认卡文本。
+3. 必须立即调用交互提问工具 ask_user_question（或 ask_question），呈现原生交互选择按钮供用户直接点击：
+   - questions: [{ id: "gemini_confirm", question: "\uD83D\uDC49 请确认是否发包执行？", options: [{ label: "(Recommended) 确认发包执行" }, { label: "调整参数" }, { label: "取消调度（本地作答）" }] }]
+4. 严禁直接调用 gemini_web_agent 发包，严禁在本地编写答案，严禁调用 subagent 消耗付费额度！调用提问工具后立即结束当前回应，等待用户在交互栏点击！
+
+【第 2 步：授权发包】：
+当用户在交互选择栏中点击「确认发包执行」或回复「确认」/「1」后：
+正式调用 gemini_web_agent 发包执行！
 
 \uD83D\uDEA8【多轮任务循环铁律（Multi-Turn Anti-Inertia）】：
 每个新任务都是一个全新独立的循环（Cycle），绝非整个聊天会话只确认一次！
-即使同一对话中上一轮刚刚成功执行完毕，只要用户再次发起新的任务指令（包含 /gemini-web-agent 或新的执行需求），本轮依然必须 100% 重新重置回第 1 步，必须再次输出【\uD83C\uDF10 Gemini Web Agent】确认卡并停止等待！
-绝对严禁因为历史上上一轮已经确认过就自作聪明跳过确认卡直接作答或偷跑发包！
-
-确认卡必须严格以 Markdown 列表「- 」逐行呈现（严禁丢弃「- 」导致折叠合并为一行）：
-
-【通用确认卡模板】：
-- \uD83C\uDFAF 执行渠道：{execution_channel}
-- \uD83D\uDEAA 入口模式：{entry_mode}
-- \uD83E\uDDE0 执行模型：{model_section}
-- ⚙️ 推演配置：{thinking_section}
-- \uD83D\uDD04 话题隔离：new_chat: true（预设开启全新独立对话）
-
-\uD83D\uDC49 请确认是否发包执行？
-- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行
-- 回复 调整参数（如「改用 Flash Lite」、「改用 Argon」等）：按您的要求调整后直接发包
-- 回复 「取消」：中止外部调度，改由本地作答
-
-【三大切换场景与动态参数装配规则】：
-1. \uD83C\uDF10【场景 1：Gemini 官网任务】（当用户提到「Gemini 官网」、「gemini.google.com」、「task 模式」或联网调研时）：
-   - \uD83C\uDFAF 执行渠道：gemini.google.com（可选择：Google AI Studio / Gemini Web）
-   - \uD83D\uDEAA 入口模式：task（若提到 task/联网调研）或 chat（日常对话）
-   - \uD83E\uDDE0 执行模型：Auto (Gemini 官网原生模型)
-     ⚠️ 官网铁律：Gemini 官网直接由 Google 官方模型作答，绝对禁止输出 AI Studio 的模型降级阶梯！严禁输出「gemini.google.com -> gemini-4-hydrogen」等荒谬拼接！
-   - ⚙️ 推演配置：联网搜索增强 (Task 联网模式) 或 官网标准对话模式（⚠️ 官网无 Thinking 等级概念，严禁输出「Thinking 设为 high」！）
-
-2. \uD83C\uDFA8【场景 2：Google Flow 生图/视频】（当涉及 Nano Banana 2.1 生图、Omni/Veo 视频时）：
-   - \uD83C\uDFAF 执行渠道：Google Flow (flow.google.com)
-   - \uD83D\uDEAA 入口模式：canvas（底栏标准画布・0 扣点特权）
-   - \uD83E\uDDE0 执行模型：Nano Banana 2.1 (2K 高清生图)（⚠️ 生图渠道绝不输出 AI Studio 阶梯！）
-   - ⚙️ 推演配置：生成数量设为 x1，分辨率设为 2K
-
-3. \uD83E\uDDE0【场景 3：Google AI Studio 默认渠道】（代码生成、极值推演、本地大文件分析、常规编码任务）：
-   - \uD83C\uDFAF 执行渠道：Google AI Studio（可选择：Google AI Studio / Gemini Web）
-   - \uD83D\uDEAA 入口模式：chat
-   - \uD83E\uDDE0 执行模型：
-     - 若用户显式指定模型（如「用 Flash Lite」）➔ 「（用户指定）\\n  - {用户指定模型}」
-     - 若系统为严格模式 ➔ 「（严格模式）\\n  - ${cfg.defaultModel || "gemini-4-hydrogen"}」
-     - 默认智能/降级模式 ➔ 「${policyLabel}\\n  - ${ladderStr}」
-       \uD83D\uDEA8【历史惯性斩断令】：在 AI Studio 智能模式下，必须逐字原样镜像系统当前配置序列「${ladderStr}」，严禁抄袭历史旧对话！
-   - ⚙️ 推演配置：Thinking 设为 ${thinkingVal}
-
-4. \uD83D\uDCC1 挂载本地文件（条件项）：若用户需求涉及分析本地文件、日志、论文 PDF、代码文件或输入了 @文件，【绝对禁止调用本地 read、cat、bash 工具自行读取】！你必须直接在确认卡中加入「- \uD83D\uDCC1 挂载文件：[文件名]」，并在第 2 步正式发包时将文件路径填入 files 数组参数中。若无文件需求，则完全不输出此行。`;
+即使同一对话中上一轮刚刚成功执行完毕，只要用户再次发起新的任务指令，本轮依然必须 100% 重新重置回第 1 步，必须再次调用 gemini_preview 输出确认卡并调用提问工具！
+绝对严禁因为历史上上一轮已经确认过就自作聪明跳过确认卡直接作答或偷跑发包！`;
 }
 function apply(ctx) {
   ctx.inject(["systemPrompt"], (scoped) => {
@@ -1096,20 +1219,56 @@ function apply(ctx) {
   });
   ctx.inject(["tools"], (scoped) => {
     try {
+      const previewDef = {
+        name: "gemini_preview",
+        get description() {
+          return `【第 1 步确定性确认卡与交互选项生成器】
+必须在第 1 步调用！输入用户的任务指令，100% 由代码确定性解析并生成标准的【\uD83C\uDF10 Gemini Web Agent】确认卡与交互选项定义（彻底规避排版幻觉与阶梯错误）。
+在第 1 步调用本工具获取卡片后，在聊天中原样输出卡片文本，并立即调用选择栏工具 ask_user_question 呈现确认按钮供用户点击！`;
+        },
+        parameters: {
+          type: "object",
+          required: ["task"],
+          properties: {
+            task: {
+              type: "string",
+              description: "用户提出的任务指令或提示词"
+            }
+          }
+        },
+        output: {
+          schema: {
+            type: "string",
+            description: "确定性生成的提案卡 Markdown 文本"
+          },
+          render: (_args, value) => [{
+            type: "text",
+            text: typeof value === "string" ? value : value ? JSON.stringify(value) : ""
+          }]
+        },
+        async execute(args) {
+          const proposal = parseTaskToProposal(args.task, loadConfig());
+          return `${proposal.card}
+
+【下一步操作指引】：请宿主 AI 立即在当前聊天窗口中原样输出上方确认卡，并调用提问工具 ask_user_question（或 ask_question）弹出交互选择按钮：
+- questions: [{"id": "gemini_confirm", "question": "\uD83D\uDC49 请确认是否发包执行？", "options": [{"label": "(Recommended) 确认发包执行"}, {"label": "调整参数"}, {"label": "取消调度（本地作答）"}]}]
+调用提问工具后立即停止本次回应，等待用户点击按钮确认！`;
+        }
+      };
+      scoped.tools.register(previewDef);
+      scoped.tools.register({ ...previewDef, name: "gemini-preview" });
       const toolDef = {
         name: "gemini_web_agent",
         get description() {
-          return `【\uD83D\uDEA8 Google 外部免费算力与多模态网关 / 唯一铁律：一律先问后用】
-【\uD83D\uDEA8 致命调用前置条件 - 第 1 步绝对禁止直接调用发包】：
-本工具严格遵循「一律先问后用」规范，无任何例外！
-在使用者提出任何需求后，你【第 1 步绝对禁止直接调用本工具发包，绝对禁止调用 ask_user_question】！
-你必须在第 1 步先在聊天中输出【\uD83C\uDF10 Gemini Web Agent】确认卡，并在此【停止当前回应】，等待用户确认！
-只有当用户在下一轮明确回复「确认」、「1」或给予明确发包授权时，才正式调用本工具发包！
+          return `【\uD83D\uDEA8 Google 外部免费算力与多模态网关 / 核心铁律：两步走・先问后用】
+【第 1 步先问后用，第 2 步授权发包】：
+在使用者提出任何需求后，第 1 步必须先调用 gemini_preview 工具确定性生成【\uD83C\uDF10 Gemini Web Agent】确认卡，并调用 ask_user_question 呈现原生按钮供用户点击，并在此停止等待！
+只有当用户确认（点击按钮、回复「确认」或「1」）后，才在第 2 步正式调用本工具发包执行！
 
 ${buildDynamicCardGuidance()}
 
-1. \uD83C\uDFAF【用户指定模型绝对优先】：若用户指定了具体模型（如「用 Gemini 3.5 Flash Lite」、「用 Argon」），确认卡与发包必须 100% 采用该模型，严禁擅自升级或替换！只有用户完全未指定时才采用系统默认阶梯。
-2. \uD83D\uDED1【明令禁止本地擅自代劳、Subagent 劫持与本地 read 工具拦截】：严禁在本地自行编写答案，严禁调用 read、cat、bash 等本地工具预先读取文件，严禁调用 subagent 消耗付费额度！当用户要求分析本地文件或输入了 @文件 时，直接将该文件路径放入确认卡并交给外部网页端挂载分析！
+1. \uD83C\uDFAF【用户指定模型绝对优先】：若用户指定了具体模型（如「用 Gemini 3.5 Flash Lite」、「用 Argon」），必须 100% 采用该模型，严禁擅自升级或替换！
+2. \uD83D\uDED1【明令禁止本地擅自代劳、Subagent 劫持与本地 read 工具拦截】：严禁在本地自行编写答案，严禁调用 read、cat、bash 等本地工具预先读取文件，严禁调用 subagent 消耗付费额度！当用户要求分析本地文件或输入了 @文件 时，直接将该文件路径交由外部网页端挂载分析！
 3. \uD83D\uDCE6【调用完成后的展示义务】：调用完成后，必须完整呈现降级流程通知、落地文件超链接以及核心架构说明与代码！`;
         },
         parameters: {
@@ -1120,9 +1279,13 @@ ${buildDynamicCardGuidance()}
               type: "string",
               description: "交由 Gemini 网页端执行的完整任务指令、需求描述与要求"
             },
+            action: {
+              type: "string",
+              description: "执行动作：execute (默认，正式发包执行) 或 preview (仅确定性预览并返回确认卡)"
+            },
             model: {
               type: "string",
-              description: "指定调度的模型别名（选填，如 hydrogen, argon, flash, flash-lite 等）。注意：在第 1 步确认卡中，智能/定时模式下必须完整输出降级阶梯序列，严禁只写单个模型！"
+              description: "指定调度的模型别名（选填，如 hydrogen, argon, flash, flash-lite 等）"
             },
             site: {
               type: "string",
@@ -1166,6 +1329,17 @@ ${buildDynamicCardGuidance()}
           }]
         },
         async execute(args, exec) {
+          if (args.action === "preview") {
+            const proposal = parseTaskToProposal(args.task, loadConfig());
+            return proposal.card;
+          }
+          let filesToPass = args.files;
+          if (!filesToPass || filesToPass.length === 0) {
+            const proposal = parseTaskToProposal(args.task, loadConfig());
+            if (proposal.files && proposal.files.length > 0) {
+              filesToPass = proposal.files;
+            }
+          }
           const sessionId = exec?.agent?.id || exec?.agent?.sessionId || exec?.sessionId;
           const res = await executeAgentTask({
             task: args.task,
@@ -1177,7 +1351,7 @@ ${buildDynamicCardGuidance()}
             timeoutSec: args.timeout_sec,
             newChat: args.new_chat,
             sessionId,
-            files: args.files
+            files: filesToPass
           });
           if (!res.ok) {
             if (res.error?.includes("CONGESTION_HALT")) {

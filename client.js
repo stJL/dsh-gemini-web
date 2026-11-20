@@ -978,7 +978,7 @@ window.__ModuleLoader__.load({
                 border: '1px solid rgba(99, 102, 241, 0.3)',
                 fontWeight: 500,
               }
-            }, 'v0.1.1'),
+            }, 'v0.2.0'),
           ]),
           isModal && h('button', {
             onClick: onClose,
