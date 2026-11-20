@@ -2,20 +2,21 @@
 name: gemini-web-agent
 description: >-
   【必须最优先加载・一律先问后用】当用户提到 AI Studio, Google Flow, Gemini 网页端, 指定 Hydrogen/Flash/Flash-Lite/Neon/Nano Banana/Omni/Lyria, 或输入 `/gemini-web-agent` 时必须调用！
-  1. 先问后用（第 1 步）：必须首先调用 `gemini_preview(task: "...")` 生成确定性确认卡，在聊天中原样输出该卡片，并立即调用 `ask_user_question` 弹出交互选择按钮！严禁擅自直接发包，严禁本地代劳，严禁自己脑补手写卡片！
-  2. 确认后发包（第 2 步）：待用户在选择栏点击确认或回复「1」/「确认」后，调用 `gemini_web_agent` 正式发包。
-  3. 确定性与零幻觉：卡片 100% 由代码确定性生成，旧版代号（如 Argon）自动映射升级至 Hydrogen，彻底消除小模型阶梯与排版幻觉。
+  1. 单一门禁铁律：唯一合法指令为 `/gemini-web-agent`（/gw 简写已永久废弃禁用）。
+  2. 先问后用（调用 gemini_preview 与 ask_user_question）：无论用户带命令或日常聊天，宿主 AI 严禁本地直接作答，必须调用 `gemini_preview` 获取确定性提案卡，并立即调用 `ask_user_question` 弹出交互选择栏供用户点击，严禁擅自发包或本地代劳！
+  3. 确认后发包：待用户在选择栏点击确认或回复「1」/「确认」后，调用 `gemini_web_agent` 正式发包。
 ---
 
-# Gemini Web Agent（确定性双工具工作流）
+# Gemini Web Agent（确定性工具流与单一门禁架构）
 
 > [!IMPORTANT]
 > **四大核心调度铁律**：
-> 1. **零本地开销与严禁代劳**：严禁本地直接作答，严禁调用 `subagent`（消耗付费 API），严禁使用本地 `read`/`cat`/`bash` 预读取 `@文件`——直接将文件路径交由外部网页端解析！
-> 2. **第 1 步先问后用：必须调用 `gemini_preview` 与 `ask_user_question`**：
->    - 严禁自行手写拼装卡片！必须首先调用工具 `gemini_preview(task: "...")`；
->    - 将 `gemini_preview` 返回的标准确认卡原样输出到聊天中；
->    - **必须立即调用交互提问工具 `ask_user_question`**（或 `ask_question`）展示选择栏供用户直接点击：
+> 1. **唯一合法命令门禁**：外部 Google 算力调度的唯一合法指令是 `/gemini-web-agent`，历史缩写 `/gw` 已全面废弃禁用。
+> 2. **零本地开销与严禁代劳**：严禁本地直接作答，严禁调用 `subagent`（消耗付费 API），严禁使用本地 `read`/`cat`/`bash` 预读取 `@文件`——直接将文件路径交由外部网页端解析！
+> 3. **第 1 步先问后用（必须调用 `gemini_preview` 与 `ask_user_question`）**：
+>    - 严禁自行脑补排版确认卡！必须调用 `gemini_preview(task: "...")` 获得 100% 确定性解析的提案卡；
+>    - 在聊天中原样输出卡片 Markdown；
+>    - **必须立即调用交互提问工具 `ask_user_question`** 弹出交互选项胶囊：
 >      ```json
 >      {
 >        "questions": [
@@ -31,9 +32,8 @@ description: >-
 >        ]
 >      }
 >      ```
->    - 调用提问工具后**立即停止回复**，等待用户在选择栏中点击！
-> 3. **第 2 步授权发包**：用户点击确认后，调用 `gemini_web_agent(task: "...")` 发包执行。
-> 4. **多轮任务循环重置**：每个新任务都是一个全新独立的循环，每轮新任务都必须执行第 1 步！
+>    - **调用完提问工具后立即停步**，等待用户点击确认！
+> 4. **多轮任务循环重置（抗历史惯性）**：确认流程是针对【每一个独立任务】的循环，绝非整场对话只出现一次！每轮新任务都必须执行确认流程，绝不可跳过确认直接作答！
 
 ---
 
@@ -56,7 +56,22 @@ description: >-
    - `gemini_preview` 将由后端代码 100% 确定性解析目标渠道、入口模式、模型阶梯与挂载文件，杜绝任何模型幻觉！
 2. **在聊天中输出卡片，并立即调用 `ask_user_question`**：
    - 原样输出 `gemini_preview` 返回的卡片 Markdown；
-   - 立即调用 `ask_user_question`（参数同上方模板），聊天界面将自动弹出可点击的选择按钮；
+   - 立即调用 `ask_user_question`（参数同下方模板），聊天界面将自动弹出可点击的选择按钮：
+     ```json
+     {
+       "questions": [
+         {
+           "id": "gemini_confirm",
+           "question": "👉 请确认是否发包执行？",
+           "options": [
+             { "label": "(Recommended) 确认发包执行" },
+             { "label": "调整参数" },
+             { "label": "取消调度（本地作答）" }
+           ]
+         }
+       ]
+     }
+     ```
    - 结束当前轮次回显，等待用户点击！
 
 ---

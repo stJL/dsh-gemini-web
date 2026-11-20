@@ -2,7 +2,7 @@
 
 [English](README.en.md) | [简体中文](README.md)
 
-[![Version](https://img.shields.io/badge/version-v0.2.0-blue.svg?style=flat-square)](package.json)
+[![Version](https://img.shields.io/badge/version-v0.2.1-blue.svg?style=flat-square)](package.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
 [![Upstream Sync](https://github.com/stJL/dsh-gemini-web/actions/workflows/sync-upstream.yml/badge.svg)](https://github.com/stJL/dsh-gemini-web/actions/workflows/sync-upstream.yml)
 [![DSH](https://img.shields.io/badge/DeepSeek--Harness-Plugin-6366f1.svg?style=flat-square)](https://github.com/stJL/dsh-gemini-web)

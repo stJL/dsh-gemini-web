@@ -2,20 +2,21 @@
 name: gemini-web-agent
 description: >-
   [HIGH PRIORITY • ASK BEFORE DISPATCH] Must be loaded as Step 1 whenever the user mentions AI Studio, Google Flow, Gemini Web, specifies Hydrogen/Flash/Flash-Lite/Neon/Nano Banana/Omni/Lyria, or uses `/gemini-web-agent`!
-  1. Ask-Before-Dispatch (Step 1): MUST invoke `gemini_preview(task: "...")` tool first to get deterministic card, output the card, and call `ask_user_question` (or `ask_question`)! Never dispatch immediately; never invoke local tools (read/cat/bash) or subagents! Never compose cards manually!
-  2. Dispatch on Confirmation (Step 2): Upon user confirmation (button click, or "1" / "confirm"), invoke `gemini_web_agent`.
-  3. Deterministic & Hallucination-Free: 100% deterministic code generation; legacy aliases like Argon auto-map to Hydrogen with guidance.
+  1. Single Gateway Rule: The ONLY valid dispatch command is `/gemini-web-agent` (legacy shorthand `/gw` is permanently deprecated).
+  2. Ask Before Dispatch (Must Invoke gemini_preview & ask_user_question): Whether user sends `/gemini-web-agent` or natural language, never answer locally! Must invoke `gemini_preview` for deterministic card, and immediately invoke `ask_user_question` for interactive choice buttons.
+  3. Dispatch on Confirmation: Upon user confirmation (button click or "1" / "confirm"), invoke `gemini_web_agent`.
 ---
 
-# Gemini Web Agent (Deterministic Tool Workflow)
+# Gemini Web Agent (Deterministic Tool Workflow & Single Gateway)
 
 > [!IMPORTANT]
 > **Four Core Golden Rules**:
-> 1. **Zero Local Overhead & No Hijacking**: Never answer locally. Never call `subagent` (paid APIs). Never use local tools (`read`, `cat`, `bash`) to inspect `@file` mentions—pass file paths to the web agent!
-> 2. **Step 1 Ask-Before-Dispatch (Must Invoke `gemini_preview` & `ask_user_question`)**:
+> 1. **Single Command Gateway**: The ONLY valid dispatch command is `/gemini-web-agent`. Legacy alias `/gw` is completely deprecated and forbidden.
+> 2. **Zero Local Overhead & No Hijacking**: Never answer locally. Never call `subagent` (paid APIs). Never use local tools (`read`, `cat`, `bash`) to inspect `@file` mentions—pass file paths to the web agent!
+> 3. **Step 1 Ask-Before-Dispatch (Must Invoke `gemini_preview` & `ask_user_question`)**:
 >    - NEVER manually draft or hallucinate cards! You MUST invoke `gemini_preview(task: "...")` to obtain the 100% deterministic proposal card.
 >    - Output the received card markdown in chat.
->    - **Immediately invoke `ask_user_question`** (or `ask_question`) to present interactive choice pills:
+>    - **Immediately invoke `ask_user_question`** to present interactive choice buttons:
 >      ```json
 >      {
 >        "questions": [
@@ -32,8 +33,7 @@ description: >-
 >      }
 >      ```
 >    - **HALT immediately** after invoking the question tool, waiting for user click!
-> 3. **Step 2 Dispatch**: Upon user confirmation, invoke `gemini_web_agent(task: "...")` to execute.
-> 4. **Per-Task Reset (Anti-Inertia)**: The confirmation cycle applies to **EVERY SINGLE TASK INDEPENDENTLY**, NOT once per session! Even if a previous task succeeded in the same chat, every new request MUST reset to Step 1 and invoke `gemini_preview` again.
+> 4. **Per-Task Reset (Anti-Inertia)**: The confirmation cycle applies to **EVERY SINGLE TASK INDEPENDENTLY**, NOT once per session! Every new request MUST reset to Step 1.
 
 ---
 
@@ -56,7 +56,22 @@ When receiving any user instruction, you **MUST ONLY execute these two steps**:
    - Backend code deterministically resolves target site, entry mode, model fallback ladder, and mounted files.
 2. **Output card & invoke `ask_user_question`**:
    - Print the card Markdown returned by `gemini_preview`.
-   - Invoke `ask_user_question` with the options above so the UI presents clickable buttons.
+   - Invoke `ask_user_question` with the options below so the UI presents clickable buttons:
+     ```json
+     {
+       "questions": [
+         {
+           "id": "gemini_confirm",
+           "question": "👉 请确认是否发包执行？",
+           "options": [
+             { "label": "(Recommended) 确认发包执行" },
+             { "label": "调整参数" },
+             { "label": "取消调度（本地作答）" }
+           ]
+         }
+       ]
+     }
+     ```
    - Stop and wait for user action.
 
 ---

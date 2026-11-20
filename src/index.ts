@@ -9,28 +9,29 @@ export const name = 'dsh-gemini-web'
 export const inject = ['tools', 'webServer', 'systemPrompt']
 
 export function buildDynamicCardGuidance(): string {
-  return `【🌐 Gemini Web Agent 调度工作流与交互规范（两步走・先问后用）】
-当用户提到 /gemini-web-agent、AI Studio、Gemini 官网、Google Flow 或指定 Hydrogen/Argon/Flash 等模型时：
+  return `【🌐 Gemini Web Agent 单一门禁与先问后用铁律】
+唯一合法调度指令：/gemini-web-agent（/gw 简写已永久废弃）。
 
-【第 1 步：生成提案并呼叫交互选择栏（严禁偷跑直接发包，严禁自行脑补排版）】：
-1. 必须首先调用工具 gemini_preview(task: "...")。系统后端代码将 100% 确定性解析目标渠道、入口模式与降级阶梯，彻底消除排版幻觉与阶梯错误！
-2. 在聊天中原样输出 gemini_preview 返回的确认卡文本。
-3. 必须立即调用交互提问工具 ask_user_question（或 ask_question），呈现原生交互选择按钮供用户直接点击：
+【核心交互流程规范】：
+当用户在对话中提到需要使用外部 Google 网页端（AI Studio / Flow / Gemini 官网）执行任务，或直接使用了 /gemini-web-agent 指令时：
+1. 严禁宿主 AI 本地代劳作答！必须立即执行第 1 步先问后用（调用 gemini_preview 工具）；
+2. 在聊天中原样输出 gemini_preview 返回的标准确认卡；
+3. 必须立即调用交互提问工具 ask_user_question（或 ask_question），展示交互选择栏供用户点击：
    - questions: [{ id: "gemini_confirm", question: "👉 请确认是否发包执行？", options: [{ label: "(Recommended) 确认发包执行" }, { label: "调整参数" }, { label: "取消调度（本地作答）" }] }]
-4. 严禁直接调用 gemini_web_agent 发包，严禁在本地编写答案，严禁调用 subagent 消耗付费额度！调用提问工具后立即结束当前回应，等待用户在交互栏点击！
+4. 严禁直接调用 gemini_web_agent 发包，严禁调用 subagent！等待用户点击确认！
 
-【第 2 步：授权发包】：
+【授权发包执行】：
 当用户在交互选择栏中点击「确认发包执行」或回复「确认」/「1」后：
 正式调用 gemini_web_agent 发包执行！
 
 🚨【多轮任务循环铁律（Multi-Turn Anti-Inertia）】：
 每个新任务都是一个全新独立的循环（Cycle），绝非整个聊天会话只确认一次！
-即使同一对话中上一轮刚刚成功执行完毕，只要用户再次发起新的任务指令，本轮依然必须 100% 重新重置回第 1 步，必须再次调用 gemini_preview 输出确认卡并调用提问工具！
+即使同一对话中上一轮刚刚成功执行完毕，只要用户再次发起新的任务指令，本轮依然必须 100% 重新重置回确认流程，必须再次输出确认卡并调用提问工具！
 绝对严禁因为历史上上一轮已经确认过就自作聪明跳过确认卡直接作答或偷跑发包！`
 }
 
 export function apply(ctx: any) {
-  // 1. 給 Agent 注入動態提示詞段落（引導先問後用與確定性預覽）
+  // 1. 給 Agent 注入動態提示詞段落（引導先問後用與單一門禁）
   ctx.inject(['systemPrompt'], (scoped: any) => {
     let disposeSection: any = null
     const syncPrompt = () => {
@@ -57,7 +58,7 @@ export function apply(ctx: any) {
   // 2. 註冊 DSH 核心代理工具: gemini_preview, gemini_web_agent 與別名
   ctx.inject(['tools'], (scoped: any) => {
     try {
-      // 2.1 確定性卡片預覽與生成工具 (Plan B: 徹底終結小模型排版幻覺與奪舍)
+      // 3.1 確定性卡片預覽與生成工具 (Plan B: 徹底終結小模型排版幻覺與奪舍)
       const previewDef = {
         name: 'gemini_preview',
         get description() {
@@ -94,7 +95,7 @@ export function apply(ctx: any) {
       scoped.tools.register(previewDef)
       scoped.tools.register({ ...previewDef, name: 'gemini-preview' })
 
-      // 2.2 核心發包執行工具
+      // 3.2 核心發包執行工具
       const toolDef = {
         name: 'gemini_web_agent',
         get description() {
@@ -123,7 +124,7 @@ ${buildDynamicCardGuidance()}
             },
             model: {
               type: 'string',
-              description: '指定调度的模型别名（选填，如 hydrogen, argon, flash, flash-lite 等）',
+              description: '指定调度的模型别名（选填，如 hydrogen, flash, flash-lite 等）',
             },
             site: {
               type: 'string',
@@ -246,7 +247,7 @@ ${buildDynamicCardGuidance()}
     }
   })
 
-  // 3. 機會性註冊 WebServer 路由 (供設定面板 API 調用)
+  // 4. 機會性註冊 WebServer 路由 (供設定面板 API 調用)
   ctx.inject(['webServer'], (scoped: any) => {
     const router = createApiRouter(ctx)
     scoped.effect(
