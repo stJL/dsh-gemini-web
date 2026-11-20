@@ -2,6 +2,13 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
+[![Version](https://img.shields.io/badge/version-v0.1.1-blue.svg?style=flat-square)](package.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
+[![Upstream Sync](https://github.com/stJL/dsh-gemini-web/actions/workflows/sync-upstream.yml/badge.svg)](https://github.com/stJL/dsh-gemini-web/actions/workflows/sync-upstream.yml)
+[![DSH](https://img.shields.io/badge/DeepSeek--Harness-Plugin-6366f1.svg?style=flat-square)](https://github.com/stJL/dsh-gemini-web)
+[![Python](https://img.shields.io/badge/python-3.10+-3776AB.svg?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Google AI](https://img.shields.io/badge/Google--AI-Studio%20%7C%20Flow-EA4335.svg?style=flat-square&logo=google&logoColor=white)](https://aistudio.google.com)
+
 > **DeepSeek Harness (DSH) 原生调度插件**：专为接入 [@582835293/gemini-web-agent](https://github.com/582835293/gemini-web-agent) 多渠道网页额度生态而设计的 GUI 管理器与 Agent 工具适配器。
 
 <!-- [图片 1 - 顶部效果预览 / Hero Banner] -->
