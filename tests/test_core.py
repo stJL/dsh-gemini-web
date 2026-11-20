@@ -283,7 +283,7 @@ class TestSetupAndInspect(unittest.TestCase):
     def test_sync_removes_stale_files_in_subdirs(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / "skill-dest"
-            stale = target / "scripts" / "obsolete_old_helper.py"
+            stale = target / "scripts" / "slice_sprites.py"
             stale.parent.mkdir(parents=True)
             stale.write_text("# stale", encoding="utf-8")
             synced = ss.sync_skill_files(REPO_ROOT, target)
