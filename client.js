@@ -966,7 +966,20 @@ window.__ModuleLoader__.load({
       }, [
         // 標題欄
         h('div', { className: 'gw-header-split', style: { marginBottom: 14 } }, [
-          h('div', { style: { fontWeight: 600, fontSize: 16 } }, t('title')),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } }, [
+            h('span', { style: { fontWeight: 600, fontSize: 16 } }, t('title')),
+            h('span', {
+              style: {
+                fontSize: 11,
+                padding: '1px 6px',
+                borderRadius: 4,
+                background: 'rgba(99, 102, 241, 0.15)',
+                color: '#818cf8',
+                border: '1px solid rgba(99, 102, 241, 0.3)',
+                fontWeight: 500,
+              }
+            }, 'v0.1.1'),
+          ]),
           isModal && h('button', {
             onClick: onClose,
             style: { background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, opacity: 0.7, color: 'inherit' }
