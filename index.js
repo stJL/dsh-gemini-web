@@ -210,12 +210,28 @@ function scanChromiumCdpInstances() {
   }
   return detected;
 }
-function detectBrowserCdp2(portOverride) {
+async function verifyCdpPort(port) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/json/version`, {
+      signal: AbortSignal.timeout(600)
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+async function detectBrowserCdpAsync(portOverride) {
   const venv = findPythonVenv();
   const cli = findCliScript();
   const instances = scanChromiumCdpInstances();
-  if (instances.length > 1) {
-    const selected = portOverride ? instances.find((i) => i.port === portOverride) || instances[0] : instances[0];
+  const liveInstances = [];
+  for (const inst of instances) {
+    if (await verifyCdpPort(inst.port)) {
+      liveInstances.push(inst);
+    }
+  }
+  if (liveInstances.length > 1) {
+    const selected = portOverride ? liveInstances.find((i) => i.port === portOverride) || liveInstances[0] : liveInstances[0];
     return {
       connected: true,
       browserType: selected.name,
@@ -225,12 +241,12 @@ function detectBrowserCdp2(portOverride) {
       pythonVenv: venv,
       cliScript: cli,
       multipleInstances: true,
-      instances,
-      error: `偵測到 ${instances.length} 個開啟遠端偵錯的瀏覽器實例（${instances.map((i) => `${i.name}:${i.port}`).join("、")}）。建議關閉多餘實例以避免衝突，或在下方指定埠號。`
+      instances: liveInstances,
+      error: `偵測到 ${liveInstances.length} 個開啟遠端偵錯的瀏覽器實例（${liveInstances.map((i) => `${i.name}:${i.port}`).join("、")}）。建議關閉多餘實例以避免衝突，或在下方指定埠號。`
     };
   }
-  if (instances.length === 1) {
-    const item = instances[0];
+  if (liveInstances.length === 1) {
+    const item = liveInstances[0];
     return {
       connected: true,
       browserType: item.name,
@@ -240,21 +256,23 @@ function detectBrowserCdp2(portOverride) {
       pythonVenv: venv,
       cliScript: cli,
       multipleInstances: false,
-      instances
+      instances: liveInstances
     };
   }
   if (portOverride) {
-    return {
-      connected: true,
-      browserType: `CDP 指定端口 (${portOverride})`,
-      port: portOverride,
-      wsUrl: `http://127.0.0.1:${portOverride}`,
-      activePortFile: null,
-      pythonVenv: venv,
-      cliScript: cli,
-      multipleInstances: false,
-      instances: []
-    };
+    if (await verifyCdpPort(portOverride)) {
+      return {
+        connected: true,
+        browserType: `CDP 指定端口 (${portOverride})`,
+        port: portOverride,
+        wsUrl: `http://127.0.0.1:${portOverride}`,
+        activePortFile: null,
+        pythonVenv: venv,
+        cliScript: cli,
+        multipleInstances: false,
+        instances: []
+      };
+    }
   }
   return {
     connected: false,
@@ -266,7 +284,7 @@ function detectBrowserCdp2(portOverride) {
     cliScript: cli,
     multipleInstances: false,
     instances: [],
-    error: "未偵測到開啟遠端偵錯的 Chromium 瀏覽器"
+    error: instances.length > 0 ? "检测到历史浏览器调试文件，但端口未响应 (浏览器可能已退出或关闭)" : "未偵測到開啟遠端偵錯的 Chromium 瀏覽器"
   };
 }
 function trySpawnAgentLimbBridge() {
@@ -316,7 +334,20 @@ async function detectAgentLimb(ports = [8765, 8766, 8767, 8768], autoSpawn = tru
         if (res.ok) {
           const data = await res.json();
           if (data.ok) {
+            const hasBrowser = Boolean(data.activeBrowser || typeof data.browsers === "number" && data.browsers > 0 || Array.isArray(data.browserList) && data.browserList.length > 0);
             const profile = data.browserList?.[0]?.label || data.browserList?.[0]?.id || "Profile";
+            if (!hasBrowser) {
+              return {
+                ready: false,
+                port,
+                version: data.version || "0.8.2",
+                browsers: 0,
+                activeProfile: profile,
+                paired: Boolean(data.paired),
+                stage: data.stage || "waiting-browser",
+                error: "AgentLimb 服务在线，但未检测到浏览器连接 (请打开 Chrome / Edge / Brave 浏览器并加载扩展)"
+              };
+            }
             return {
               ready: true,
               port,
@@ -354,7 +385,7 @@ async function detectDualChannel(cfgMode, cfgPort) {
   const venv = findPythonVenv();
   const cli = findCliScript();
   if (mode === "cdp") {
-    const cdp = detectBrowserCdp2(cfgPort);
+    const cdp = await detectBrowserCdpAsync(cfgPort);
     return {
       activeChannel: cdp.connected ? "cdp" : "none",
       mode: "cdp",
@@ -385,7 +416,7 @@ async function detectDualChannel(cfgMode, cfgPort) {
     };
   }
   if (mode === "auto") {
-    const cdp = detectBrowserCdp2(cfgPort);
+    const cdp = await detectBrowserCdpAsync(cfgPort);
     return {
       activeChannel: cdp.connected ? "cdp" : "none",
       mode: "auto",
@@ -489,6 +520,13 @@ async function fetchUsage() {
       error: "未找到 Python 虛擬環境 (.venv)"
     };
   }
+  if (status.activeChannel === "none") {
+    const detail = status.agentlimb?.error || status.cdp?.error || "雙通道皆未連線";
+    return {
+      ok: false,
+      error: `瀏覽器未開啟或通訊中斷：${detail}`
+    };
+  }
   if (status.activeChannel === "agentlimb") {
     const alScript = findAgentLimbScript();
     if (!alScript) {
@@ -496,24 +534,32 @@ async function fetchUsage() {
     }
     try {
       const { stdout } = await execFileAsync(venv, [alScript, "usage", "--include-flow"], {
-        timeout: 25000,
+        timeout: 15000,
         env: { ...process.env, PYTHONIOENCODING: "utf-8" }
       });
       const parsed = JSON.parse(stdout.trim());
+      if (parsed.status === "error") {
+        return {
+          ok: false,
+          error: parsed.error || "AgentLimb 用量探測失敗",
+          raw: parsed
+        };
+      }
       return {
         ok: true,
         geminiPlan: parsed.plan || "FREE",
         geminiUsedPct: parsed.used_pct ?? 0,
         geminiResetTime: parsed.reset_time || "",
         geminiWeeklyPct: parsed.used_pct ?? 0,
-        flowCredits: parsed.flow_credits ?? 1050,
+        flowCredits: parsed.flow_credits ?? 50,
         flowResetTime: parsed.flow_reset_time || "",
+        flowResetPeriod: parsed.flow_reset_period || "",
         raw: parsed
       };
     } catch (err) {
       return {
         ok: false,
-        error: err.message || String(err)
+        error: `AgentLimb 探測失敗 (瀏覽器未響應或已關閉): ${err.message || String(err)}`
       };
     }
   }
@@ -527,24 +573,32 @@ async function fetchUsage() {
       if (status.cdp.port)
         args.push("--port", String(status.cdp.port));
       const { stdout } = await execFileAsync(venv, args, {
-        timeout: 30000,
+        timeout: 18000,
         env: { ...process.env, PYTHONIOENCODING: "utf-8" }
       });
       const parsed = JSON.parse(stdout.trim());
+      if (parsed.status === "error") {
+        return {
+          ok: false,
+          error: parsed.error || "CDP 用量探測失敗",
+          raw: parsed
+        };
+      }
       return {
         ok: true,
         geminiPlan: parsed.plan || "FREE",
         geminiUsedPct: parsed.current_usage?.used_pct ?? 0,
         geminiResetTime: parsed.current_usage?.reset_time || "",
         geminiWeeklyPct: parsed.weekly_usage?.used_pct ?? 0,
-        flowCredits: parsed.flow?.credits ?? 1050,
+        flowCredits: parsed.flow?.credits ?? 50,
         flowResetTime: parsed.flow?.reset_time || "",
+        flowResetPeriod: parsed.flow?.reset_period || "",
         raw: parsed
       };
     } catch (err) {
       return {
         ok: false,
-        error: err.message || String(err)
+        error: `CDP 探測失敗 (瀏覽器未響應或已關閉): ${err.message || String(err)}`
       };
     }
   }

@@ -230,6 +230,95 @@ export function scanChromiumCdpInstances(): BrowserInstance[] {
   return detected
 }
 
+export async function verifyCdpPort(port: number): Promise<boolean> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/json/version`, {
+      signal: AbortSignal.timeout(600),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+export async function detectBrowserCdpAsync(portOverride?: number): Promise<BrowserStatus> {
+  const venv = findPythonVenv()
+  const cli = findCliScript()
+  const instances = scanChromiumCdpInstances()
+
+  // 过滤出真正存活响应的 CDP 端口（防止浏览器异常关闭残留 DevToolsActivePort 假在线）
+  const liveInstances: BrowserInstance[] = []
+  for (const inst of instances) {
+    if (await verifyCdpPort(inst.port)) {
+      liveInstances.push(inst)
+    }
+  }
+
+  if (liveInstances.length > 1) {
+    const selected = portOverride
+      ? (liveInstances.find((i) => i.port === portOverride) || liveInstances[0])
+      : liveInstances[0]
+    return {
+      connected: true,
+      browserType: selected.name,
+      port: selected.port,
+      wsUrl: selected.wsUrl,
+      activePortFile: selected.activePortFile,
+      pythonVenv: venv,
+      cliScript: cli,
+      multipleInstances: true,
+      instances: liveInstances,
+      error: `偵測到 ${liveInstances.length} 個開啟遠端偵錯的瀏覽器實例（${liveInstances.map((i) => `${i.name}:${i.port}`).join('、')}）。建議關閉多餘實例以避免衝突，或在下方指定埠號。`,
+    }
+  }
+
+  if (liveInstances.length === 1) {
+    const item = liveInstances[0]
+    return {
+      connected: true,
+      browserType: item.name,
+      port: portOverride || item.port,
+      wsUrl: item.wsUrl,
+      activePortFile: item.activePortFile,
+      pythonVenv: venv,
+      cliScript: cli,
+      multipleInstances: false,
+      instances: liveInstances,
+    }
+  }
+
+  if (portOverride) {
+    if (await verifyCdpPort(portOverride)) {
+      return {
+        connected: true,
+        browserType: `CDP 指定端口 (${portOverride})`,
+        port: portOverride,
+        wsUrl: `http://127.0.0.1:${portOverride}`,
+        activePortFile: null,
+        pythonVenv: venv,
+        cliScript: cli,
+        multipleInstances: false,
+        instances: [],
+      }
+    }
+  }
+
+  return {
+    connected: false,
+    browserType: 'None',
+    port: null,
+    wsUrl: null,
+    activePortFile: null,
+    pythonVenv: venv,
+    cliScript: cli,
+    multipleInstances: false,
+    instances: [],
+    error: instances.length > 0
+      ? '检测到历史浏览器调试文件，但端口未响应 (浏览器可能已退出或关闭)'
+      : '未偵測到開啟遠端偵錯的 Chromium 瀏覽器',
+  }
+}
+
 export function detectBrowserCdp(portOverride?: number): BrowserStatus {
   const venv = findPythonVenv()
   const cli = findCliScript()
@@ -351,7 +440,24 @@ export async function detectAgentLimb(ports: number[] = [8765, 8766, 8767, 8768]
         if (res.ok) {
           const data = (await res.json()) as any
           if (data.ok) {
+            const hasBrowser = Boolean(
+              data.activeBrowser ||
+              (typeof data.browsers === 'number' && data.browsers > 0) ||
+              (Array.isArray(data.browserList) && data.browserList.length > 0)
+            )
             const profile = data.browserList?.[0]?.label || data.browserList?.[0]?.id || 'Profile'
+            if (!hasBrowser) {
+              return {
+                ready: false,
+                port,
+                version: data.version || '0.8.2',
+                browsers: 0,
+                activeProfile: profile,
+                paired: Boolean(data.paired),
+                stage: data.stage || 'waiting-browser',
+                error: 'AgentLimb 服务在线，但未检测到浏览器连接 (请打开 Chrome / Edge / Brave 浏览器并加载扩展)',
+              }
+            }
             return {
               ready: true,
               port,
@@ -398,9 +504,9 @@ export interface DualChannelReport {
 
 /**
  * 依序智慧探測：
- * 1. 若手動指定 cdp：僅測 CDP
+ * 1. 若手動指定 cdp：僅測 CDP (非同步驗證通訊埠存活)
  * 2. 若為 auto 或 agentlimb：先測 AgentLimb
- *    👉 若 AgentLimb 成功連通，立即返回，【完全不碰、不喚醒、不探測 CDP】，實現 100% 零彈窗！
+ *    👉 若 AgentLimb 成功連通且有瀏覽器在線，立即返回，【完全不碰、不喚醒、不探測 CDP】，實現 100% 零彈窗！
  * 3. 僅當 AgentLimb 不通且模式為 auto 時，才向下探測 CDP 備用通道
  */
 export async function detectDualChannel(cfgMode?: string, cfgPort?: number): Promise<DualChannelReport> {
@@ -410,7 +516,7 @@ export async function detectDualChannel(cfgMode?: string, cfgPort?: number): Pro
 
   // 1. 強制手動指定走 CDP 模式
   if (mode === 'cdp') {
-    const cdp = detectBrowserCdp(cfgPort)
+    const cdp = await detectBrowserCdpAsync(cfgPort)
     return {
       activeChannel: cdp.connected ? 'cdp' : 'none',
       mode: 'cdp',
@@ -421,10 +527,10 @@ export async function detectDualChannel(cfgMode?: string, cfgPort?: number): Pro
     }
   }
 
-  // 2. 優先探測 AgentLimb (先看有沒有 AgentLimb)
+  // 2. 優先探測 AgentLimb (先看有沒有 AgentLimb 且是否有連線的瀏覽器)
   const agentlimb = await detectAgentLimb()
   if (agentlimb.ready) {
-    // AgentLimb 通了！完全不測 CDP，零彈窗保護中！
+    // AgentLimb 通了且瀏覽器在線！完全不測 CDP，零彈窗保護中！
     return {
       activeChannel: 'agentlimb',
       mode,
@@ -444,9 +550,9 @@ export async function detectDualChannel(cfgMode?: string, cfgPort?: number): Pro
     }
   }
 
-  // 3. 只有在 auto 模式且 AgentLimb 不通時，才召喚 CDP 備用
+  // 3. 只有在 auto 模式且 AgentLimb 不通/無瀏覽器時，才召喚 CDP 備用通道
   if (mode === 'auto') {
-    const cdp = detectBrowserCdp(cfgPort)
+    const cdp = await detectBrowserCdpAsync(cfgPort)
     return {
       activeChannel: cdp.connected ? 'cdp' : 'none',
       mode: 'auto',
@@ -457,7 +563,7 @@ export async function detectDualChannel(cfgMode?: string, cfgPort?: number): Pro
     }
   }
 
-  // 4. 強制 AgentLimb 但未連線
+  // 4. 強制 AgentLimb 但未連線或無瀏覽器
   return {
     activeChannel: 'none',
     mode: 'agentlimb',

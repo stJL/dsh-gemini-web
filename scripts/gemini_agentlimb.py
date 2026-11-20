@@ -1368,10 +1368,21 @@ def run_agent_task(
 
 def check_flow_usage() -> dict:
     """後台靜默開啟 https://flow.google.com/ 抓取 Google Flow 獨立點數與重置時間，讀畢立刻 tab_close"""
-    nav_res = agentlimb_client.call_tool("tab_new", {"url": "https://flow.google.com/", "active": False})
-    tab_id = nav_res.get("result", {}).get("tab", {}).get("id") or nav_res.get("id") or nav_res.get("tabId")
+    st = agentlimb_client.get_status()
+    if not st or not st.get("ok"):
+        return {"credits": None, "reset_time": None, "reset_period": None, "error": "AgentLimb 服务未启动"}
+    if not st.get("activeBrowser") and not st.get("browsers", 0):
+        return {"credits": None, "reset_time": None, "reset_period": None, "error": "未检测到浏览器连接"}
+
+    tab_id = None
+    try:
+        nav_res = agentlimb_client.call_tool("tab_new", {"url": "https://flow.google.com/", "active": False}, timeout=10.0)
+        tab_id = nav_res.get("result", {}).get("tab", {}).get("id") or nav_res.get("id") or nav_res.get("tabId")
+    except Exception as e:
+        return {"credits": None, "reset_time": None, "reset_period": None, "error": f"打开 Flow 失败: {e}"}
+
     if not tab_id:
-        return {"credits": None, "reset_time": None}
+        return {"credits": None, "reset_time": None, "reset_period": None, "error": "無法開啟用量偵測标签页"}
 
     try:
         time.sleep(1.2)
@@ -1385,6 +1396,7 @@ def check_flow_usage() -> dict:
                 return false;
             })()""",
             tab_id=tab_id,
+            timeout=8.0,
         )
 
         time.sleep(0.8)
@@ -1395,6 +1407,7 @@ def check_flow_usage() -> dict:
                 return d ? d.innerText : '';
             })()""",
             tab_id=tab_id,
+            timeout=8.0,
         )
         raw = eval_res.get("result", {}).get("result", "")
         credits_m = re.search(
@@ -1402,36 +1415,57 @@ def check_flow_usage() -> dict:
             raw,
             re.IGNORECASE,
         )
+        # 忠实抓取完整的重置/刷新说明语句（例如 "Credits refresh daily at 5:00 PM" 或 "Resets on Dec 15" 或 "点数将于每日 17:00 刷新"）
         reset_m = re.search(
-            r"(?:Resets?(?:\s+on)?|Credits?\s+refresh(?:\s+daily\s+at)?|点数将于|點數將於|刷新时间[:：]|重置时间[:：]|每日)\s+([^\n]+?)(?=\s*(?:刷新|重置|升级|升級|Upgrade|Manage|Sign\s*out|退出|$))",
+            r"(?:Credits?\s+refresh[^\n]+|Resets?(?:\s+on)?\s+[^\n]+|点数将于[^\n]+|點數將於[^\n]+|(?:重置时间|刷新时间)[:：]\s*[^\n]+|每日\s*[\d:]+\s*(?:AM|PM)?)",
             raw,
             re.IGNORECASE,
         )
 
         credits = int(credits_m.group(1).replace(",", "")) if credits_m else None
-        reset_time = (
-            reset_m.group(1).replace("Upgrade", "").replace("升級", "").replace("升级", "").strip()
-            if reset_m
-            else None
-        )
-        return {"credits": credits, "reset_time": reset_time}
+        raw_reset = reset_m.group(0).strip() if reset_m else None
+        if raw_reset:
+            raw_reset = re.sub(
+                r"\s*(?:Upgrade|Manage|Sign\s*out|升级|升級|退出|person|Visible|可见水印|Privacy|隐私权|Terms).*$",
+                "",
+                raw_reset,
+                flags=re.IGNORECASE,
+            ).strip()
+
+        period = None
+        if raw_reset:
+            lower = raw_reset.lower()
+            if any(w in lower for w in ["daily", "每日", "每天"]):
+                period = "daily"
+            elif any(w in lower for w in ["month", "每月", "每逢", "resets on"]):
+                period = "monthly"
+
+        return {"credits": credits, "reset_time": raw_reset, "reset_period": period}
     except Exception:
-        return {"credits": None, "reset_time": None}
+        return {"credits": None, "reset_time": None, "reset_period": None}
     finally:
-        try:
-            agentlimb_client.call_tool("tab_close", {"tabId": tab_id})
-        except Exception:
-            pass
+        if tab_id:
+            try:
+                agentlimb_client.call_tool("tab_close", {"tabId": tab_id}, timeout=5.0)
+            except Exception:
+                pass
 
 
 def check_gemini_usage(include_flow: bool = True) -> dict:
     """後台靜默開啟 https://gemini.google.com/usage 抓取用量，並依需求讀取 Google Flow，依原作者鐵律讀取後立刻 tab_close"""
     st = agentlimb_client.get_status()
     if not st or not st.get("ok"):
-        return {"status": "error", "error": "AgentLimb 未连接"}
+        return {"status": "error", "error": "AgentLimb 服务未连接"}
+    if not st.get("activeBrowser") and not st.get("browsers", 0):
+        return {"status": "error", "error": "AgentLimb 已就绪，但未检测到浏览器连接 (请打开 Chrome / Edge / Brave 浏览器)"}
 
-    nav_res = agentlimb_client.call_tool("tab_new", {"url": "https://gemini.google.com/usage", "active": False})
-    tab_id = nav_res.get("result", {}).get("tab", {}).get("id") or nav_res.get("id") or nav_res.get("tabId")
+    tab_id = None
+    try:
+        nav_res = agentlimb_client.call_tool("tab_new", {"url": "https://gemini.google.com/usage", "active": False}, timeout=10.0)
+        tab_id = nav_res.get("result", {}).get("tab", {}).get("id") or nav_res.get("id") or nav_res.get("tabId")
+    except Exception as e:
+        return {"status": "error", "error": f"打开用量标签页失败 (浏览器可能未响应或已关闭): {e}"}
+
     if not tab_id:
         return {"status": "error", "error": "無法開啟用量偵測标签页"}
 
@@ -1454,6 +1488,7 @@ def check_gemini_usage(include_flow: bool = True) -> dict:
                     };
                 })()""",
                 tab_id=tab_id,
+                timeout=8.0,
             )
             raw = eval_res.get("result", {}).get("result", {})
             cur_pct = None
@@ -1478,18 +1513,20 @@ def check_gemini_usage(include_flow: bool = True) -> dict:
                 "reset_time": reset_time,
             }
     finally:
-        try:
-            agentlimb_client.call_tool("tab_close", {"tabId": tab_id})
-        except Exception:
-            pass
+        if tab_id:
+            try:
+                agentlimb_client.call_tool("tab_close", {"tabId": tab_id}, timeout=5.0)
+            except Exception:
+                pass
 
     # 循序执行：Gemini 标签页关闭後，再開啟 Flow 标签页探測，避免雙标签页競爭
-    flow_info = {"credits": None, "reset_time": None}
+    flow_info = {"credits": None, "reset_time": None, "reset_period": None}
     if include_flow:
         flow_info = check_flow_usage()
 
     gemini_result["flow_credits"] = flow_info.get("credits")
     gemini_result["flow_reset_time"] = flow_info.get("reset_time")
+    gemini_result["flow_reset_period"] = flow_info.get("reset_period")
     return gemini_result
 
 
@@ -1497,7 +1534,9 @@ def discover_available_models() -> dict:
     """動態探索 AI Studio 當前帳號所有可用模型（自動識別 New / Paid 標記）"""
     st = agentlimb_client.get_status()
     if not st or not st.get("ok"):
-        return {"status": "error", "error": "AgentLimb 未连接"}
+        return {"status": "error", "error": "AgentLimb 服务未连接"}
+    if not st.get("activeBrowser") and not st.get("browsers", 0):
+        return {"status": "error", "error": "未检测到浏览器连接"}
 
     tabs = agentlimb_client.get_tabs()
     target_tab = None
@@ -1508,12 +1547,19 @@ def discover_available_models() -> dict:
             target_tab = t
             break
 
+    tab_id = None
     if target_tab is not None:
         tab_id = target_tab.get("id")
     else:
-        nav_res = agentlimb_client.call_tool("tab_new", {"url": "https://aistudio.google.com/prompts/new_chat", "active": False})
-        tab_id = nav_res.get("result", {}).get("tab", {}).get("id") or nav_res.get("id") or nav_res.get("tabId")
-        created_tab = True
+        try:
+            nav_res = agentlimb_client.call_tool("tab_new", {"url": "https://aistudio.google.com/prompts/new_chat", "active": False}, timeout=10.0)
+            tab_id = nav_res.get("result", {}).get("tab", {}).get("id") or nav_res.get("id") or nav_res.get("tabId")
+            created_tab = True
+        except Exception as e:
+            return {"status": "error", "error": f"打开 AI Studio 失败: {e}"}
+
+    if not tab_id:
+        return {"status": "error", "error": "无法创建或定位 AI Studio 标签页"}
 
     try:
         ready = wait_for_selector(tab_id, ".model-selector-card", timeout=12.0)

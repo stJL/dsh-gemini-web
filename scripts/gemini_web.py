@@ -2083,18 +2083,37 @@ def execute_flow_usage(browser) -> dict:
         acc.click()
         dialog = page.locator('[role="dialog"]').first
         dialog.wait_for(state="visible", timeout=10000)
-        raw = re.sub(r"\s+", " ", (dialog.inner_text() or "")).strip()
-        credits_m = re.search(r"([\d,]+)\s*(?:个\s*Google Flow\s*点数|Google Flow\s*credits?)", raw, re.IGNORECASE)
+        raw = (dialog.inner_text() or "").strip()
+        credits_m = re.search(r"([\d,]+)\s*(?:個\s*Google Flow\s*點數|个\s*Google Flow\s*点数|Google Flow\s*credits?)", raw, re.IGNORECASE)
+        # 忠实抓取完整的重置/刷新说明语句（例如 "Credits refresh daily at 5:00 PM" 或 "Resets on Dec 15" 或 "点数将于每日 17:00 刷新"）
         reset_m = re.search(
-            r"(?:重置时间[:：]\s*|Resets?\s+)([^\n]+?)(?=\s+(?:升级|person|Upgrade|退出|Sign\s*out|frame_spark|可见水印|隐私权|Privacy)|$)",
+            r"(?:Credits?\s+refresh[^\n]+|Resets?(?:\s+on)?\s+[^\n]+|点数将于[^\n]+|點數將於[^\n]+|(?:重置时间|刷新时间)[:：]\s*[^\n]+|每日\s*[\d:]+\s*(?:AM|PM)?)",
             raw,
             re.IGNORECASE,
         )
+        raw_reset = reset_m.group(0).strip() if reset_m else None
+        if raw_reset:
+            raw_reset = re.sub(
+                r"\s*(?:Upgrade|Manage|Sign\s*out|升级|升級|退出|person|Visible|可见水印|Privacy|隐私权|Terms).*$",
+                "",
+                raw_reset,
+                flags=re.IGNORECASE,
+            ).strip()
+
+        period = None
+        if raw_reset:
+            lower = raw_reset.lower()
+            if any(w in lower for w in ["daily", "每日", "每天"]):
+                period = "daily"
+            elif any(w in lower for w in ["month", "每月", "每逢", "resets on"]):
+                period = "monthly"
+
         return {
             "status": "ok",
             "url": page.url,
             "credits": int(credits_m.group(1).replace(",", "")) if credits_m else None,
-            "reset_time": reset_m.group(1).strip() if reset_m else None,
+            "reset_time": raw_reset,
+            "reset_period": period,
             "raw": raw,
         }
     finally:

@@ -388,11 +388,22 @@ window.__ModuleLoader__.load({
         flow_title: '🎨 Google Flow (flow.google.com)',
         flow_connected_badge: '🟢 已连通',
         flow_pending_badge: '🟡 待刷新',
+        flow_offline_badge: '🔴 未连通',
         flow_credits_unit: '可用点数：{credits} 点（🎨 生图免扣点・完全免费）',
-        flow_desc_p1: '• 点数用途：每月免费享有独立点数，专门用于 Veo / Omni 视频生成（每部视频仅消耗少量点数）。',
+        flow_desc_p1: '• 点数用途：免费享有独立点数，专门用于 Veo / Omni 视频生成（每部视频仅消耗少量点数）。',
         flow_desc_p2: '• 生图特权：使用 Nano Banana 2.1 生成 2K 高清图片时“完全不扣除点数”（单张消耗 0 点，等同无限免费生图）！',
-        flow_desc_p3: '• 额度重置：每月自动补满额度{time}。',
-        flow_reset_note: '（重置时间：{time}）',
+        flow_reset_label: '重置时间：',
+        flow_desc_p3_daily: '• 额度重置：每日自动刷新（{text}）。',
+        flow_desc_p3_monthly: '• 额度重置：每月自动补满（{text}）。',
+        flow_desc_p3_generic: '• 额度重置：依方案自动刷新（{text}）。',
+        flow_desc_p3_empty: '• 额度重置：依官方方案自动刷新。',
+        probe_err_title: '浏览器通道探测失败 / 通信中断',
+        probe_err_tip: '💡 提示：请确认 Chrome / Edge / Brave 浏览器是否已启动，且 AgentLimb 扩展功能处于连线状态，或 CDP 调试端口已开启。',
+        probe_err_no_browser: '未检测到任何正在运行的浏览器实例 (请开启 Chrome / Edge / Brave 浏览器)',
+        probe_err_failed: '额度探测失败，浏览器可能未响应或已关闭',
+        probe_err_timeout: '探测超时 (15s)：浏览器未能在时限内响应，请检查浏览器是否卡住或已关闭',
+        retry_btn: '🔄 重新探测',
+        quota_offline_warning: '⚠️ 浏览器当前未连线：下方用量显示为离线预设值。请启动浏览器并点击重新探测。',
         settings_section_title: '⚙️ Agent 调度与浏览器通道设置',
         dispatch_mode_title: 'Agent 调度执行模式：',
         dispatch_mode_ask_first_desc: '🛡️ 先问后用（原作者推荐）：发包前呈现渠道与参数提案，待确认后执行；支持「例外直通」（指定直接发包直接跑）',
@@ -533,11 +544,22 @@ window.__ModuleLoader__.load({
         flow_title: '🎨 Google Flow (flow.google.com)',
         flow_connected_badge: '🟢 Connected',
         flow_pending_badge: '🟡 Pending',
+        flow_offline_badge: '🔴 Disconnected',
         flow_credits_unit: 'Available: {credits} Credits (🎨 Images: 100% Free / 0 Cost)',
-        flow_desc_p1: '• Credit Purpose: Free monthly credits dedicated to Veo / Omni video generation (costs few credits per video).',
+        flow_desc_p1: '• Credit Purpose: Free dedicated credits for Veo / Omni video generation (costs few credits per video).',
         flow_desc_p2: '• Free Image Gen: 2K HD image generation via Nano Banana 2.1 costs 0 credits (completely free, unlimited generation)!',
-        flow_desc_p3: '• Balance Reset: Automatically replenished monthly{time}.',
-        flow_reset_note: ' (Reset: {time})',
+        flow_reset_label: 'Reset: ',
+        flow_desc_p3_daily: '• Balance Reset: Daily auto-refresh ({text}).',
+        flow_desc_p3_monthly: '• Balance Reset: Monthly auto-refresh ({text}).',
+        flow_desc_p3_generic: '• Balance Reset: Replenished according to plan ({text}).',
+        flow_desc_p3_empty: '• Balance Reset: Automatically refreshed according to plan.',
+        probe_err_title: 'Browser Channel Probe Failed / Communication Lost',
+        probe_err_tip: '💡 Tip: Please ensure Chrome / Edge / Brave is running, and AgentLimb extension is paired/connected, or CDP debugging port is active.',
+        probe_err_no_browser: 'No running browser instance detected (please launch Chrome / Edge / Brave)',
+        probe_err_failed: 'Quota probe failed; browser might not be responding or is closed',
+        probe_err_timeout: 'Probe timeout (15s): Browser did not respond in time; please verify browser status',
+        retry_btn: '🔄 Retry Probe',
+        quota_offline_warning: '⚠️ Browser currently offline: Quotas below show default offline values. Launch browser and retry.',
         settings_section_title: '⚙️ Agent Orchestration & Channel Settings',
         dispatch_mode_title: 'Agent Dispatch Mode:',
         dispatch_mode_ask_first_desc: '🛡️ Ask-Before-Dispatch (Author Recommended): Presents proposal before execution; bypasses on explicit direct request',
@@ -671,6 +693,7 @@ window.__ModuleLoader__.load({
       const [saveNotice, setSaveNotice] = useState('')
       const [availableModels, setAvailableModels] = useState([])
       const [syncingModels, setSyncingModels] = useState(false)
+      const [probeError, setProbeError] = useState(null)
 
       // 即時設定寫死器：更新 React State 同步寫入 localStorage 並背景 POST 後端永久保存
       const updateConfig = (patch) => {
@@ -739,9 +762,10 @@ window.__ModuleLoader__.load({
 
       const loadData = async () => {
         setLoading(true)
+        setProbeError(null)
         setAlTestResult(null)
         try {
-          const s = await api('/status')
+          const s = await api('/status', { timeout: 8000 })
           setStatus(s)
           let localCfg = {}
           try {
@@ -761,14 +785,32 @@ window.__ModuleLoader__.load({
           } else if (Object.keys(localCfg).length > 0) {
             setConfig(prev => ({ ...prev, ...localCfg }))
           }
-          const u = await api('/usage?force=1', { timeout: 25000 })
+
+          // 通道状态校验：若 AgentLimb 与 CDP 皆未就绪（浏览器未开或死掉），快速报错，绝不阻塞盲等
+          const hasLiveChannel = Boolean(s?.agentlimb?.ready || s?.cdp?.connected || s?.dual?.agentlimb?.ready || s?.dual?.cdp?.connected)
+          if (!hasLiveChannel) {
+            const detail = s?.agentlimb?.error || s?.cdp?.error || s?.dual?.agentlimb?.error || s?.dual?.cdp?.error || t('probe_err_no_browser')
+            setProbeError(detail)
+            setUsage({ ok: false, error: detail })
+            return
+          }
+
+          const u = await api('/usage?force=1', { timeout: 16000 })
           setUsage(u)
-          const m = await api('/models')
+          if (!u?.ok) {
+            setProbeError(u?.error || t('probe_err_failed'))
+          }
+
+          const m = await api('/models', { timeout: 10000 })
           if (m?.ok && Array.isArray(m.models)) {
             setAvailableModels(m.models)
           }
         } catch (e) {
           console.error(e)
+          const errText = e.name === 'AbortError'
+            ? t('probe_err_timeout')
+            : (e.message || String(e))
+          setProbeError(errText)
         } finally {
           setLoading(false)
         }
@@ -942,6 +984,35 @@ window.__ModuleLoader__.load({
             h('button', {
               className: 'gw-btn',
               style: { background: '#f59e0b', color: '#000' },
+              onClick: () => openUrl('https://accounts.google.com')
+            }, t('unauthed_btn'))
+          ])
+        ]),
+
+        // 探測異常或瀏覽器斷線報錯機制 (Probe Error Banner)
+        probeError && h('div', {
+          className: 'gw-card',
+          style: {
+            background: 'rgba(239, 68, 68, 0.1)',
+            borderColor: 'rgba(239, 68, 68, 0.45)',
+            marginBottom: 10
+          }
+        }, [
+          h('div', { className: 'gw-title', style: { color: '#f87171', display: 'flex', alignItems: 'center', gap: 6 } }, [
+            h('span', null, '❌'),
+            h('span', null, t('probe_err_title'))
+          ]),
+          h('div', { className: 'gw-desc', style: { color: '#fca5a5', lineHeight: 1.6 } }, probeError),
+          h('div', { style: { fontSize: 11, opacity: 0.85, marginTop: 4, color: '#fecaca' } }, t('probe_err_tip')),
+          h('div', { style: { marginTop: 10, display: 'flex', gap: 8 } }, [
+            h('button', {
+              className: 'gw-btn',
+              style: { background: '#ef4444', color: '#fff' },
+              onClick: loadData,
+              disabled: loading
+            }, loading ? t('probing') : t('retry_btn')),
+            h('button', {
+              className: 'gw-btn gw-btn-secondary',
               onClick: () => openUrl('https://accounts.google.com')
             }, t('unauthed_btn'))
           ])
@@ -1148,6 +1219,17 @@ window.__ModuleLoader__.load({
             ])
           ]),
           h('div', { className: 'gw-desc', style: { display: 'flex', flexDirection: 'column', gap: 10 } }, [
+            !isAnyConnected && h('div', {
+              style: {
+                padding: '6px 10px',
+                borderRadius: 5,
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: '#f87171',
+                fontSize: 11,
+                lineHeight: 1.5,
+              }
+            }, t('quota_offline_warning')),
             // 站點 1: AI Studio
             h('div', { style: { padding: '8px 10px', borderRadius: 6, background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.2)' } }, [
               h('div', { className: 'gw-header-split', style: { marginBottom: 4 } }, [
@@ -1183,10 +1265,10 @@ window.__ModuleLoader__.load({
                   className: 'gw-badge',
                   style: (usage?.flowResetTime || (usage?.flowCredits !== undefined && usage?.flowCredits !== null))
                     ? { background: '#059669', color: '#fff' }
-                    : { background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' }
+                    : (isAnyConnected ? { background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' } : { background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' })
                 }, (usage?.flowResetTime || (usage?.flowCredits !== undefined && usage?.flowCredits !== null))
                   ? t('flow_connected_badge')
-                  : t('flow_pending_badge'))
+                  : (isAnyConnected ? t('flow_pending_badge') : t('flow_offline_badge')))
               ]),
               // 行 2: 獨立一行的可用點數與免扣點特權標籤 (單獨佔一行，空間充裕絕不截斷)
               h('div', {
@@ -1207,11 +1289,22 @@ window.__ModuleLoader__.load({
               h('div', { style: { fontSize: 11, opacity: 0.85, lineHeight: 1.6 } }, [
                 h('div', null, t('flow_desc_p1')),
                 h('div', { style: { color: '#10b981', fontWeight: 500 } }, t('flow_desc_p2')),
-                h('div', { style: { opacity: 0.8 } }, t('flow_desc_p3', {
-                  time: usage?.flowResetTime
-                    ? t('flow_reset_note', { time: usage.flowResetTime })
-                    : ((usage?.flowCredits !== undefined && usage?.flowCredits !== null) ? '（每日自动刷新）' : '')
-                }))
+                h('div', { style: { opacity: 0.8 } }, (() => {
+                  const resetText = usage?.flowResetTime
+                  const period = usage?.flowResetPeriod
+                  if (resetText) {
+                    const hasPrompt = /refresh|resets?|将于|將於|时间|時間|提示/i.test(resetText)
+                    const label = hasPrompt ? resetText : `${t('flow_reset_label')}${resetText}`
+                    if (period === 'daily') {
+                      return t('flow_desc_p3_daily', { text: label })
+                    }
+                    if (period === 'monthly') {
+                      return t('flow_desc_p3_monthly', { text: label })
+                    }
+                    return t('flow_desc_p3_generic', { text: label })
+                  }
+                  return t('flow_desc_p3_empty')
+                })())
               ])
             ]),
           ])

@@ -13,6 +13,7 @@ export interface UsageResult {
   geminiWeeklyPct?: number
   flowCredits?: number
   flowResetTime?: string
+  flowResetPeriod?: string
   raw?: any
   error?: string
 }
@@ -29,6 +30,15 @@ export async function fetchUsage(): Promise<UsageResult> {
     }
   }
 
+  // 若雙通道皆未連線或無瀏覽器存活，立刻返回明確報錯，絕不盲等或卡死
+  if (status.activeChannel === 'none') {
+    const detail = status.agentlimb?.error || status.cdp?.error || '雙通道皆未連線'
+    return {
+      ok: false,
+      error: `瀏覽器未開啟或通訊中斷：${detail}`,
+    }
+  }
+
   // 1. 若當前生效通道為 AgentLimb：調用 gemini_agentlimb.py usage --include-flow (100% 零彈窗，且探測完立刻 tab_close)
   if (status.activeChannel === 'agentlimb') {
     const alScript = findAgentLimbScript()
@@ -37,24 +47,32 @@ export async function fetchUsage(): Promise<UsageResult> {
     }
     try {
       const { stdout } = await execFileAsync(venv, [alScript, 'usage', '--include-flow'], {
-        timeout: 25000,
+        timeout: 15000,
         env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
       })
       const parsed = JSON.parse(stdout.trim())
+      if (parsed.status === 'error') {
+        return {
+          ok: false,
+          error: parsed.error || 'AgentLimb 用量探測失敗',
+          raw: parsed,
+        }
+      }
       return {
         ok: true,
         geminiPlan: parsed.plan || 'FREE',
         geminiUsedPct: parsed.used_pct ?? 0,
         geminiResetTime: parsed.reset_time || '',
         geminiWeeklyPct: parsed.used_pct ?? 0,
-        flowCredits: parsed.flow_credits ?? 1050,
+        flowCredits: parsed.flow_credits ?? 50,
         flowResetTime: parsed.flow_reset_time || '',
+        flowResetPeriod: parsed.flow_reset_period || '',
         raw: parsed,
       }
     } catch (err: any) {
       return {
         ok: false,
-        error: err.message || String(err),
+        error: `AgentLimb 探測失敗 (瀏覽器未響應或已關閉): ${err.message || String(err)}`,
       }
     }
   }
@@ -70,25 +88,33 @@ export async function fetchUsage(): Promise<UsageResult> {
       if (status.cdp.port) args.push('--port', String(status.cdp.port))
 
       const { stdout } = await execFileAsync(venv, args, {
-        timeout: 30000,
+        timeout: 18000,
         env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
       })
 
       const parsed = JSON.parse(stdout.trim())
+      if (parsed.status === 'error') {
+        return {
+          ok: false,
+          error: parsed.error || 'CDP 用量探測失敗',
+          raw: parsed,
+        }
+      }
       return {
         ok: true,
         geminiPlan: parsed.plan || 'FREE',
         geminiUsedPct: parsed.current_usage?.used_pct ?? 0,
         geminiResetTime: parsed.current_usage?.reset_time || '',
         geminiWeeklyPct: parsed.weekly_usage?.used_pct ?? 0,
-        flowCredits: parsed.flow?.credits ?? 1050,
+        flowCredits: parsed.flow?.credits ?? 50,
         flowResetTime: parsed.flow?.reset_time || '',
+        flowResetPeriod: parsed.flow?.reset_period || '',
         raw: parsed,
       }
     } catch (err: any) {
       return {
         ok: false,
-        error: err.message || String(err),
+        error: `CDP 探測失敗 (瀏覽器未響應或已關閉): ${err.message || String(err)}`,
       }
     }
   }
