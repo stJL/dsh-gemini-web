@@ -1,11 +1,12 @@
 {
   "name": "dsh-gemini-web",
-  "version": "0.2.1",
+  "version": "0.2.2-beta.0",
   "description": "Multi-site & multi-modal Gemini web quota orchestration plugin for DeepSeek Harness (AI Studio + Google Flow + Gemini Web via Chrome / Edge / Brave).",
   "type": "module",
   "main": "./index.js",
   "scripts": {
     "build": "bun build src/index.ts --outfile index.js --target node",
+    "prepublishOnly": "bun run build && rm -rf scripts/__pycache__",
     "sync:upstream": "python scripts/sync_upstream.py"
   },
   "exports": {
@@ -14,6 +15,20 @@
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./locale/*.json": "./locale/*.json"
   },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale",
+    "scripts",
+    "references",
+    "requirements.txt",
+    "SKILL.md",
+    "SKILL.zh-CN.md",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
   "keywords": [
     "dsh-plugin",
     "dsh",
