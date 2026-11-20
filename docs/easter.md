@@ -29,7 +29,7 @@
 
 <!-- [作者吐血奋战留念截图] -->
 <!-- 截图提示：请将您在 DSH 中吐血调试、狂啃 Token 或终端疯狂报错/成功的截图放置于 docs/images/blood_and_tears.png -->
-![作者吐血奋战留念](docs/images/blood_and_tears.png)  
+![作者吐血奋战留念](./images/blood_and_tears.png)  
 *(「看着后台疯狂燃烧的 2 亿 Token 与无数次 403 报错，作者流下了欣（吐）慰（血）的泪水……」)*
 
 ### 致未来的每一位贡献者与同路人
@@ -71,7 +71,7 @@ This Vibe Coding sprint was far more intense and thrilling than anyone anticipat
 
 <!-- [Author's Blood & Tears Screenshot] -->
 <!-- Screenshot Note: Place your screenshot showing intense debugging, token burn, or successful dispatches at docs/images/blood_and_tears.png -->
-![Author's Blood & Tears Memorial](docs/images/blood_and_tears.png)  
+![Author's Blood & Tears Memorial](./images/blood_and_tears.png)  
 *( "Watching 200M+ tokens burn and navigating endless 403 retries, the author shed tears of both agony and victory..." )*
 
 ### To Future Contributors and Fellow Travelers
