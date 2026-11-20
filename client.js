@@ -393,15 +393,6 @@ window.__ModuleLoader__.load({
         flow_desc_p2: '• 生图特权：使用 Nano Banana 2.1 生成 2K 高清图片时“完全不扣除点数”（单张消耗 0 点，等同无限免费生图）！',
         flow_desc_p3: '• 额度重置：每月自动补满额度{time}。',
         flow_reset_note: '（重置时间：{time}）',
-        routing_guide_title: '🧭 渠道自动路由与防扣款指南',
-        routing_text_title: '💬 文字对话 / 复杂代码',
-        routing_text_desc: '➔ 自动导向 AI Studio key_off 免费层级（长文本输出）或 Gemini 网页端。',
-        routing_image_title: '🎨 2K 高清生图 (Nano 2.1)',
-        routing_image_desc: '➔ 自动导向 Google Flow 0 点数免费池 / AI Studio。',
-        routing_video_title: '🎬 视频生成 (Omni 1.2 / Veo)',
-        routing_video_desc: '➔ 自动导向 Google Flow 视频池 / AI Studio 专用模块。',
-        routing_paid_title: '🔒 付费模型防扣款锁',
-        routing_paid_desc: '➔ 强制过滤并锁定 Paid 标记条目（如 Carbon），默认完全避开，保护钱包！',
         settings_section_title: '⚙️ Agent 调度与浏览器通道设置',
         dispatch_mode_title: 'Agent 调度执行模式：',
         dispatch_mode_ask_first_desc: '🛡️ 先问后用（原作者推荐）：发包前呈现渠道与参数提案，待确认后执行；支持「例外直通」（指定直接发包直接跑）',
@@ -547,15 +538,6 @@ window.__ModuleLoader__.load({
         flow_desc_p2: '• Free Image Gen: 2K HD image generation via Nano Banana 2.1 costs 0 credits (completely free, unlimited generation)!',
         flow_desc_p3: '• Balance Reset: Automatically replenished monthly{time}.',
         flow_reset_note: ' (Reset: {time})',
-        routing_guide_title: '🧭 Automatic Routing & Billing Safety Guide',
-        routing_text_title: '💬 Text Chat / Complex Code',
-        routing_text_desc: '➔ Routed to AI Studio key_off free tier (1M output) or Gemini Web.',
-        routing_image_title: '🎨 2K HD Image Gen (Nano 2.1)',
-        routing_image_desc: '➔ Routed to Google Flow 0-credit pool or AI Studio.',
-        routing_video_title: '🎬 Video Gen (Omni 1.2 / Veo)',
-        routing_video_desc: '➔ Routed to Google Flow video pool or AI Studio dedicated module.',
-        routing_paid_title: '🔒 Paid Model Safety Lock',
-        routing_paid_desc: '➔ Automatically filters and locks Paid-tagged models (e.g. Carbon) to protect your wallet!',
         settings_section_title: '⚙️ Agent Orchestration & Channel Settings',
         dispatch_mode_title: 'Agent Dispatch Mode:',
         dispatch_mode_ask_first_desc: '🛡️ Ask-Before-Dispatch (Author Recommended): Presents proposal before execution; bypasses on explicit direct request',
@@ -1231,29 +1213,6 @@ window.__ModuleLoader__.load({
                     : ((usage?.flowCredits !== undefined && usage?.flowCredits !== null) ? '（每日自动刷新）' : '')
                 }))
               ])
-            ]),
-          ])
-        ]),
-
-        // 卡片 2.5: 渠道自動路由與防扣款指南 (Routing & Safety Guide)
-        h('div', { className: 'gw-card', style: { borderColor: 'rgba(16, 185, 129, 0.3)' } }, [
-          h('div', { className: 'gw-title', style: { color: '#34d399' } }, t('routing_guide_title')),
-          h('div', { className: 'gw-grid-4', style: { fontSize: 11 } }, [
-            h('div', { style: { padding: '6px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.03)' } }, [
-              h('div', { style: { fontWeight: 600, color: '#818cf8', marginBottom: 2 } }, t('routing_text_title')),
-              h('div', { opacity: 0.8 }, t('routing_text_desc'))
-            ]),
-            h('div', { style: { padding: '6px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.03)' } }, [
-              h('div', { style: { fontWeight: 600, color: '#10b981', marginBottom: 2 } }, t('routing_image_title')),
-              h('div', { opacity: 0.8 }, t('routing_image_desc'))
-            ]),
-            h('div', { style: { padding: '6px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.03)' } }, [
-              h('div', { style: { fontWeight: 600, color: '#f59e0b', marginBottom: 2 } }, t('routing_video_title')),
-              h('div', { opacity: 0.8 }, t('routing_video_desc'))
-            ]),
-            h('div', { style: { padding: '6px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.03)' } }, [
-              h('div', { style: { fontWeight: 600, color: '#ec4899', marginBottom: 2 } }, t('routing_paid_title')),
-              h('div', { opacity: 0.8 }, t('routing_paid_desc'))
             ]),
           ])
         ]),
