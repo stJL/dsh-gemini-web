@@ -1102,7 +1102,7 @@ function parseTaskToProposal(task, config) {
     const channel = "Wave 多 Tab 并发波次引擎 (Chrome Multi-Tab Cluster)";
     const actionDesc = `启动虚拟工作室「${pb.title}」并发协作`;
     const modelLabel = "（多 Tab 角色矩阵）";
-    const modelTarget = "Director (4 Neon) + Task (Debian 12) + Flow (Nano Banana)";
+    const modelTarget = "架构定界 (AI Studio Hydrogen / Neon) + 研发沙盒 (Gemini 官网云端运行) + 视觉资产 (Flow 零点数特权)";
     const thinkingConfig = "各 Tab 错峰 3.5s 派发 · 后台静默轮询 · 自动解包写入工作区";
     const filesLine = extractedFiles.length > 0 ? `- \uD83D\uDCC1 挂载文件：[${extractedFiles.join(", ")}]` : "";
     const cardLines = [
@@ -1116,7 +1116,7 @@ function parseTaskToProposal(task, config) {
     if (filesLine) {
       cardLines.push(filesLine);
     }
-    cardLines.push(`- \uD83D\uDEAA 入口模式：wave (多 Tab 并发外包)`, `- \uD83E\uDDE0 执行模型：${modelLabel}`, `  - ${modelTarget}`, `- \uD83C\uDF0A 规划波次：${pb.stages}`, `- ⚙️ 推演配置：${thinkingConfig}`, "- \uD83D\uDD04 话题隔离：各角色独立 Tab 绑定 (.web-team.json 持久化)", "", "\uD83D\uDC49 请确认是否启动 Wave 并发外包执行？", "- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化错峰派发多 Tab 并行执行", "- 回复 「花名册」：查阅当前项目团队各角色绑定的标签页与 Google Drive 状态", "- 回复 「取消」：中止并发外包，改由本地单模型作答");
+    cardLines.push(`- \uD83D\uDEAA 入口模式：wave (多 Tab 并发外包)`, `- \uD83E\uDDE0 协同矩阵：多 Tab 专属工种`, `  - \uD83D\uDCD0 架构定界：Google AI Studio (Gemini 4 Hydrogen / Neon 深度长文本)`, `  - \uD83D\uDEE0️ 研发与自测：Gemini 官网代码沙盒 (云端容器运行测试，无需本地装环境)`, `  - \uD83C\uDFA8 视觉素材：Google Flow (Nano Banana 2.1 享受 0 扣点特权)`, `- \uD83C\uDF0A 规划波次：${pb.stages}`, `- ⚙️ 推演配置：${thinkingConfig}`, "- \uD83D\uDD04 话题隔离：各角色独立 Tab 绑定 (.web-team.json 持久化)", "", "\uD83D\uDC49 请确认是否启动 Wave 并发外包执行？", "- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化错峰派发多 Tab 并行执行", "- 回复 「花名册」：查阅当前项目团队各角色绑定的标签页与 Google Drive 状态", "- 回复 「取消」：中止并发外包，改由本地单模型作答");
     const card = cardLines.join(`
 `);
     const question = "\uD83D\uDC49 请确认是否启动 Wave 并发外包执行？";

@@ -106,7 +106,7 @@ export function parseTaskToProposal(task: string, config?: PluginConfig): Propos
     const channel = 'Wave 多 Tab 并发波次引擎 (Chrome Multi-Tab Cluster)'
     const actionDesc = `启动虚拟工作室「${pb.title}」并发协作`
     const modelLabel = '（多 Tab 角色矩阵）'
-    const modelTarget = 'Director (4 Neon) + Task (Debian 12) + Flow (Nano Banana)'
+    const modelTarget = '架构定界 (AI Studio Hydrogen / Neon) + 研发沙盒 (Gemini 官网云端运行) + 视觉资产 (Flow 零点数特权)'
     const thinkingConfig = '各 Tab 错峰 3.5s 派发 · 后台静默轮询 · 自动解包写入工作区'
 
     const filesLine = extractedFiles.length > 0 ? `- 📁 挂载文件：[${extractedFiles.join(', ')}]` : ''
@@ -125,8 +125,10 @@ export function parseTaskToProposal(task: string, config?: PluginConfig): Propos
 
     cardLines.push(
       `- 🚪 入口模式：wave (多 Tab 并发外包)`,
-      `- 🧠 执行模型：${modelLabel}`,
-      `  - ${modelTarget}`,
+      `- 🧠 协同矩阵：多 Tab 专属工种`,
+      `  - 📐 架构定界：Google AI Studio (Gemini 4 Hydrogen / Neon 深度长文本)`,
+      `  - 🛠️ 研发与自测：Gemini 官网代码沙盒 (云端容器运行测试，无需本地装环境)`,
+      `  - 🎨 视觉素材：Google Flow (Nano Banana 2.1 享受 0 扣点特权)`,
       `- 🌊 规划波次：${pb.stages}`,
       `- ⚙️ 推演配置：${thinkingConfig}`,
       '- 🔄 话题隔离：各角色独立 Tab 绑定 (.web-team.json 持久化)',
