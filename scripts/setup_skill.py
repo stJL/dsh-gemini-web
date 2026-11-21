@@ -589,7 +589,7 @@ def main() -> None:
     synced = False
     if args.auto or args.target:
         synced = sync_skill_files(source_root, target_dir)
-        # 同步更新其他已存在的已知全局技能目录（如 ~/.dsh/gemini-web-agent 与 ~/.gemini/config/skills/gemini-web-agent）
+        # 同步更新其他已存在的已知全局技能目录（如 ~/.dsh/gemini-web-agent 與 ~/.gemini/config/skills/gemini-web-agent）
         home = Path.home()
         extra_candidates = [
             home / ".dsh" / SKILL_NAME,

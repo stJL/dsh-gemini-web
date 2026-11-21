@@ -32,6 +32,16 @@ export function formatEfforts(efforts?: string[]): ReasoningEffortOption[] | und
 export const BUILTIN_MODELS = [
   // ── 主力推理 (Reasoning & Coding) ──
   {
+    id: 'gemini-4-neon',
+    name: 'Gemini 4 Neon (Web)',
+    description: 'AI Studio 網頁免費額度 · 4 Neon 超高性價比旗艦推理',
+    contextWindow: 1048576,
+    maxOutput: 65536,
+    inputModalities: ['text'],
+    efforts: ['low', 'medium', 'high'],
+    defaultEffort: 'high',
+  },
+  {
     id: 'gemini-4-hydrogen',
     name: 'Gemini 4 Hydrogen (Web)',
     description: 'AI Studio 網頁免費額度 · 1M 最長輸出 · 高頻推理與 Agentic 默認主力',

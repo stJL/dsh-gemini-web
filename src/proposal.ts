@@ -96,17 +96,17 @@ export function parseTaskToProposal(task: string, config?: PluginConfig): Propos
   } else if (/3\.8[- ]?flash|\bflash\b/i.test(task) && !/flash[- ]?lite/i.test(task)) {
     userSpecifiedModel = 'gemini-3.8-flash'
     userSpecifiedModelKey = 'gemini-3.8-flash'
-  } else if (/hydrogen|gemini-4/i.test(task)) {
-    userSpecifiedModel = 'gemini-4-hydrogen'
-    userSpecifiedModelKey = 'gemini-4-hydrogen'
+  } else if (/neon/i.test(task)) {
+    userSpecifiedModel = 'gemini-4-neon'
+    userSpecifiedModelKey = 'gemini-4-neon'
   } else if (/argon/i.test(task)) {
     // 官方已将早期测试版 Argon 思考槽位升级合并至 Hydrogen 深度推理
     userSpecifiedModel = 'gemini-4-hydrogen'
     userSpecifiedModelKey = 'gemini-4-hydrogen'
     modelNote = '（注：Google 已将旧 Argon 槽位升级合并至 Hydrogen 深度推理，已自动为您映射）'
-  } else if (/neon/i.test(task)) {
-    userSpecifiedModel = 'gemini-4-neon'
-    userSpecifiedModelKey = 'neon'
+  } else if (/hydrogen|gemini-4/i.test(task)) {
+    userSpecifiedModel = 'gemini-4-hydrogen'
+    userSpecifiedModelKey = 'gemini-4-hydrogen'
   } else if (/nano\s*banana/i.test(task)) {
     userSpecifiedModel = 'Nano Banana 2.1'
     userSpecifiedModelKey = 'nano-banana'

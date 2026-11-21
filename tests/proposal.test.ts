@@ -137,4 +137,16 @@ describe('Deterministic Proposal Parser (Plan B)', () => {
     expect(res.card).toContain('Google AI Studio')
     expect(res.card).not.toContain('Auto (Gemini 官网原生模型)')
   })
+
+  it('Scenario 10: AI Studio 用户显式指定新模型 (Gemini 4 Neon)', () => {
+    const prompt = '用 Gemini 4 Neon 分析微服务架构的流量调度'
+    const res = parseTaskToProposal(prompt, mockConfig)
+
+    expect(res.site).toBe('aistudio')
+    expect(res.entry).toBe('chat')
+    expect(res.modelLabel).toBe('（用户指定）')
+    expect(res.modelTarget).toBe('gemini-4-neon')
+    expect(res.model).toBe('gemini-4-neon')
+    expect(res.thinkingConfig).toBe('Thinking 设为 high')
+  })
 })

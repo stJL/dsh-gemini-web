@@ -949,6 +949,7 @@ window.__ModuleLoader__.load({
       const selectableLadderModels = textGroup.length > 0 ? textGroup.map(m => ({ id: m.id, name: m.name })) : [
         { id: 'gemini-4-argon', name: 'Gemini 4 Argon' },
         { id: 'gemini-4-hydrogen', name: 'Gemini 4 Hydrogen' },
+        { id: 'gemini-4-neon', name: 'Gemini 4 Neon' },
         { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash' },
         { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite' },
       ]
@@ -1415,6 +1416,7 @@ window.__ModuleLoader__.load({
                   h('optgroup', { label: t('group_text') }, [
                     h('option', { key: 'fl', value: 'gemini-3.5-flash-lite' }, '⚡ 3.5 Flash Lite'),
                     h('option', { key: 'f', value: 'gemini-3.8-flash' }, '🚀 3.8 Flash'),
+                    h('option', { key: 'n', value: 'gemini-4-neon' }, '⚡ 4 Neon (1M)'),
                     h('option', { key: 'h', value: 'gemini-4-hydrogen' }, '🧠 4 Hydrogen (1M)'),
                     h('option', { key: 'a', value: 'gemini-4-argon' }, '🏗️ 4 Argon'),
                   ]),

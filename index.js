@@ -987,6 +987,7 @@ function createApiRouter(ctx) {
           discovered = [
             { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash Lite", new: false, paid: false },
             { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", new: false, paid: false },
+            { id: "gemini-4-neon", name: "Gemini 4 Neon", new: true, paid: false },
             { id: "gemini-4-hydrogen", name: "Gemini 4 Hydrogen", new: true, paid: false },
             { id: "gemini-4-argon", name: "Gemini 4 Argon", new: false, paid: false },
             { id: "gemini-nano-banana-2.1", name: "Nano Banana 2.1", new: true, paid: false },
@@ -1076,16 +1077,16 @@ function parseTaskToProposal(task, config) {
   } else if (/3\.8[- ]?flash|\bflash\b/i.test(task) && !/flash[- ]?lite/i.test(task)) {
     userSpecifiedModel = "gemini-3.8-flash";
     userSpecifiedModelKey = "gemini-3.8-flash";
-  } else if (/hydrogen|gemini-4/i.test(task)) {
-    userSpecifiedModel = "gemini-4-hydrogen";
-    userSpecifiedModelKey = "gemini-4-hydrogen";
+  } else if (/neon/i.test(task)) {
+    userSpecifiedModel = "gemini-4-neon";
+    userSpecifiedModelKey = "gemini-4-neon";
   } else if (/argon/i.test(task)) {
     userSpecifiedModel = "gemini-4-hydrogen";
     userSpecifiedModelKey = "gemini-4-hydrogen";
     modelNote = "（注：Google 已将旧 Argon 槽位升级合并至 Hydrogen 深度推理，已自动为您映射）";
-  } else if (/neon/i.test(task)) {
-    userSpecifiedModel = "gemini-4-neon";
-    userSpecifiedModelKey = "neon";
+  } else if (/hydrogen|gemini-4/i.test(task)) {
+    userSpecifiedModel = "gemini-4-hydrogen";
+    userSpecifiedModelKey = "gemini-4-hydrogen";
   } else if (/nano\s*banana/i.test(task)) {
     userSpecifiedModel = "Nano Banana 2.1";
     userSpecifiedModelKey = "nano-banana";

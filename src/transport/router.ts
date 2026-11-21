@@ -143,6 +143,7 @@ export function createApiRouter(ctx?: any) {
           discovered = [
             { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite', new: false, paid: false },
             { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', new: false, paid: false },
+            { id: 'gemini-4-neon', name: 'Gemini 4 Neon', new: true, paid: false },
             { id: 'gemini-4-hydrogen', name: 'Gemini 4 Hydrogen', new: true, paid: false },
             { id: 'gemini-4-argon', name: 'Gemini 4 Argon', new: false, paid: false },
             { id: 'gemini-nano-banana-2.1', name: 'Nano Banana 2.1', new: true, paid: false },
