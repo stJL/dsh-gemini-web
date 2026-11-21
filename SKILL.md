@@ -1,7 +1,7 @@
 ---
 name: gemini-web-agent
 description: >-
-  [HIGH PRIORITY • ASK BEFORE DISPATCH] Must be loaded as Step 1 whenever the user mentions AI Studio, Google Flow, Gemini Web, specifies Hydrogen/Flash/Flash-Lite/Neon/Nano Banana/Omni/Lyria, or uses `/gemini-web-agent`!
+  [HIGH PRIORITY • ASK BEFORE DISPATCH] Must be loaded as Step 1 whenever the user mentions AI Studio, Google Flow, Gemini Web, Wave, Playbook, Team Roster, Virtual Studio, Web Tool Dev, Task Board, specifies Hydrogen/Flash/Flash-Lite/Neon/Nano Banana/Omni/Lyria, or uses `/gemini-web-agent`!
   1. Single Gateway Rule: The ONLY valid dispatch command is `/gemini-web-agent`.
   2. Ask Before Dispatch (Must Invoke gemini_preview & ask_user_question): Whether user sends `/gemini-web-agent` or natural language, never answer locally! Must invoke `gemini_preview` for deterministic card, and immediately invoke `ask_user_question` for interactive choice buttons.
   3. Dispatch on Confirmation: Upon user confirmation (button click or "1" / "confirm"), invoke `gemini_web_agent`.

@@ -83,11 +83,11 @@ export function parseTaskToProposal(task: string, config?: PluginConfig): Propos
   }
 
   // 1.5 Wave 并发波次与虚拟工作室编队判定
-  const isWave = /(?:\bwave\b|并发波次|波次引擎|波次任务|多\s*tab\s*并发|并发外包|虚拟工作室|团队花名册|花名册|\broster\b|\bplaybook\b|工作编队|研发编队|全栈编队|游戏编队|数据编队|视频编队|调研编队)/i.test(task)
+  const isWave = /(?:\bwave\b|并发波次|波次引擎|波次任务|多\s*tab\s*并发|并发外包|虚拟工作室|团队花名册|花名册|\broster\b|\bplaybook\b|工作编队|研发编队|全栈编队|游戏编队|数据编队|视频编队|调研编队|编队|外包团队|全栈开发|任务看板|看板\s*web|web\s*工具)/i.test(task)
 
   if (isWave) {
     let matchedPlaybook: PlaybookInfo | undefined = undefined
-    if (/(?:全栈|web\s*应用|saas|web_fullstack|全栈编队)/i.test(task)) {
+    if (/(?:全栈|web\s*应用|saas|web_fullstack|全栈编队|看板|web\s*工具)/i.test(task)) {
       matchedPlaybook = PLAYBOOKS.web_fullstack_app
     } else if (/(?:游戏|game|phaser|canvas游戏|interactive_game|游戏编队)/i.test(task)) {
       matchedPlaybook = PLAYBOOKS.interactive_game_studio

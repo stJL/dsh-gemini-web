@@ -8,17 +8,23 @@ import { parseTaskToProposal } from './proposal.js'
 export const name = 'dsh-gemini-web'
 export const inject = ['tools', 'webServer', 'systemPrompt']
 
+const previewedTaskMap = new Map<string, number>()
+
+function getTaskKey(t: string): string {
+  return (t || '').trim().replace(/\s+/g, ' ').slice(0, 100)
+}
+
 export function buildDynamicCardGuidance(): string {
   return `【🌐 Gemini Web Agent 单一门禁与先问后用铁律】
 唯一合法调度指令：/gemini-web-agent。
 
 【核心交互流程规范】：
-当用户在对话中提到需要使用外部 Google 网页端（AI Studio / Flow / Gemini 官网）执行任务，或直接使用了 /gemini-web-agent 指令时：
-1. 严禁宿主 AI 本地代劳作答！必须立即执行第 1 步先问后用（调用 gemini_preview 工具）；
+当用户在对话中提到需要使用外部 Google 网页端（AI Studio / Flow / Gemini 官网 / Wave 编队 / 虚拟工作室）执行任务，或直接使用了 /gemini-web-agent 指令时：
+1. 严禁宿主 AI 本地代劳作答！严禁在未向用户展示确认卡前擅自执行代码！必须立即执行第 1 步先问后用（调用 gemini_preview 工具）；
 2. 在聊天中原样输出 gemini_preview 返回的标准确认卡；
 3. 必须立即调用交互提问工具 ask_user_question（或 ask_question），展示交互选择栏供用户点击：
    - questions: [{ id: "gemini_confirm", question: "👉 请确认是否发包执行？", options: [{ label: "(Recommended) 确认发包执行" }, { label: "调整参数" }, { label: "取消调度（本地作答）" }] }]
-4. 严禁直接调用 gemini_web_agent 发包，严禁调用 subagent！等待用户点击确认！
+4. 严禁直接调用 gemini_web_agent 发包，严禁调用 subagent！必须立即停步等待用户点击确认！
 
 【授权发包执行】：
 当用户在交互选择栏中点击「确认发包执行」或回复「确认」/「1」后：
@@ -88,7 +94,9 @@ export function apply(ctx: any) {
         },
         async execute(args: any) {
           const proposal = parseTaskToProposal(args.task, loadConfig())
-          return `${proposal.card}\n\n【下一步操作指引】：请宿主 AI 立即在当前聊天窗口中原样输出上方确认卡，并调用提问工具 ask_user_question（或 ask_question）弹出交互选择按钮：\n- questions: [{"id": "gemini_confirm", "question": "👉 请确认是否发包执行？", "options": [{"label": "(Recommended) 确认发包执行"}, {"label": "调整参数"}, {"label": "取消调度（本地作答）"}]}]\n调用提问工具后立即停止本次回应，等待用户点击按钮确认！`
+          const key = getTaskKey(args.task)
+          previewedTaskMap.set(key, Date.now())
+          return `${proposal.card}\n\n【下一步操作指引】：请宿主 AI 立即在当前聊天窗口中原样输出上方确认卡，并调用提问工具 ask_user_question（或 ask_question）弹出交互选择按钮：\n- questions: [{"id": "gemini_confirm", "question": "${proposal.question || '👉 请确认是否发包执行？'}", "options": ${JSON.stringify((proposal.options || []).map((opt: string) => ({ label: opt })))}}]\n调用提问工具后立即停止本次回应，等待用户点击按钮确认！`
         },
       }
 
@@ -150,6 +158,10 @@ ${buildDynamicCardGuidance()}
               type: 'boolean',
               description: '是否开启全新对话窗口（若为 true 则重置为全新聊天室，默认为 false 延续对话）',
             },
+            confirmed: {
+              type: 'boolean',
+              description: '是否已在聊天室获得用户明确点击授权（必须为 true 才能正式发包；未授权时将被门禁拦截并自动返回确认卡）',
+            },
             files: {
               type: 'array',
               items: { type: 'string' },
@@ -171,8 +183,26 @@ ${buildDynamicCardGuidance()}
           // 若为 preview 动作，直接执行确定性解析生成确认卡
           if (args.action === 'preview') {
             const proposal = parseTaskToProposal(args.task, loadConfig())
+            const key = getTaskKey(args.task)
+            previewedTaskMap.set(key, Date.now())
             return proposal.card
           }
+
+          const cfg = loadConfig()
+          const key = getTaskKey(args.task)
+          const isExplicitConfirmed = args.confirmed === true || args.action === 'execute_confirmed'
+          const hasBeenPreviewed = previewedTaskMap.has(key) && (Date.now() - (previewedTaskMap.get(key) || 0) < 10 * 60 * 1000)
+
+          // 核心拦截门禁：若未在聊天室展示过确认卡且未显式确认，且非极速直通模式
+          if (!isExplicitConfirmed && !hasBeenPreviewed && cfg.dispatchMode !== 'fast_track') {
+            // 自动标记为已预览并返回确定性确认卡，死死锁住偷跑发包
+            previewedTaskMap.set(key, Date.now())
+            const proposal = parseTaskToProposal(args.task, cfg)
+            return `${proposal.card}\n\n🛑【系统安全门禁拦截：先问后用强制生效中】\n检测到尚未在聊天窗口向用户展示上方【🌐 Gemini Web Agent】确认卡并获取点击授权！本次调度已被底层代码强制拦截挂起，未向外部发包。\n\n👉 宿主 AI 必须：\n1. 立即在当前聊天窗口中原样输出上方确认卡；\n2. 立即调用提问工具 ask_user_question 呈现确认按钮供用户点击：\n   - questions: [{"id": "gemini_confirm", "question": "${proposal.question || '👉 请确认是否发包执行？'}", "options": ${JSON.stringify((proposal.options || []).map((opt: string) => ({ label: opt })))}}]\n3. 停步等待用户点击！只有在用户在选择栏点击确认后，第二轮才允许正式发包！`
+          }
+
+          // 消耗掉预览记录（单次任务独立闭环，抗历史惯性）
+          previewedTaskMap.delete(key)
 
           // 自动挂载文件兜底提取：若未显式传 files，自动提取提示词中的路径或 @file
           let filesToPass = args.files

@@ -1081,10 +1081,10 @@ function parseTaskToProposal(task, config) {
       extractedFiles.push(f);
     }
   }
-  const isWave = /(?:\bwave\b|并发波次|波次引擎|波次任务|多\s*tab\s*并发|并发外包|虚拟工作室|团队花名册|花名册|\broster\b|\bplaybook\b|工作编队|研发编队|全栈编队|游戏编队|数据编队|视频编队|调研编队)/i.test(task);
+  const isWave = /(?:\bwave\b|并发波次|波次引擎|波次任务|多\s*tab\s*并发|并发外包|虚拟工作室|团队花名册|花名册|\broster\b|\bplaybook\b|工作编队|研发编队|全栈编队|游戏编队|数据编队|视频编队|调研编队|编队|外包团队|全栈开发|任务看板|看板\s*web|web\s*工具)/i.test(task);
   if (isWave) {
     let matchedPlaybook = undefined;
-    if (/(?:全栈|web\s*应用|saas|web_fullstack|全栈编队)/i.test(task)) {
+    if (/(?:全栈|web\s*应用|saas|web_fullstack|全栈编队|看板|web\s*工具)/i.test(task)) {
       matchedPlaybook = PLAYBOOKS.web_fullstack_app;
     } else if (/(?:游戏|game|phaser|canvas游戏|interactive_game|游戏编队)/i.test(task)) {
       matchedPlaybook = PLAYBOOKS.interactive_game_studio;
@@ -1471,17 +1471,21 @@ function createApiRouter(ctx) {
 // src/index.ts
 var name = "dsh-gemini-web";
 var inject = ["tools", "webServer", "systemPrompt"];
+var previewedTaskMap = new Map;
+function getTaskKey(t) {
+  return (t || "").trim().replace(/\s+/g, " ").slice(0, 100);
+}
 function buildDynamicCardGuidance() {
   return `【\uD83C\uDF10 Gemini Web Agent 单一门禁与先问后用铁律】
 唯一合法调度指令：/gemini-web-agent。
 
 【核心交互流程规范】：
-当用户在对话中提到需要使用外部 Google 网页端（AI Studio / Flow / Gemini 官网）执行任务，或直接使用了 /gemini-web-agent 指令时：
-1. 严禁宿主 AI 本地代劳作答！必须立即执行第 1 步先问后用（调用 gemini_preview 工具）；
+当用户在对话中提到需要使用外部 Google 网页端（AI Studio / Flow / Gemini 官网 / Wave 编队 / 虚拟工作室）执行任务，或直接使用了 /gemini-web-agent 指令时：
+1. 严禁宿主 AI 本地代劳作答！严禁在未向用户展示确认卡前擅自执行代码！必须立即执行第 1 步先问后用（调用 gemini_preview 工具）；
 2. 在聊天中原样输出 gemini_preview 返回的标准确认卡；
 3. 必须立即调用交互提问工具 ask_user_question（或 ask_question），展示交互选择栏供用户点击：
    - questions: [{ id: "gemini_confirm", question: "\uD83D\uDC49 请确认是否发包执行？", options: [{ label: "(Recommended) 确认发包执行" }, { label: "调整参数" }, { label: "取消调度（本地作答）" }] }]
-4. 严禁直接调用 gemini_web_agent 发包，严禁调用 subagent！等待用户点击确认！
+4. 严禁直接调用 gemini_web_agent 发包，严禁调用 subagent！必须立即停步等待用户点击确认！
 
 【授权发包执行】：
 当用户在交互选择栏中点击「确认发包执行」或回复「确认」/「1」后：
@@ -1548,10 +1552,12 @@ function apply(ctx) {
         },
         async execute(args) {
           const proposal = parseTaskToProposal(args.task, loadConfig());
+          const key = getTaskKey(args.task);
+          previewedTaskMap.set(key, Date.now());
           return `${proposal.card}
 
 【下一步操作指引】：请宿主 AI 立即在当前聊天窗口中原样输出上方确认卡，并调用提问工具 ask_user_question（或 ask_question）弹出交互选择按钮：
-- questions: [{"id": "gemini_confirm", "question": "\uD83D\uDC49 请确认是否发包执行？", "options": [{"label": "(Recommended) 确认发包执行"}, {"label": "调整参数"}, {"label": "取消调度（本地作答）"}]}]
+- questions: [{"id": "gemini_confirm", "question": "${proposal.question || "\uD83D\uDC49 请确认是否发包执行？"}", "options": ${JSON.stringify((proposal.options || []).map((opt) => ({ label: opt })))}}]
 调用提问工具后立即停止本次回应，等待用户点击按钮确认！`;
         }
       };
@@ -1611,6 +1617,10 @@ ${buildDynamicCardGuidance()}
               type: "boolean",
               description: "是否开启全新对话窗口（若为 true 则重置为全新聊天室，默认为 false 延续对话）"
             },
+            confirmed: {
+              type: "boolean",
+              description: "是否已在聊天室获得用户明确点击授权（必须为 true 才能正式发包；未授权时将被门禁拦截并自动返回确认卡）"
+            },
             files: {
               type: "array",
               items: { type: "string" },
@@ -1631,8 +1641,29 @@ ${buildDynamicCardGuidance()}
         async execute(args, exec) {
           if (args.action === "preview") {
             const proposal = parseTaskToProposal(args.task, loadConfig());
+            const key = getTaskKey(args.task);
+            previewedTaskMap.set(key, Date.now());
             return proposal.card;
           }
+          const cfg = loadConfig();
+          const key = getTaskKey(args.task);
+          const isExplicitConfirmed = args.confirmed === true || args.action === "execute_confirmed";
+          const hasBeenPreviewed = previewedTaskMap.has(key) && Date.now() - (previewedTaskMap.get(key) || 0) < 10 * 60 * 1000;
+          if (!isExplicitConfirmed && !hasBeenPreviewed && cfg.dispatchMode !== "fast_track") {
+            previewedTaskMap.set(key, Date.now());
+            const proposal = parseTaskToProposal(args.task, cfg);
+            return `${proposal.card}
+
+\uD83D\uDED1【系统安全门禁拦截：先问后用强制生效中】
+检测到尚未在聊天窗口向用户展示上方【\uD83C\uDF10 Gemini Web Agent】确认卡并获取点击授权！本次调度已被底层代码强制拦截挂起，未向外部发包。
+
+\uD83D\uDC49 宿主 AI 必须：
+1. 立即在当前聊天窗口中原样输出上方确认卡；
+2. 立即调用提问工具 ask_user_question 呈现确认按钮供用户点击：
+   - questions: [{"id": "gemini_confirm", "question": "${proposal.question || "\uD83D\uDC49 请确认是否发包执行？"}", "options": ${JSON.stringify((proposal.options || []).map((opt) => ({ label: opt })))}}]
+3. 停步等待用户点击！只有在用户在选择栏点击确认后，第二轮才允许正式发包！`;
+          }
+          previewedTaskMap.delete(key);
           let filesToPass = args.files;
           if (!filesToPass || filesToPass.length === 0) {
             const proposal = parseTaskToProposal(args.task, loadConfig());

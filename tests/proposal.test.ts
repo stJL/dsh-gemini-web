@@ -162,4 +162,15 @@ describe('Deterministic Proposal Parser (Plan B)', () => {
     expect(res.card).toContain('Wave 0 (架构定界) -> Wave 1 (并行生产)')
     expect(res.options).toContain('(Recommended) 确认启动 Wave 并发外包')
   })
+
+  it('Scenario 12: 用户简要输入「开发任务看板Web工具」自动匹配全栈编队', () => {
+    const prompt = '开发任务看板Web工具'
+    const res = parseTaskToProposal(prompt, mockConfig)
+
+    expect(res.site).toBe('wave')
+    expect(res.entry).toBe('wave')
+    expect(res.playbook?.slug).toBe('web_fullstack_app')
+    expect(res.card).toContain('全栈 Web / SaaS 应用研发编队')
+    expect(res.options).toContain('(Recommended) 确认启动 Wave 并发外包')
+  })
 })
