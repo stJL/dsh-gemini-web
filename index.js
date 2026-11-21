@@ -1554,11 +1554,14 @@ function apply(ctx) {
           const proposal = parseTaskToProposal(args.task, loadConfig());
           const key = getTaskKey(args.task);
           previewedTaskMap.set(key, Date.now());
+          const qText = proposal.question || "\uD83D\uDC49 请确认是否发包执行？";
+          const rawOptions = proposal.options || ["(Recommended) 确认发包执行", "调整参数", "取消调度（本地作答）"];
           return `${proposal.card}
 
-【下一步操作指引】：请宿主 AI 立即在当前聊天窗口中原样输出上方确认卡，并调用提问工具 ask_user_question（或 ask_question）弹出交互选择按钮：
-- questions: [{"id": "gemini_confirm", "question": "${proposal.question || "\uD83D\uDC49 请确认是否发包执行？"}", "options": ${JSON.stringify((proposal.options || []).map((opt) => ({ label: opt })))}}]
-调用提问工具后立即停止本次回应，等待用户点击按钮确认！`;
+【下一步操作指引】：请宿主 AI 立即在当前聊天窗口原样输出上方确认卡，并调用提问工具弹出交互选项栏：
+- 原生 ask_question 工具（Antigravity 规范）：ask_question(questions: [{"question": "${qText}", "options": ${JSON.stringify(rawOptions)}}])
+- MCP ask_user_question 工具：ask_user_question(questions: [{"id": "gemini_confirm", "question": "${qText}", "options": ${JSON.stringify(rawOptions.map((opt) => ({ label: opt })))}}])
+\uD83D\uDED1【铁律】：调用完提问工具后必须彻底停步，严禁调用任何后续工具（严禁调用 run_command、gemini_web_agent 或本地代劳），直接结束本次回答，等待用户点击或回复！`;
         }
       };
       scoped.tools.register(previewDef);
@@ -1652,6 +1655,8 @@ ${buildDynamicCardGuidance()}
           if (!isExplicitConfirmed && !hasBeenPreviewed && cfg.dispatchMode !== "fast_track") {
             previewedTaskMap.set(key, Date.now());
             const proposal = parseTaskToProposal(args.task, cfg);
+            const qText = proposal.question || "\uD83D\uDC49 请确认是否发包执行？";
+            const rawOptions = proposal.options || ["(Recommended) 确认发包执行", "调整参数", "取消调度（本地作答）"];
             return `${proposal.card}
 
 \uD83D\uDED1【系统安全门禁拦截：先问后用强制生效中】
@@ -1659,9 +1664,10 @@ ${buildDynamicCardGuidance()}
 
 \uD83D\uDC49 宿主 AI 必须：
 1. 立即在当前聊天窗口中原样输出上方确认卡；
-2. 立即调用提问工具 ask_user_question 呈现确认按钮供用户点击：
-   - questions: [{"id": "gemini_confirm", "question": "${proposal.question || "\uD83D\uDC49 请确认是否发包执行？"}", "options": ${JSON.stringify((proposal.options || []).map((opt) => ({ label: opt })))}}]
-3. 停步等待用户点击！只有在用户在选择栏点击确认后，第二轮才允许正式发包！`;
+2. 立即调用提问工具弹出交互选项供用户点击：
+   - 原生 ask_question 工具：ask_question(questions: [{"question": "${qText}", "options": ${JSON.stringify(rawOptions)}}])
+   - MCP ask_user_question 工具：ask_user_question(questions: [{"id": "gemini_confirm", "question": "${qText}", "options": ${JSON.stringify(rawOptions.map((opt) => ({ label: opt })))}}])
+3. 彻底停步！严禁调用 run_command 或再次发包！直接结束本次回答，等待用户在交互栏中点击或回复！`;
           }
           previewedTaskMap.delete(key);
           let filesToPass = args.files;

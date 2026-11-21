@@ -13,26 +13,42 @@ description: >-
 > **四大核心调度铁律**：
 > 1. **唯一合法命令门禁**：外部 Google 算力调度的唯一合法指令是 `/gemini-web-agent`。
 > 2. **零本地开销与严禁代劳**：严禁本地直接作答，严禁调用 `subagent`（消耗付费 API），严禁使用本地 `read`/`cat`/`bash` 预读取 `@文件`——直接将文件路径交由外部网页端解析！
-> 3. **第 1 步先问后用（必须调用 `gemini_preview` 与 `ask_user_question`）**：
+> 3. **第 1 步先问后用（必须调用 `gemini_preview` 与提问工具）**：
 >    - 严禁自行脑补排版确认卡！必须调用 `gemini_preview(task: "...")` 获得 100% 确定性解析的提案卡；
 >    - 在聊天中原样输出卡片 Markdown；
->    - **必须立即调用交互提问工具 `ask_user_question`** 弹出交互选项胶囊：
->      ```json
->      {
->        "questions": [
->          {
->            "id": "gemini_confirm",
->            "question": "👉 请确认是否发包执行？",
->            "options": [
->              { "label": "(Recommended) 确认发包执行" },
->              { "label": "调整参数" },
->              { "label": "取消调度（本地作答）" }
->            ]
->          }
->        ]
->      }
->      ```
->    - **调用完提问工具后立即停步**，等待用户点击确认！
+>    - **必须立即调用交互提问工具**（原生 `ask_question` 或 MCP `ask_user_question`）弹出交互选项胶囊：
+>      - 原生 `ask_question`（Antigravity 规范，options 为字符串数组）：
+>        ```json
+>        {
+>          "questions": [
+>            {
+>              "question": "👉 请确认是否发包执行？",
+>              "options": [
+>                "(Recommended) 确认发包执行",
+>                "调整参数",
+>                "取消调度（本地作答）"
+>              ]
+>            }
+>          ]
+>        }
+>        ```
+>      - MCP `ask_user_question`：
+>        ```json
+>        {
+>          "questions": [
+>            {
+>              "id": "gemini_confirm",
+>              "question": "👉 请确认是否发包执行？",
+>              "options": [
+>                { "label": "(Recommended) 确认发包执行" },
+>                { "label": "调整参数" },
+>                { "label": "取消调度（本地作答）" }
+>              ]
+>            }
+>          ]
+>        }
+>        ```
+>    - **调用完提问工具后彻底停步**，严禁调用任何其他工具（严禁 `run_command`），直接结束本轮回答，等待用户点击确认！
 > 4. **多轮任务循环重置（抗历史惯性）**：确认流程是针对【每一个独立任务】的循环，绝非整场对话只出现一次！每轮新任务都必须执行确认流程，绝不可跳过确认直接作答！
 
 ---

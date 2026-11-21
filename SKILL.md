@@ -13,26 +13,42 @@ description: >-
 > **Four Core Golden Rules**:
 > 1. **Single Command Gateway**: The ONLY valid dispatch command is `/gemini-web-agent`.
 > 2. **Zero Local Overhead & No Hijacking**: Never answer locally. Never call `subagent` (paid APIs). Never use local tools (`read`, `cat`, `bash`) to inspect `@file` mentions—pass file paths to the web agent!
-> 3. **Step 1 Ask-Before-Dispatch (Must Invoke `gemini_preview` & `ask_user_question`)**:
+> 3. **Step 1 Ask-Before-Dispatch (Must Invoke `gemini_preview` & Question Tool)**:
 >    - NEVER manually draft or hallucinate cards! You MUST invoke `gemini_preview(task: "...")` to obtain the 100% deterministic proposal card.
 >    - Output the received card markdown in chat.
->    - **Immediately invoke `ask_user_question`** to present interactive choice buttons:
->      ```json
->      {
->        "questions": [
->          {
->            "id": "gemini_confirm",
->            "question": "👉 请确认是否发包执行？",
->            "options": [
->              { "label": "(Recommended) 确认发包执行" },
->              { "label": "调整参数" },
->              { "label": "取消调度（本地作答）" }
->            ]
->          }
->        ]
->      }
->      ```
->    - **HALT immediately** after invoking the question tool, waiting for user click!
+>    - **Immediately invoke the question tool** (native `ask_question` or MCP `ask_user_question`):
+>      - Native `ask_question` (Antigravity standard, options are string array):
+>        ```json
+>        {
+>          "questions": [
+>            {
+>              "question": "👉 请确认是否发包执行？",
+>              "options": [
+>                "(Recommended) 确认发包执行",
+>                "调整参数",
+>                "取消调度（本地作答）"
+>              ]
+>            }
+>          ]
+>        }
+>        ```
+>      - MCP `ask_user_question`:
+>        ```json
+>        {
+>          "questions": [
+>            {
+>              "id": "gemini_confirm",
+>              "question": "👉 请确认是否发包执行？",
+>              "options": [
+>                { "label": "(Recommended) 确认发包执行" },
+>                { "label": "调整参数" },
+>                { "label": "取消调度（本地作答）" }
+>              ]
+>            }
+>          ]
+>        }
+>        ```
+>    - **HALT immediately** after invoking the question tool, do NOT invoke run_command or other tools, end the turn and wait for user click!
 > 4. **Per-Task Reset (Anti-Inertia)**: The confirmation cycle applies to **EVERY SINGLE TASK INDEPENDENTLY**, NOT once per session! Every new request MUST reset to Step 1.
 
 ---
