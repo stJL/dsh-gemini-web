@@ -208,6 +208,8 @@ ${buildDynamicCardGuidance()}
             const current = res.model || '备援模型'
             const pathDisplay = res.fallbackHistory || `\`${initial}\` ➔ 尖峰拥塞 ➔ \`${current}\``
             notice = `> 🔄 **【模型与渠道降级调度流程通知】**\n> - 原选模型/渠道：\`${initial}\`（遭遇 Google AI Studio 免费池尖峰排队）\n> - 调度路径：${pathDisplay}\n> - 最终交付渠道与模型：\`${current}\`（推演与生成成功）\n\n`
+          } else if (res.site === 'wave' || args.site === 'wave') {
+            notice = `> 👥 **【Wave 虚拟外包工作室通知】**：本次波次已由 **Wave 并发波次引擎** 顺利派发至多 Tab 并发执行并解包完成。\n\n`
           } else if (res.site === 'gemini' || args.site === 'gemini') {
             notice = `> 🌐 **【执行渠道通知】**：本次任务已由 **Gemini 官网通道 (gemini.google.com)** 顺利执行完成。\n\n`
           } else if (res.site === 'flow' || args.site === 'flow') {

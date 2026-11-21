@@ -43,6 +43,7 @@ description: >-
 | :--- | :--- | :--- |
 | **Google AI Studio** | `Hydrogen` (`gemini-4-hydrogen`)<br>`Flash` (`gemini-3.8-flash`)<br>`Flash Lite` (`gemini-3.5-flash-lite`)<br>`Neon` (`gemini-4-neon`) | • 深度推理与长文本首选 `Hydrogen`；<br>• 日常极速首选 `Flash Lite`；<br>• ⚠️ **提示**：旧版实验代号 `Argon` 已被 Google 官方升级合并入 `Hydrogen`，若指定 Argon 将自动映射为 Hydrogen。 |
 | **Gemini 官网** | `Auto` (官方原生模型) | 官网由 Google 原生大模型自动作答与联网增强，无需且无法指定单独模型代号。 |
+| **Wave 虚拟外包工作室** | `Wave 并发引擎`<br>`5 套官方研发编队` | • 多 Tab 错峰并发派单，1 Tab 1 员工持久绑定<br>• 架构定界 ➔ 并行研发 ➔ Debian 12 沙盒单测 ➔ 成果自动解包 |
 | **Google Flow** | `Nano Banana 2.1`<br>`Omni 1.2 / Veo` | • 生图默认享受 0 扣点特权 (`Nano Banana 2.1`)；<br>• 视频生成请指定 `Omni 1.2` 或 `Veo`。 |
 
 ---

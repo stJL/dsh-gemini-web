@@ -149,4 +149,17 @@ describe('Deterministic Proposal Parser (Plan B)', () => {
     expect(res.model).toBe('gemini-4-neon')
     expect(res.thinkingConfig).toBe('Thinking 设为 high')
   })
+
+  it('Scenario 11: Wave 虚拟软件工作室与并发编队判定 (全栈 Web 编队)', () => {
+    const prompt = '启动 Wave 并发波次，用全栈编队开发一套任务管理看板'
+    const res = parseTaskToProposal(prompt, mockConfig)
+
+    expect(res.site).toBe('wave')
+    expect(res.entry).toBe('wave')
+    expect(res.channel).toContain('Wave 多 Tab 并发波次引擎')
+    expect(res.playbook?.slug).toBe('web_fullstack_app')
+    expect(res.card).toContain('全栈 Web / SaaS 应用研发编队')
+    expect(res.card).toContain('Wave 0 (架构定界) -> Wave 1 (并行生产)')
+    expect(res.options).toContain('(Recommended) 确认启动 Wave 并发外包')
+  })
 })

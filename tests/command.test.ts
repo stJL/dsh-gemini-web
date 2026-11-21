@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import { parseTaskToProposal } from '../src/proposal.js'
 
-describe('Gemini Web Agent Single Gateway & Proposal Engine (v0.2.1)', () => {
+describe('Gemini Web Agent Single Gateway & Proposal Engine (v0.3.0-beta.0)', () => {
   it('Command Help & Guide on empty input or help', () => {
     const handleCommand = (rawInput: string) => {
       const raw = rawInput.trim()

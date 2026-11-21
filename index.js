@@ -658,6 +658,28 @@ async function executeAgentTask(options) {
   if (targetModel === "gemini.google.com" || targetModel === "gemini") {
     targetSite = "gemini";
   }
+  if (targetSite === "wave" || options.entry === "wave") {
+    let waveSpec = null;
+    try {
+      const trimmed = options.task.trim();
+      if (trimmed.startsWith("{") && trimmed.endsWith("}") || trimmed.startsWith("[") && trimmed.endsWith("]")) {
+        waveSpec = JSON.parse(trimmed);
+      }
+    } catch {}
+    if (waveSpec) {
+      const res = await executeWave(waveSpec, { projectDir: process.cwd(), timeoutSec: options.timeoutSec || 360 });
+      if (!res.ok) {
+        return { ok: false, channel: "cdp", site: "wave", error: res.error };
+      }
+      return {
+        ok: true,
+        channel: "cdp",
+        site: "wave",
+        model: "wave-engine",
+        output: typeof res.data === "string" ? res.data : JSON.stringify(res.data, null, 2)
+      };
+    }
+  }
   let baseTimeout = options.timeoutSec || cfg.timeoutSec || 180;
   const isHeavyTask = options.task.length > 150 || /(?:c\+\+|cpp|rust|紅黑樹|red-black|算法|演算法|架構|從零|完整實作|生產級|完整代碼|重構)/i.test(options.task);
   if (thinkingPolicy === "adaptive" && isHeavyTask) {
@@ -856,6 +878,407 @@ async function executeAgentTask(options) {
   }
   return { ok: false, channel: status.activeChannel, error: "未找到执行脚本" };
 }
+async function getRoster(rosterFile = ".web-team.json") {
+  const venv = findPythonVenv();
+  const cdpScript = findCliScript();
+  if (!venv || !cdpScript || !fs3.existsSync(venv) || !fs3.existsSync(cdpScript)) {
+    try {
+      const p = path3.resolve(rosterFile);
+      if (fs3.existsSync(p)) {
+        const data = JSON.parse(fs3.readFileSync(p, "utf-8"));
+        return { ok: true, file: p, project: data.project || "", count: Object.keys(data.roster || {}).length, roster: data.roster || {} };
+      }
+      return { ok: true, file: p, project: "", count: 0, roster: {} };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+  try {
+    const { stdout } = await execFileAsync2(venv, [cdpScript, "roster", "list", "--roster-file", rosterFile], {
+      timeout: 1e4,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" }
+    });
+    const parsed = JSON.parse(stdout.trim());
+    return {
+      ok: true,
+      file: parsed.file,
+      project: parsed.project,
+      count: parsed.count,
+      roster: parsed.roster
+    };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+}
+async function clearRoster(rosterFile = ".web-team.json") {
+  const venv = findPythonVenv();
+  const cdpScript = findCliScript();
+  if (!venv || !cdpScript || !fs3.existsSync(venv) || !fs3.existsSync(cdpScript)) {
+    try {
+      const p = path3.resolve(rosterFile);
+      if (fs3.existsSync(p)) {
+        fs3.writeFileSync(p, JSON.stringify({ project: "", updated_at: new Date().toISOString(), roster: {} }, null, 2), "utf-8");
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+  try {
+    await execFileAsync2(venv, [cdpScript, "roster", "clear", "--roster-file", rosterFile], {
+      timeout: 1e4,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" }
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+}
+async function auditRoster(projectDir = ".", rosterFile = ".web-team.json") {
+  const venv = findPythonVenv();
+  const cdpScript = findCliScript();
+  if (!venv || !cdpScript) {
+    return { ok: false, error: "未找到 Python 执行环境" };
+  }
+  try {
+    const { stdout } = await execFileAsync2(venv, [cdpScript, "roster", "audit", "--project-dir", projectDir, "--roster-file", rosterFile], {
+      timeout: 20000,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" }
+    });
+    try {
+      return { ok: true, data: JSON.parse(stdout.trim()) };
+    } catch {
+      return { ok: true, data: stdout.trim() };
+    }
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+}
+async function getPlaybooks() {
+  const venv = findPythonVenv();
+  const cdpScript = findCliScript();
+  if (!venv || !cdpScript) {
+    return { ok: false, error: "未找到 Python 执行环境" };
+  }
+  try {
+    const { stdout } = await execFileAsync2(venv, [cdpScript, "playbook", "list"], {
+      timeout: 1e4,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" }
+    });
+    return { ok: true, data: JSON.parse(stdout.trim()) };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+}
+async function getPlaybookDetail(name) {
+  const venv = findPythonVenv();
+  const cdpScript = findCliScript();
+  if (!venv || !cdpScript) {
+    return { ok: false, error: "未找到 Python 执行环境" };
+  }
+  try {
+    const { stdout } = await execFileAsync2(venv, [cdpScript, "playbook", "show", "--name", name], {
+      timeout: 1e4,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" }
+    });
+    return { ok: true, data: JSON.parse(stdout.trim()) };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+}
+async function executeWave(specPathOrObj, options = {}) {
+  const venv = findPythonVenv();
+  const cdpScript = findCliScript();
+  if (!venv || !cdpScript) {
+    return { ok: false, error: "未找到 Python 执行环境" };
+  }
+  let specPath = "";
+  let tmpSpec = false;
+  if (typeof specPathOrObj === "string" && specPathOrObj.endsWith(".json")) {
+    specPath = path3.resolve(specPathOrObj);
+  } else {
+    tmpSpec = true;
+    const tmpFile = path3.join(os3.tmpdir(), `dsh_wave_${Date.now()}.json`);
+    fs3.writeFileSync(tmpFile, JSON.stringify(specPathOrObj, null, 2), "utf-8");
+    specPath = tmpFile;
+  }
+  try {
+    const args = [cdpScript, "wave", "--spec", specPath];
+    if (options.projectDir)
+      args.push("--project-dir", options.projectDir);
+    if (options.timeoutSec)
+      args.push("--timeout", String(options.timeoutSec));
+    if (options.port)
+      args.push("--port", String(options.port));
+    const { stdout } = await execFileAsync2(venv, args, {
+      timeout: ((options.timeoutSec || 360) + 30) * 1000,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" }
+    });
+    try {
+      return { ok: true, data: JSON.parse(stdout.trim()) };
+    } catch {
+      return { ok: true, data: stdout.trim() };
+    }
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  } finally {
+    if (tmpSpec && fs3.existsSync(specPath)) {
+      try {
+        fs3.unlinkSync(specPath);
+      } catch {}
+    }
+  }
+}
+
+// src/proposal.ts
+var PLAYBOOKS = {
+  web_fullstack_app: {
+    slug: "web_fullstack_app",
+    title: "全栈 Web / SaaS 应用研发编队",
+    roles: ["director", "frontend_builder", "backend_coder", "ui_artist", "qa_tester"],
+    stages: "Wave 0 (架构定界) -> Wave 1 (并行生产) -> Wave 2 (集成解包) -> Wave 3 (沙盒自测)"
+  },
+  interactive_game_studio: {
+    slug: "interactive_game_studio",
+    title: "互动游戏与创意原型工作室",
+    roles: ["director", "game_designer", "core_coder", "ui_artist", "audio_engineer", "qa_tester"],
+    stages: "Wave 0 (玩法原型) -> Wave 1 (逻辑与美术并行) -> Wave 2 (音效切图) -> Wave 3 (冒烟试玩)"
+  },
+  data_office_automation: {
+    slug: "data_office_automation",
+    title: "数据工程、报表与办公自动化工坊",
+    roles: ["director", "data_engineer", "chart_formatter", "doc_auditor"],
+    stages: "Wave 0 (数据契约) -> Wave 1 (清洗与作图) -> Wave 2 (文档汇总)"
+  },
+  content_video_media: {
+    slug: "content_video_media",
+    title: "视觉创意、音视频与自媒体工坊",
+    roles: ["director", "script_writer", "visual_artist", "voice_actor", "post_editor"],
+    stages: "Wave 0 (剧本策划) -> Wave 1 (生图与配音) -> Wave 2 (视频合成与包装)"
+  },
+  academic_deep_research: {
+    slug: "academic_deep_research",
+    title: "学术研报、文献综述与深度调研编队",
+    roles: ["director", "deep_researcher", "fact_checker", "paper_writer"],
+    stages: "Wave 0 (提纲界定) -> Wave 1 (多源调研) -> Wave 2 (交叉核对) -> Wave 3 (综述成文)"
+  }
+};
+function parseTaskToProposal(task, config) {
+  const cfg = config || loadConfig();
+  const extractedFiles = [];
+  const atRegex = /@([a-zA-Z0-9_\-\.\/]+)/g;
+  let match;
+  while ((match = atRegex.exec(task)) !== null) {
+    const f = match[1].trim();
+    if (f && !extractedFiles.includes(f)) {
+      extractedFiles.push(f);
+    }
+  }
+  const fileRegex = /\b(?:(?:\.?\.?\/)?[a-zA-Z0-9_\-]+\/)*[a-zA-Z0-9_\-]+\.(?:ts|tsx|js|jsx|py|json|md|txt|pdf|png|jpg|jpeg|gif|webp|csv|log|yaml|yml|rs|go|cpp|c|h|java|html|css|sh)\b/gi;
+  while ((match = fileRegex.exec(task)) !== null) {
+    const f = match[0].trim();
+    if (f && !f.includes("google.com") && !extractedFiles.includes(f)) {
+      extractedFiles.push(f);
+    }
+  }
+  const isWave = /(?:\bwave\b|并发波次|波次引擎|波次任务|多\s*tab\s*并发|并发外包|虚拟工作室|团队花名册|花名册|\broster\b|\bplaybook\b|工作编队|研发编队|全栈编队|游戏编队|数据编队|视频编队|调研编队)/i.test(task);
+  if (isWave) {
+    let matchedPlaybook = undefined;
+    if (/(?:全栈|web\s*应用|saas|web_fullstack|全栈编队)/i.test(task)) {
+      matchedPlaybook = PLAYBOOKS.web_fullstack_app;
+    } else if (/(?:游戏|game|phaser|canvas游戏|interactive_game|游戏编队)/i.test(task)) {
+      matchedPlaybook = PLAYBOOKS.interactive_game_studio;
+    } else if (/(?:数据工程|办公自动化|excel|报表|清洗|data_office|数据编队)/i.test(task)) {
+      matchedPlaybook = PLAYBOOKS.data_office_automation;
+    } else if (/(?:视频|自媒体|音频|配乐|剪辑|content_video|视频编队)/i.test(task)) {
+      matchedPlaybook = PLAYBOOKS.content_video_media;
+    } else if (/(?:学术|文献|综述|深度调研|研报|academic_deep|调研编队)/i.test(task)) {
+      matchedPlaybook = PLAYBOOKS.academic_deep_research;
+    }
+    if (!matchedPlaybook) {
+      matchedPlaybook = PLAYBOOKS.web_fullstack_app;
+    }
+    const pb = matchedPlaybook;
+    const channel = "Wave 多 Tab 并发波次引擎 (Chrome Multi-Tab Cluster)";
+    const actionDesc = `启动虚拟工作室「${pb.title}」并发协作`;
+    const modelLabel = "（多 Tab 角色矩阵）";
+    const modelTarget = "Director (4 Neon) + Task (Debian 12) + Flow (Nano Banana)";
+    const thinkingConfig = "各 Tab 错峰 3.5s 派发 · 后台静默轮询 · 自动解包写入工作区";
+    const filesLine = extractedFiles.length > 0 ? `- \uD83D\uDCC1 挂载文件：[${extractedFiles.join(", ")}]` : "";
+    const cardLines = [
+      "### \uD83C\uDF10 Gemini Web Agent",
+      `检测到您欲调用外部 Google 网页端${actionDesc}，相关配置如下：`,
+      "",
+      `- \uD83C\uDFAF 执行渠道：${channel}`,
+      `- \uD83D\uDCCB 启用编队：${pb.title} (${pb.slug})`,
+      `- \uD83D\uDC65 协同角色：[${pb.roles.join(", ")}]`
+    ];
+    if (filesLine) {
+      cardLines.push(filesLine);
+    }
+    cardLines.push(`- \uD83D\uDEAA 入口模式：wave (多 Tab 并发外包)`, `- \uD83E\uDDE0 执行模型：${modelLabel}`, `  - ${modelTarget}`, `- \uD83C\uDF0A 规划波次：${pb.stages}`, `- ⚙️ 推演配置：${thinkingConfig}`, "- \uD83D\uDD04 话题隔离：各角色独立 Tab 绑定 (.web-team.json 持久化)", "", "\uD83D\uDC49 请确认是否启动 Wave 并发外包执行？", "- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化错峰派发多 Tab 并行执行", "- 回复 「花名册」：查阅当前项目团队各角色绑定的标签页与 Google Drive 状态", "- 回复 「取消」：中止并发外包，改由本地单模型作答");
+    const card = cardLines.join(`
+`);
+    const question = "\uD83D\uDC49 请确认是否启动 Wave 并发外包执行？";
+    const options = [
+      "(Recommended) 确认启动 Wave 并发外包",
+      "查看该编队花名册契约",
+      "取消调度（本地作答）"
+    ];
+    return {
+      site: "wave",
+      entry: "wave",
+      channel,
+      actionDesc,
+      modelLabel,
+      modelTarget,
+      model: "wave",
+      thinkingConfig,
+      files: extractedFiles,
+      card,
+      question,
+      options,
+      playbook: pb
+    };
+  }
+  const isAiStudio = /(?:google\s*ai\s*studio|ai\s*studio|aistudio)/i.test(task);
+  const isFlow = /(?:google\s*flow|flow\.google\.com|\bflow\b|nano\s*banana|veo|omni\s*1\.2|生图|画一张|生成图片|生成图|做视频|生成视频)/i.test(task);
+  const isGeminiWeb = /(?:gemini(?:\.google\.com)?\s*官网|gemini\s*web|gemini\s*网页|task\s*模式|task模式)/i.test(task) || !isAiStudio && /联网调研/i.test(task);
+  let site = "aistudio";
+  if (isAiStudio) {
+    site = "aistudio";
+  } else if (isFlow) {
+    site = "flow";
+  } else if (isGeminiWeb) {
+    site = "gemini";
+  }
+  let entry = "chat";
+  if (site === "flow") {
+    entry = "canvas";
+  } else if (site === "gemini") {
+    if (/(?:task\s*模式|task模式|联网调研|\btask\b)/i.test(task)) {
+      entry = "task";
+    } else {
+      entry = "chat";
+    }
+  }
+  let channel = "Google AI Studio（可选择：Google AI Studio / Gemini Web）";
+  if (site === "gemini") {
+    channel = "gemini.google.com（可选择：Google AI Studio / Gemini Web）";
+  } else if (site === "flow") {
+    channel = "Google Flow (flow.google.com)";
+  }
+  let actionDesc = "实现任务";
+  if (extractedFiles.length > 0) {
+    actionDesc = "分析本地文件";
+  } else if (site === "flow") {
+    actionDesc = "实现多媒体生成";
+  } else if (site === "gemini" && entry === "task") {
+    actionDesc = "进行联网调研与深度探索";
+  } else if (site === "aistudio" && /联网调研/i.test(task)) {
+    actionDesc = "进行联网调研与深度探索";
+  }
+  let userSpecifiedModel;
+  let userSpecifiedModelKey;
+  let modelNote = "";
+  if (/flash[- ]?lite|3\.5[- ]?flash[- ]?lite/i.test(task)) {
+    userSpecifiedModel = "gemini-3.5-flash-lite";
+    userSpecifiedModelKey = "gemini-3.5-flash-lite";
+  } else if (/3\.8[- ]?flash|\bflash\b/i.test(task) && !/flash[- ]?lite/i.test(task)) {
+    userSpecifiedModel = "gemini-3.8-flash";
+    userSpecifiedModelKey = "gemini-3.8-flash";
+  } else if (/neon/i.test(task)) {
+    userSpecifiedModel = "gemini-4-neon";
+    userSpecifiedModelKey = "gemini-4-neon";
+  } else if (/argon/i.test(task)) {
+    userSpecifiedModel = "gemini-4-hydrogen";
+    userSpecifiedModelKey = "gemini-4-hydrogen";
+    modelNote = "（注：Google 已将旧 Argon 槽位升级合并至 Hydrogen 深度推理，已自动为您映射）";
+  } else if (/hydrogen|gemini-4/i.test(task)) {
+    userSpecifiedModel = "gemini-4-hydrogen";
+    userSpecifiedModelKey = "gemini-4-hydrogen";
+  } else if (/nano\s*banana/i.test(task)) {
+    userSpecifiedModel = "Nano Banana 2.1";
+    userSpecifiedModelKey = "nano-banana";
+  } else if (/veo|omni/i.test(task)) {
+    userSpecifiedModel = "Omni 1.2 / Veo";
+    userSpecifiedModelKey = "omni";
+  }
+  let modelLabel = "";
+  let modelTarget = "";
+  let finalModel = undefined;
+  if (site === "flow") {
+    if (userSpecifiedModelKey === "omni") {
+      modelLabel = "Omni 1.2 / Veo (视频生成)";
+      modelTarget = "Omni 1.2 / Veo";
+      finalModel = "omni";
+    } else {
+      modelLabel = "Nano Banana 2.1 (2K 高清生图)";
+      modelTarget = "Nano Banana 2.1";
+      finalModel = "nano-banana";
+    }
+  } else if (site === "gemini") {
+    modelLabel = "Auto (Gemini 官网原生模型)";
+    modelTarget = "Google 官方原生模型";
+  } else if (userSpecifiedModel) {
+    modelLabel = "（用户指定）";
+    modelTarget = userSpecifiedModel;
+    finalModel = userSpecifiedModelKey;
+  } else {
+    const isStrict = cfg.thinkingPolicy === "strict";
+    if (isStrict) {
+      modelLabel = "（严格模式）";
+      modelTarget = cfg.defaultModel || "gemini-4-hydrogen";
+      finalModel = cfg.defaultModel;
+    } else {
+      modelLabel = "（智能/降级模式）";
+      const ladder = cfg.fallbackLadder && cfg.fallbackLadder.length > 0 ? cfg.fallbackLadder : [cfg.defaultModel || "gemini-4-hydrogen"];
+      modelTarget = ladder.join(" -> ");
+    }
+  }
+  let thinkingConfig = "";
+  if (site === "gemini") {
+    thinkingConfig = entry === "task" ? "联网搜索增强 (Task 联网模式)" : "官网标准对话模式";
+  } else if (site === "flow") {
+    thinkingConfig = "生成数量设为 x1，分辨率设为 2K";
+  } else {
+    const level = cfg.thinkingLevel || "high";
+    thinkingConfig = /联网调研/i.test(task) ? `Thinking 设为 ${level} (联网搜索增强)` : `Thinking 设为 ${level}`;
+  }
+  const filesLine = extractedFiles.length > 0 ? `- \uD83D\uDCC1 挂载文件：[${extractedFiles.join(", ")}]` : "";
+  const cardLines = [
+    "### \uD83C\uDF10 Gemini Web Agent",
+    `检测到您欲调用外部 Google 网页端${actionDesc}，相关配置如下：`,
+    "",
+    `- \uD83C\uDFAF 执行渠道：${channel}`
+  ];
+  if (filesLine) {
+    cardLines.push(filesLine);
+  }
+  cardLines.push(`- \uD83D\uDEAA 入口模式：${entry}`, `- \uD83E\uDDE0 执行模型：${modelLabel}`, `  - ${modelTarget}${modelNote ? ` ${modelNote}` : ""}`, `- ⚙️ 推演配置：${thinkingConfig}`, "- \uD83D\uDD04 话题隔离：new_chat: true（预设开启全新独立对话）", "", "\uD83D\uDC49 请确认是否发包执行？", "- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行", "- 回复 调整参数（如「改用 Flash Lite」、「改用 Hydrogen」等）：按您的要求调整后直接发包", "- 回复 「取消」：中止外部调度，改由本地作答");
+  const card = cardLines.join(`
+`);
+  const question = "\uD83D\uDC49 请确认是否发包执行？";
+  const options = [
+    "(Recommended) 确认发包执行",
+    "调整参数",
+    "取消调度（本地作答）"
+  ];
+  return {
+    site,
+    entry,
+    channel,
+    actionDesc,
+    modelLabel,
+    modelTarget,
+    model: finalModel,
+    thinkingConfig,
+    files: extractedFiles,
+    card,
+    question,
+    options
+  };
+}
 
 // src/transport/router.ts
 var execFileAsync3 = promisify3(execFile3);
@@ -1005,168 +1428,43 @@ function createApiRouter(ctx) {
         const result = await executeAgentTask({ task, model: body.model });
         return send(200, result);
       }
+      if (routePath === "/roster" && method === "GET") {
+        const roster = await getRoster();
+        return send(200, roster);
+      }
+      if (routePath === "/roster/clear" && method === "POST") {
+        const result = await clearRoster();
+        return send(200, result);
+      }
+      if (routePath === "/roster/audit" && method === "POST") {
+        const body = await readBody(req);
+        const result = await auditRoster(body.projectDir || ".");
+        return send(200, result);
+      }
+      if (routePath === "/playbooks" && method === "GET") {
+        const pb = await getPlaybooks();
+        return send(200, {
+          ok: true,
+          playbooks: pb.ok && pb.data?.playbooks ? pb.data.playbooks : Object.values(PLAYBOOKS)
+        });
+      }
+      if (routePath.startsWith("/playbook/") && method === "GET") {
+        const pbName = decodeURIComponent(routePath.replace("/playbook/", ""));
+        const detail = await getPlaybookDetail(pbName);
+        return send(200, detail);
+      }
+      if (routePath === "/wave" && method === "POST") {
+        const body = await readBody(req);
+        const result = await executeWave(body.spec || body.tasks, {
+          projectDir: body.projectDir,
+          timeoutSec: body.timeoutSec
+        });
+        return send(200, result);
+      }
       return send(404, { error: "Not found" });
     } catch (err) {
       return send(500, { error: err.message || String(err) });
     }
-  };
-}
-
-// src/proposal.ts
-function parseTaskToProposal(task, config) {
-  const cfg = config || loadConfig();
-  const extractedFiles = [];
-  const atRegex = /@([a-zA-Z0-9_\-\.\/]+)/g;
-  let match;
-  while ((match = atRegex.exec(task)) !== null) {
-    const f = match[1].trim();
-    if (f && !extractedFiles.includes(f)) {
-      extractedFiles.push(f);
-    }
-  }
-  const fileRegex = /\b(?:(?:\.?\.?\/)?[a-zA-Z0-9_\-]+\/)*[a-zA-Z0-9_\-]+\.(?:ts|tsx|js|jsx|py|json|md|txt|pdf|png|jpg|jpeg|gif|webp|csv|log|yaml|yml|rs|go|cpp|c|h|java|html|css|sh)\b/gi;
-  while ((match = fileRegex.exec(task)) !== null) {
-    const f = match[0].trim();
-    if (f && !f.includes("google.com") && !extractedFiles.includes(f)) {
-      extractedFiles.push(f);
-    }
-  }
-  const isAiStudio = /(?:google\s*ai\s*studio|ai\s*studio|aistudio)/i.test(task);
-  const isFlow = /(?:google\s*flow|flow\.google\.com|\bflow\b|nano\s*banana|veo|omni\s*1\.2|生图|画一张|生成图片|生成图|做视频|生成视频)/i.test(task);
-  const isGeminiWeb = /(?:gemini(?:\.google\.com)?\s*官网|gemini\s*web|gemini\s*网页|task\s*模式|task模式)/i.test(task) || !isAiStudio && /联网调研/i.test(task);
-  let site = "aistudio";
-  if (isAiStudio) {
-    site = "aistudio";
-  } else if (isFlow) {
-    site = "flow";
-  } else if (isGeminiWeb) {
-    site = "gemini";
-  }
-  let entry = "chat";
-  if (site === "flow") {
-    entry = "canvas";
-  } else if (site === "gemini") {
-    if (/(?:task\s*模式|task模式|联网调研|\btask\b)/i.test(task)) {
-      entry = "task";
-    } else {
-      entry = "chat";
-    }
-  }
-  let channel = "Google AI Studio（可选择：Google AI Studio / Gemini Web）";
-  if (site === "gemini") {
-    channel = "gemini.google.com（可选择：Google AI Studio / Gemini Web）";
-  } else if (site === "flow") {
-    channel = "Google Flow (flow.google.com)";
-  }
-  let actionDesc = "实现任务";
-  if (extractedFiles.length > 0) {
-    actionDesc = "分析本地文件";
-  } else if (site === "flow") {
-    actionDesc = "实现多媒体生成";
-  } else if (site === "gemini" && entry === "task") {
-    actionDesc = "进行联网调研与深度探索";
-  } else if (site === "aistudio" && /联网调研/i.test(task)) {
-    actionDesc = "进行联网调研与深度探索";
-  }
-  let userSpecifiedModel;
-  let userSpecifiedModelKey;
-  let modelNote = "";
-  if (/flash[- ]?lite|3\.5[- ]?flash[- ]?lite/i.test(task)) {
-    userSpecifiedModel = "gemini-3.5-flash-lite";
-    userSpecifiedModelKey = "gemini-3.5-flash-lite";
-  } else if (/3\.8[- ]?flash|\bflash\b/i.test(task) && !/flash[- ]?lite/i.test(task)) {
-    userSpecifiedModel = "gemini-3.8-flash";
-    userSpecifiedModelKey = "gemini-3.8-flash";
-  } else if (/neon/i.test(task)) {
-    userSpecifiedModel = "gemini-4-neon";
-    userSpecifiedModelKey = "gemini-4-neon";
-  } else if (/argon/i.test(task)) {
-    userSpecifiedModel = "gemini-4-hydrogen";
-    userSpecifiedModelKey = "gemini-4-hydrogen";
-    modelNote = "（注：Google 已将旧 Argon 槽位升级合并至 Hydrogen 深度推理，已自动为您映射）";
-  } else if (/hydrogen|gemini-4/i.test(task)) {
-    userSpecifiedModel = "gemini-4-hydrogen";
-    userSpecifiedModelKey = "gemini-4-hydrogen";
-  } else if (/nano\s*banana/i.test(task)) {
-    userSpecifiedModel = "Nano Banana 2.1";
-    userSpecifiedModelKey = "nano-banana";
-  } else if (/veo|omni/i.test(task)) {
-    userSpecifiedModel = "Omni 1.2 / Veo";
-    userSpecifiedModelKey = "omni";
-  }
-  let modelLabel = "";
-  let modelTarget = "";
-  let finalModel = undefined;
-  if (site === "flow") {
-    if (userSpecifiedModelKey === "omni") {
-      modelLabel = "Omni 1.2 / Veo (视频生成)";
-      modelTarget = "Omni 1.2 / Veo";
-      finalModel = "omni";
-    } else {
-      modelLabel = "Nano Banana 2.1 (2K 高清生图)";
-      modelTarget = "Nano Banana 2.1";
-      finalModel = "nano-banana";
-    }
-  } else if (site === "gemini") {
-    modelLabel = "Auto (Gemini 官网原生模型)";
-    modelTarget = "Google 官方原生模型";
-  } else if (userSpecifiedModel) {
-    modelLabel = "（用户指定）";
-    modelTarget = userSpecifiedModel;
-    finalModel = userSpecifiedModelKey;
-  } else {
-    const isStrict = cfg.thinkingPolicy === "strict";
-    if (isStrict) {
-      modelLabel = "（严格模式）";
-      modelTarget = cfg.defaultModel || "gemini-4-hydrogen";
-      finalModel = cfg.defaultModel;
-    } else {
-      modelLabel = "（智能/降级模式）";
-      const ladder = cfg.fallbackLadder && cfg.fallbackLadder.length > 0 ? cfg.fallbackLadder : [cfg.defaultModel || "gemini-4-hydrogen"];
-      modelTarget = ladder.join(" -> ");
-    }
-  }
-  let thinkingConfig = "";
-  if (site === "gemini") {
-    thinkingConfig = entry === "task" ? "联网搜索增强 (Task 联网模式)" : "官网标准对话模式";
-  } else if (site === "flow") {
-    thinkingConfig = "生成数量设为 x1，分辨率设为 2K";
-  } else {
-    const level = cfg.thinkingLevel || "high";
-    thinkingConfig = /联网调研/i.test(task) ? `Thinking 设为 ${level} (联网搜索增强)` : `Thinking 设为 ${level}`;
-  }
-  const filesLine = extractedFiles.length > 0 ? `- \uD83D\uDCC1 挂载文件：[${extractedFiles.join(", ")}]` : "";
-  const cardLines = [
-    "### \uD83C\uDF10 Gemini Web Agent",
-    `检测到您欲调用外部 Google 网页端${actionDesc}，相关配置如下：`,
-    "",
-    `- \uD83C\uDFAF 执行渠道：${channel}`
-  ];
-  if (filesLine) {
-    cardLines.push(filesLine);
-  }
-  cardLines.push(`- \uD83D\uDEAA 入口模式：${entry}`, `- \uD83E\uDDE0 执行模型：${modelLabel}`, `  - ${modelTarget}${modelNote ? ` ${modelNote}` : ""}`, `- ⚙️ 推演配置：${thinkingConfig}`, "- \uD83D\uDD04 话题隔离：new_chat: true（预设开启全新独立对话）", "", "\uD83D\uDC49 请确认是否发包执行？", "- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行", "- 回复 调整参数（如「改用 Flash Lite」、「改用 Hydrogen」等）：按您的要求调整后直接发包", "- 回复 「取消」：中止外部调度，改由本地作答");
-  const card = cardLines.join(`
-`);
-  const question = "\uD83D\uDC49 请确认是否发包执行？";
-  const options = [
-    "(Recommended) 确认发包执行",
-    "调整参数",
-    "取消调度（本地作答）"
-  ];
-  return {
-    site,
-    entry,
-    channel,
-    actionDesc,
-    modelLabel,
-    modelTarget,
-    model: finalModel,
-    thinkingConfig,
-    files: extractedFiles,
-    card,
-    question,
-    options
   };
 }
 
@@ -1373,6 +1671,10 @@ ${res.error}
 > - 原选模型/渠道：\`${initial}\`（遭遇 Google AI Studio 免费池尖峰排队）
 > - 调度路径：${pathDisplay}
 > - 最终交付渠道与模型：\`${current}\`（推演与生成成功）
+
+`;
+          } else if (res.site === "wave" || args.site === "wave") {
+            notice = `> \uD83D\uDC65 **【Wave 虚拟外包工作室通知】**：本次波次已由 **Wave 并发波次引擎** 顺利派发至多 Tab 并发执行并解包完成。
 
 `;
           } else if (res.site === "gemini" || args.site === "gemini") {

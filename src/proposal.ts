@@ -1,8 +1,48 @@
 import { PluginConfig, loadConfig } from './config.js'
 
+export interface PlaybookInfo {
+  slug: string
+  title: string
+  roles: string[]
+  stages: string
+}
+
+export const PLAYBOOKS: Record<string, PlaybookInfo> = {
+  web_fullstack_app: {
+    slug: 'web_fullstack_app',
+    title: '全栈 Web / SaaS 应用研发编队',
+    roles: ['director', 'frontend_builder', 'backend_coder', 'ui_artist', 'qa_tester'],
+    stages: 'Wave 0 (架构定界) -> Wave 1 (并行生产) -> Wave 2 (集成解包) -> Wave 3 (沙盒自测)',
+  },
+  interactive_game_studio: {
+    slug: 'interactive_game_studio',
+    title: '互动游戏与创意原型工作室',
+    roles: ['director', 'game_designer', 'core_coder', 'ui_artist', 'audio_engineer', 'qa_tester'],
+    stages: 'Wave 0 (玩法原型) -> Wave 1 (逻辑与美术并行) -> Wave 2 (音效切图) -> Wave 3 (冒烟试玩)',
+  },
+  data_office_automation: {
+    slug: 'data_office_automation',
+    title: '数据工程、报表与办公自动化工坊',
+    roles: ['director', 'data_engineer', 'chart_formatter', 'doc_auditor'],
+    stages: 'Wave 0 (数据契约) -> Wave 1 (清洗与作图) -> Wave 2 (文档汇总)',
+  },
+  content_video_media: {
+    slug: 'content_video_media',
+    title: '视觉创意、音视频与自媒体工坊',
+    roles: ['director', 'script_writer', 'visual_artist', 'voice_actor', 'post_editor'],
+    stages: 'Wave 0 (剧本策划) -> Wave 1 (生图与配音) -> Wave 2 (视频合成与包装)',
+  },
+  academic_deep_research: {
+    slug: 'academic_deep_research',
+    title: '学术研报、文献综述与深度调研编队',
+    roles: ['director', 'deep_researcher', 'fact_checker', 'paper_writer'],
+    stages: 'Wave 0 (提纲界定) -> Wave 1 (多源调研) -> Wave 2 (交叉核对) -> Wave 3 (综述成文)',
+  },
+}
+
 export interface ProposalResult {
-  site: 'aistudio' | 'flow' | 'gemini'
-  entry: 'chat' | 'task' | 'canvas'
+  site: 'aistudio' | 'flow' | 'gemini' | 'wave'
+  entry: 'chat' | 'task' | 'canvas' | 'wave'
   channel: string
   actionDesc: string
   modelLabel: string
@@ -13,6 +53,7 @@ export interface ProposalResult {
   card: string
   question: string
   options: string[]
+  playbook?: PlaybookInfo
 }
 
 /**
@@ -38,6 +79,86 @@ export function parseTaskToProposal(task: string, config?: PluginConfig): Propos
     const f = match[0].trim()
     if (f && !f.includes('google.com') && !extractedFiles.includes(f)) {
       extractedFiles.push(f)
+    }
+  }
+
+  // 1.5 Wave 并发波次与虚拟工作室编队判定
+  const isWave = /(?:\bwave\b|并发波次|波次引擎|波次任务|多\s*tab\s*并发|并发外包|虚拟工作室|团队花名册|花名册|\broster\b|\bplaybook\b|工作编队|研发编队|全栈编队|游戏编队|数据编队|视频编队|调研编队)/i.test(task)
+
+  if (isWave) {
+    let matchedPlaybook: PlaybookInfo | undefined = undefined
+    if (/(?:全栈|web\s*应用|saas|web_fullstack|全栈编队)/i.test(task)) {
+      matchedPlaybook = PLAYBOOKS.web_fullstack_app
+    } else if (/(?:游戏|game|phaser|canvas游戏|interactive_game|游戏编队)/i.test(task)) {
+      matchedPlaybook = PLAYBOOKS.interactive_game_studio
+    } else if (/(?:数据工程|办公自动化|excel|报表|清洗|data_office|数据编队)/i.test(task)) {
+      matchedPlaybook = PLAYBOOKS.data_office_automation
+    } else if (/(?:视频|自媒体|音频|配乐|剪辑|content_video|视频编队)/i.test(task)) {
+      matchedPlaybook = PLAYBOOKS.content_video_media
+    } else if (/(?:学术|文献|综述|深度调研|研报|academic_deep|调研编队)/i.test(task)) {
+      matchedPlaybook = PLAYBOOKS.academic_deep_research
+    }
+    if (!matchedPlaybook) {
+      matchedPlaybook = PLAYBOOKS.web_fullstack_app
+    }
+
+    const pb = matchedPlaybook
+    const channel = 'Wave 多 Tab 并发波次引擎 (Chrome Multi-Tab Cluster)'
+    const actionDesc = `启动虚拟工作室「${pb.title}」并发协作`
+    const modelLabel = '（多 Tab 角色矩阵）'
+    const modelTarget = 'Director (4 Neon) + Task (Debian 12) + Flow (Nano Banana)'
+    const thinkingConfig = '各 Tab 错峰 3.5s 派发 · 后台静默轮询 · 自动解包写入工作区'
+
+    const filesLine = extractedFiles.length > 0 ? `- 📁 挂载文件：[${extractedFiles.join(', ')}]` : ''
+    const cardLines = [
+      '### 🌐 Gemini Web Agent',
+      `检测到您欲调用外部 Google 网页端${actionDesc}，相关配置如下：`,
+      '',
+      `- 🎯 执行渠道：${channel}`,
+      `- 📋 启用编队：${pb.title} (${pb.slug})`,
+      `- 👥 协同角色：[${pb.roles.join(', ')}]`,
+    ]
+
+    if (filesLine) {
+      cardLines.push(filesLine)
+    }
+
+    cardLines.push(
+      `- 🚪 入口模式：wave (多 Tab 并发外包)`,
+      `- 🧠 执行模型：${modelLabel}`,
+      `  - ${modelTarget}`,
+      `- 🌊 规划波次：${pb.stages}`,
+      `- ⚙️ 推演配置：${thinkingConfig}`,
+      '- 🔄 话题隔离：各角色独立 Tab 绑定 (.web-team.json 持久化)',
+      '',
+      '👉 请确认是否启动 Wave 并发外包执行？',
+      '- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化错峰派发多 Tab 并行执行',
+      '- 回复 「花名册」：查阅当前项目团队各角色绑定的标签页与 Google Drive 状态',
+      '- 回复 「取消」：中止并发外包，改由本地单模型作答'
+    )
+
+    const card = cardLines.join('\n')
+    const question = '👉 请确认是否启动 Wave 并发外包执行？'
+    const options = [
+      '(Recommended) 确认启动 Wave 并发外包',
+      '查看该编队花名册契约',
+      '取消调度（本地作答）'
+    ]
+
+    return {
+      site: 'wave',
+      entry: 'wave',
+      channel,
+      actionDesc,
+      modelLabel,
+      modelTarget,
+      model: 'wave',
+      thinkingConfig,
+      files: extractedFiles,
+      card,
+      question,
+      options,
+      playbook: pb,
     }
   }
 

@@ -3,8 +3,9 @@ import { spawn, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { detectDualChannel, detectAgentLimb, findPythonVenv, findAgentLimbScript } from '../bridge/detector.js'
 import { fetchUsage } from '../bridge/runner.js'
-import { executeAgentTask } from '../bridge/agent-executor.js'
+import { executeAgentTask, getRoster, clearRoster, auditRoster, getPlaybooks, getPlaybookDetail, executeWave } from '../bridge/agent-executor.js'
 import { loadConfig, saveConfig, type PluginConfig } from '../config.js'
+import { PLAYBOOKS } from '../proposal.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -160,6 +161,45 @@ export function createApiRouter(ctx?: any) {
         const body = await readBody(req)
         const task = body.task || '請用一句話打招呼'
         const result = await executeAgentTask({ task, model: body.model })
+        return send(200, result)
+      }
+
+      if (routePath === '/roster' && method === 'GET') {
+        const roster = await getRoster()
+        return send(200, roster)
+      }
+
+      if (routePath === '/roster/clear' && method === 'POST') {
+        const result = await clearRoster()
+        return send(200, result)
+      }
+
+      if (routePath === '/roster/audit' && method === 'POST') {
+        const body = await readBody(req)
+        const result = await auditRoster(body.projectDir || '.')
+        return send(200, result)
+      }
+
+      if (routePath === '/playbooks' && method === 'GET') {
+        const pb = await getPlaybooks()
+        return send(200, {
+          ok: true,
+          playbooks: pb.ok && pb.data?.playbooks ? pb.data.playbooks : Object.values(PLAYBOOKS),
+        })
+      }
+
+      if (routePath.startsWith('/playbook/') && method === 'GET') {
+        const pbName = decodeURIComponent(routePath.replace('/playbook/', ''))
+        const detail = await getPlaybookDetail(pbName)
+        return send(200, detail)
+      }
+
+      if (routePath === '/wave' && method === 'POST') {
+        const body = await readBody(req)
+        const result = await executeWave(body.spec || body.tasks, {
+          projectDir: body.projectDir,
+          timeoutSec: body.timeoutSec,
+        })
         return send(200, result)
       }
 

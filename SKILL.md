@@ -43,6 +43,7 @@ description: >-
 | :--- | :--- | :--- |
 | **Google AI Studio** | `Hydrogen` (`gemini-4-hydrogen`)<br>`Flash` (`gemini-3.8-flash`)<br>`Flash Lite` (`gemini-3.5-flash-lite`)<br>`Neon` (`gemini-4-neon`) | • Best for code & reasoning: `Hydrogen`<br>• Best for rapid tasks: `Flash Lite`<br>• ⚠️ **Note**: Legacy `Argon` has been upgraded/merged into `Hydrogen`; specifying Argon will automatically map to `gemini-4-hydrogen`. |
 | **Gemini Web** | `Auto` (Native Web Model) | Managed automatically by Google official web model; no individual model alias needed. |
+| **Wave Virtual Studio** | `Wave Engine`<br>`5 Official Playbooks` | • Multi-tab staggered dispatch with 1-Tab-1-Role persistent binding<br>• Architecture ➔ Parallel dev ➔ Debian 12 sandbox tests ➔ Auto-unpacking |
 | **Google Flow** | `Nano Banana 2.1`<br>`Omni 1.2 / Veo` | • 0-credit image generation: `Nano Banana 2.1`<br>• Video generation: `Omni 1.2` or `Veo` |
 
 ---

@@ -476,6 +476,26 @@ window.__ModuleLoader__.load({
         safety_item2: '• 🌐 官方真实渲染：所有请求皆通过官方真实网页打字与接收结果，相对更稳，完全绕开本地 Token 与模型限制。',
         safety_item3: '• ⚡ 频率控制建议：日常自用建议保持合理调度频率，避免极高频并发刷网页端；遇到高峰排队塞车时，建议切换为 Flash Lite 备用。',
         safety_item4: '• 🔒 100% 回环安全：所有通信限制于本机 127.0.0.1 回环，零凭证外泄风险。',
+        studio_title: '👥 虚拟软件工作室 (Web Studio & Wave 并发引擎)',
+        studio_desc: '基于原作者 95874ab Wave 架构，单命令将多角色任务并发派发至独立标签页，支持 1 Tab 1 员工绑定、Google Drive 云端总线与 5 大官方研发编队。',
+        roster_title: '📋 团队花名册状态 (.web-team.json)',
+        roster_empty: '⚪ 暂无活动员工标签页（首次执行 Wave 时将自动按角色创建独立会话）',
+        roster_count: '当前活跃员工：{count} 名',
+        roster_clear_btn: '🧹 重置花名册',
+        roster_audit_btn: '🔍 真实性审计 (Audit)',
+        roster_refresh_btn: '🔄 刷新状态',
+        playbooks_title: '📚 5 套官方主流研发编队卡 (Playbooks)',
+        pb_fullstack_title: '🌐 全栈 Web / SaaS 应用研发组',
+        pb_fullstack_desc: 'Director 架构定界 ➔ 前端整包生成 ➔ 后端 Debian 12 沙盒单测 ➔ Flow 图标生成 ➔ 无头 Chromium 冒烟自测',
+        pb_game_title: '🎮 互动游戏与创意原型工作室',
+        pb_game_desc: '游戏策划 ➔ 核心逻辑与美术并行 ➔ 沙盒 ffmpeg/PIL 音效切图 ➔ 试玩验收',
+        pb_data_title: '📊 数据工程、报表与办公自动化',
+        pb_data_desc: '数据契约 ➔ Debian 12 沙盒 Pandas/NumPy 清洗与 Matplotlib 作图 ➔ 最终报表汇总',
+        pb_video_title: '🎬 视觉创意、音视频与自媒体工坊',
+        pb_video_desc: '剧本策划 ➔ Nano Banana 生图与 TTS 配音 ➔ 沙盒 ffmpeg 自动化剪辑混音包装',
+        pb_research_title: '📑 学术研报、文献综述与深度调研',
+        pb_research_desc: '提纲界定 ➔ AI Studio 1M 长文本多源调研 ➔ 交叉核对 ➔ 综述成文',
+        wave_stagger_tip: '🛡️ 防风控保障：内置错峰 3.5s 派发 + 进程内后台静默轮询 + 自动解包写入本地项目目录。',
         nav_label: '✨ Gemini 网页端 (Agent 调度中心)'
       },
       'en-US': {
@@ -632,6 +652,26 @@ window.__ModuleLoader__.load({
         safety_item2: '• 🌐 Authentic official rendering: All requests are typed and rendered directly on official web pages, bypassing token limits.',
         safety_item3: '• ⚡ Rate limit recommendations: Keep a reasonable request frequency for daily personal use; switch to Flash Lite during peak congestion.',
         safety_item4: '• 🔒 100% Loopback Security: All communications are restricted to 127.0.0.1 loopback with zero credential exposure.',
+        studio_title: '👥 Virtual Software Studio (Web Studio & Wave)',
+        studio_desc: 'Powered by upstream 95874ab Wave architecture. Dispatches multi-role tasks concurrently across independent browser tabs with persistent 1-Tab-1-Role binding and Drive bus.',
+        roster_title: '📋 Team Roster (.web-team.json)',
+        roster_empty: '⚪ No active worker tabs yet (Will automatically create dedicated tabs per role upon Wave execution)',
+        roster_count: 'Active workers: {count}',
+        roster_clear_btn: '🧹 Reset Roster',
+        roster_audit_btn: '🔍 Audit Artifacts',
+        roster_refresh_btn: '🔄 Refresh Status',
+        playbooks_title: '📚 5 Official Playbooks',
+        pb_fullstack_title: '🌐 Fullstack Web / SaaS Dev Team',
+        pb_fullstack_desc: 'Director Architecture ➔ Frontend Bundle ➔ Backend Sandbox Tests ➔ Flow UI Assets ➔ Headless Chromium E2E',
+        pb_game_title: '🎮 Interactive Game & Prototype Studio',
+        pb_game_desc: 'Game Design ➔ Logic & Assets in Parallel ➔ Sandbox Audio/Sprite Slicing ➔ Smoke Playtest',
+        pb_data_title: '📊 Data Engineering & Office Automation',
+        pb_data_desc: 'Data Contract ➔ Debian 12 Sandbox Cleaning & Matplotlib Plots ➔ Summary Reports',
+        pb_video_title: '🎬 Visual Media & Video Production Studio',
+        pb_video_desc: 'Scriptwriting ➔ Nano Banana Art & TTS Voiceover ➔ Sandbox FFmpeg Auto-Editing',
+        pb_research_title: '📑 Academic Deep Research & Survey',
+        pb_research_desc: 'Outline Definition ➔ 1M Context Multi-Source Research ➔ Cross-Verification ➔ Survey Paper',
+        wave_stagger_tip: '🛡️ Anti-ban Guardrails: Built-in 3.5s staggered dispatch + background silent polling + auto-unpacking to local project.',
         nav_label: '✨ Gemini Web (Agent Orchestration Center)'
       }
     }
@@ -694,6 +734,47 @@ window.__ModuleLoader__.load({
       const [availableModels, setAvailableModels] = useState([])
       const [syncingModels, setSyncingModels] = useState(false)
       const [probeError, setProbeError] = useState(null)
+      const [rosterData, setRosterData] = useState(null)
+      const [rosterLoading, setRosterLoading] = useState(false)
+      const [rosterNotice, setRosterNotice] = useState('')
+
+      const fetchRoster = async () => {
+        setRosterLoading(true)
+        try {
+          const res = await api('/roster')
+          if (res?.ok) setRosterData(res.roster || res)
+        } catch (e) {
+          console.error(e)
+        } finally {
+          setRosterLoading(false)
+        }
+      }
+
+      const clearRosterHandler = async () => {
+        try {
+          const res = await api('/roster/clear', { method: 'POST' })
+          if (res?.ok) {
+            setRosterData(null)
+            setRosterNotice(t('roster_empty'))
+            setTimeout(() => setRosterNotice(''), 3000)
+          }
+        } catch (e) {
+          console.error(e)
+        }
+      }
+
+      const auditRosterHandler = async () => {
+        try {
+          const res = await api('/roster/audit', { method: 'POST', body: { projectDir: '.' } })
+          if (res?.ok) {
+            const summary = res.data?.summary || res.data || 'Audit completed'
+            setRosterNotice(typeof summary === 'string' ? summary : JSON.stringify(summary))
+            setTimeout(() => setRosterNotice(''), 5000)
+          }
+        } catch (e) {
+          console.error(e)
+        }
+      }
 
       // 即時設定寫死器：更新 React State 同步寫入 localStorage 並背景 POST 後端永久保存
       const updateConfig = (patch) => {
@@ -805,6 +886,8 @@ window.__ModuleLoader__.load({
           if (m?.ok && Array.isArray(m.models)) {
             setAvailableModels(m.models)
           }
+
+          fetchRoster().catch(() => {})
         } catch (e) {
           console.error(e)
           const errText = e.name === 'AbortError'
@@ -979,7 +1062,7 @@ window.__ModuleLoader__.load({
                 border: '1px solid rgba(99, 102, 241, 0.3)',
                 fontWeight: 500,
               }
-            }, 'v0.2.1'),
+            }, 'v0.3.0-beta.0'),
           ]),
           isModal && h('button', {
             onClick: onClose,
@@ -1701,6 +1784,68 @@ window.__ModuleLoader__.load({
               }, saving ? t('saving') : t('save_btn')),
               saveNotice && h('span', { style: { fontSize: 12, color: saveNotice.startsWith('✅') ? '#10b981' : '#ef4444' } }, saveNotice)
             ])
+          ])
+        ]),
+
+        // 卡片 3.5: 【👥 虚拟软件工作室 (Web Studio & Wave 并发引擎)】
+        h('div', { className: 'gw-card', style: { borderColor: 'rgba(168, 85, 247, 0.4)' } }, [
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
+            h('div', { className: 'gw-title', style: { color: '#c084fc' } }, t('studio_title')),
+            h('span', { className: 'gw-badge', style: { background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' } }, 'Wave 0.3.0 Engine')
+          ]),
+          h('div', { className: 'gw-desc', style: { fontSize: 11, opacity: 0.8, marginBottom: 12 } }, t('studio_desc')),
+
+          // 子卡片 A: 团队花名册 (.web-team.json)
+          h('div', { style: { background: 'rgba(255, 255, 255, 0.03)', borderRadius: 6, padding: '10px 12px', marginBottom: 12, border: '1px solid rgba(255, 255, 255, 0.06)' } }, [
+            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 } }, [
+              h('div', { style: { fontWeight: 600, fontSize: 12, color: '#e2e8f0' } }, t('roster_title')),
+              h('div', { style: { display: 'flex', gap: 6 } }, [
+                h('button', { className: 'gw-btn gw-btn-secondary', style: { padding: '2px 8px', fontSize: 11 }, onClick: fetchRoster, disabled: rosterLoading }, t('roster_refresh_btn')),
+                h('button', { className: 'gw-btn gw-btn-secondary', style: { padding: '2px 8px', fontSize: 11 }, onClick: auditRosterHandler }, t('roster_audit_btn')),
+                h('button', { className: 'gw-btn gw-btn-secondary', style: { padding: '2px 8px', fontSize: 11, color: '#ef4444' }, onClick: clearRosterHandler }, t('roster_clear_btn')),
+              ])
+            ]),
+            rosterNotice && h('div', { style: { fontSize: 11, color: '#a855f7', marginBottom: 6 } }, rosterNotice),
+            (() => {
+              const workers = rosterData?.workers || (rosterData && typeof rosterData === 'object' && !Array.isArray(rosterData) ? Object.entries(rosterData) : [])
+              if (!workers || workers.length === 0) {
+                return h('div', { style: { fontSize: 11, opacity: 0.5, fontStyle: 'italic' } }, t('roster_empty'))
+              }
+              return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+                workers.map(([role, info]) => h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 11, background: 'rgba(0,0,0,0.2)', padding: '4px 8px', borderRadius: 4 } }, [
+                  h('span', { style: { fontWeight: 500, color: '#a855f7' } }, `• ${role}`),
+                  h('span', { style: { opacity: 0.7 } }, info?.model || info?.site || 'active')
+                ]))
+              )
+            })()
+          ]),
+
+          // 子卡片 B: 5 大官方研发编队
+          h('div', { style: { background: 'rgba(255, 255, 255, 0.03)', borderRadius: 6, padding: '10px 12px', border: '1px solid rgba(255, 255, 255, 0.06)' } }, [
+            h('div', { style: { fontWeight: 600, fontSize: 12, color: '#e2e8f0', marginBottom: 8 } }, t('playbooks_title')),
+            h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } }, [
+              h('div', { style: { fontSize: 11 } }, [
+                h('span', { style: { fontWeight: 600, color: '#38bdf8' } }, t('pb_fullstack_title')),
+                h('span', { style: { opacity: 0.7, marginLeft: 6 } }, t('pb_fullstack_desc')),
+              ]),
+              h('div', { style: { fontSize: 11 } }, [
+                h('span', { style: { fontWeight: 600, color: '#ec4899' } }, t('pb_game_title')),
+                h('span', { style: { opacity: 0.7, marginLeft: 6 } }, t('pb_game_desc')),
+              ]),
+              h('div', { style: { fontSize: 11 } }, [
+                h('span', { style: { fontWeight: 600, color: '#f59e0b' } }, t('pb_data_title')),
+                h('span', { style: { opacity: 0.7, marginLeft: 6 } }, t('pb_data_desc')),
+              ]),
+              h('div', { style: { fontSize: 11 } }, [
+                h('span', { style: { fontWeight: 600, color: '#8b5cf6' } }, t('pb_video_title')),
+                h('span', { style: { opacity: 0.7, marginLeft: 6 } }, t('pb_video_desc')),
+              ]),
+              h('div', { style: { fontSize: 11 } }, [
+                h('span', { style: { fontWeight: 600, color: '#10b981' } }, t('pb_research_title')),
+                h('span', { style: { opacity: 0.7, marginLeft: 6 } }, t('pb_research_desc')),
+              ]),
+            ]),
+            h('div', { style: { fontSize: 11, color: '#a855f7', marginTop: 8, opacity: 0.85 } }, t('wave_stagger_tip'))
           ])
         ]),
 

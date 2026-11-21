@@ -4,7 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { detectDualChannel, findAgentLimbScript, findCliScript } from './detector.js'
+import { detectDualChannel, findAgentLimbScript, findCliScript, findPythonVenv } from './detector.js'
 import { loadConfig } from '../config.js'
 
 const execFileAsync = promisify(execFile)
@@ -89,6 +89,31 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
   let targetSite = options.site || 'aistudio'
   if (targetModel === 'gemini.google.com' || targetModel === 'gemini') {
     targetSite = 'gemini'
+  }
+
+  // Wave 虚拟工作室直通分支
+  if (targetSite === 'wave' || options.entry === 'wave') {
+    let waveSpec: any = null
+    try {
+      const trimmed = options.task.trim()
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        waveSpec = JSON.parse(trimmed)
+      }
+    } catch {}
+
+    if (waveSpec) {
+      const res = await executeWave(waveSpec, { projectDir: process.cwd(), timeoutSec: options.timeoutSec || 360 })
+      if (!res.ok) {
+        return { ok: false, channel: 'cdp', site: 'wave', error: res.error }
+      }
+      return {
+        ok: true,
+        channel: 'cdp',
+        site: 'wave',
+        model: 'wave-engine',
+        output: typeof res.data === 'string' ? res.data : JSON.stringify(res.data, null, 2),
+      }
+    }
   }
 
   // 任務量級與超时研判 (自适应模式下複雜任務自動放寬至至少 300 秒)
@@ -292,4 +317,169 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
   }
 
   return { ok: false, channel: status.activeChannel, error: '未找到执行脚本' }
+}
+
+export interface RosterResult {
+  ok: boolean
+  file?: string
+  project?: string
+  count?: number
+  roster?: Record<string, any>
+  error?: string
+}
+
+export async function getRoster(rosterFile = '.web-team.json'): Promise<RosterResult> {
+  const venv = findPythonVenv()
+  const cdpScript = findCliScript()
+  if (!venv || !cdpScript || !fs.existsSync(venv) || !fs.existsSync(cdpScript)) {
+    try {
+      const p = path.resolve(rosterFile)
+      if (fs.existsSync(p)) {
+        const data = JSON.parse(fs.readFileSync(p, 'utf-8'))
+        return { ok: true, file: p, project: data.project || '', count: Object.keys(data.roster || {}).length, roster: data.roster || {} }
+      }
+      return { ok: true, file: p, project: '', count: 0, roster: {} }
+    } catch (err: any) {
+      return { ok: false, error: err.message }
+    }
+  }
+
+  try {
+    const { stdout } = await execFileAsync(venv, [cdpScript, 'roster', 'list', '--roster-file', rosterFile], {
+      timeout: 10000,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    })
+    const parsed = JSON.parse(stdout.trim())
+    return {
+      ok: true,
+      file: parsed.file,
+      project: parsed.project,
+      count: parsed.count,
+      roster: parsed.roster,
+    }
+  } catch (err: any) {
+    return { ok: false, error: err.message || String(err) }
+  }
+}
+
+export async function clearRoster(rosterFile = '.web-team.json'): Promise<{ ok: boolean; error?: string }> {
+  const venv = findPythonVenv()
+  const cdpScript = findCliScript()
+  if (!venv || !cdpScript || !fs.existsSync(venv) || !fs.existsSync(cdpScript)) {
+    try {
+      const p = path.resolve(rosterFile)
+      if (fs.existsSync(p)) {
+        fs.writeFileSync(p, JSON.stringify({ project: '', updated_at: new Date().toISOString(), roster: {} }, null, 2), 'utf-8')
+      }
+      return { ok: true }
+    } catch (err: any) {
+      return { ok: false, error: err.message }
+    }
+  }
+
+  try {
+    await execFileAsync(venv, [cdpScript, 'roster', 'clear', '--roster-file', rosterFile], {
+      timeout: 10000,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    })
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err.message || String(err) }
+  }
+}
+
+export async function auditRoster(projectDir = '.', rosterFile = '.web-team.json'): Promise<any> {
+  const venv = findPythonVenv()
+  const cdpScript = findCliScript()
+  if (!venv || !cdpScript) {
+    return { ok: false, error: '未找到 Python 执行环境' }
+  }
+  try {
+    const { stdout } = await execFileAsync(venv, [cdpScript, 'roster', 'audit', '--project-dir', projectDir, '--roster-file', rosterFile], {
+      timeout: 20000,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    })
+    try {
+      return { ok: true, data: JSON.parse(stdout.trim()) }
+    } catch {
+      return { ok: true, data: stdout.trim() }
+    }
+  } catch (err: any) {
+    return { ok: false, error: err.message || String(err) }
+  }
+}
+
+export async function getPlaybooks(): Promise<any> {
+  const venv = findPythonVenv()
+  const cdpScript = findCliScript()
+  if (!venv || !cdpScript) {
+    return { ok: false, error: '未找到 Python 执行环境' }
+  }
+  try {
+    const { stdout } = await execFileAsync(venv, [cdpScript, 'playbook', 'list'], {
+      timeout: 10000,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    })
+    return { ok: true, data: JSON.parse(stdout.trim()) }
+  } catch (err: any) {
+    return { ok: false, error: err.message || String(err) }
+  }
+}
+
+export async function getPlaybookDetail(name: string): Promise<any> {
+  const venv = findPythonVenv()
+  const cdpScript = findCliScript()
+  if (!venv || !cdpScript) {
+    return { ok: false, error: '未找到 Python 执行环境' }
+  }
+  try {
+    const { stdout } = await execFileAsync(venv, [cdpScript, 'playbook', 'show', '--name', name], {
+      timeout: 10000,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    })
+    return { ok: true, data: JSON.parse(stdout.trim()) }
+  } catch (err: any) {
+    return { ok: false, error: err.message || String(err) }
+  }
+}
+
+export async function executeWave(specPathOrObj: string | any, options: { projectDir?: string; timeoutSec?: number; port?: number } = {}): Promise<any> {
+  const venv = findPythonVenv()
+  const cdpScript = findCliScript()
+  if (!venv || !cdpScript) {
+    return { ok: false, error: '未找到 Python 执行环境' }
+  }
+  let specPath = ''
+  let tmpSpec = false
+  if (typeof specPathOrObj === 'string' && specPathOrObj.endsWith('.json')) {
+    specPath = path.resolve(specPathOrObj)
+  } else {
+    tmpSpec = true
+    const tmpFile = path.join(os.tmpdir(), `dsh_wave_${Date.now()}.json`)
+    fs.writeFileSync(tmpFile, JSON.stringify(specPathOrObj, null, 2), 'utf-8')
+    specPath = tmpFile
+  }
+
+  try {
+    const args = [cdpScript, 'wave', '--spec', specPath]
+    if (options.projectDir) args.push('--project-dir', options.projectDir)
+    if (options.timeoutSec) args.push('--timeout', String(options.timeoutSec))
+    if (options.port) args.push('--port', String(options.port))
+
+    const { stdout } = await execFileAsync(venv, args, {
+      timeout: ((options.timeoutSec || 360) + 30) * 1000,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    })
+    try {
+      return { ok: true, data: JSON.parse(stdout.trim()) }
+    } catch {
+      return { ok: true, data: stdout.trim() }
+    }
+  } catch (err: any) {
+    return { ok: false, error: err.message || String(err) }
+  } finally {
+    if (tmpSpec && fs.existsSync(specPath)) {
+      try { fs.unlinkSync(specPath) } catch {}
+    }
+  }
 }
