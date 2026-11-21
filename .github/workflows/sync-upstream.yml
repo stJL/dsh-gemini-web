@@ -17,9 +17,16 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Run Upstream Sync Script
         run: |
           python scripts/sync_upstream.py
+
+      - name: Run DSH Tests
+        run: |
+          bun test
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
@@ -28,6 +35,6 @@ jobs:
           title: "🤖 [Automated] 同步上游 gemini-web-agent 最新选择器与脚本"
           body: |
             检测到上游 [@582835293/gemini-web-agent](https://github.com/582835293/gemini-web-agent) 有更新。
-            已自动拉取并保留 DSH 专有补丁与设置特性。
+            已通过自动化增量同步保留 DSH 专有补丁、重新编译前端产物并通过所有单元测试。
           branch: auto-sync-upstream
           base: main
