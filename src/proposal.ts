@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { PluginConfig, loadConfig } from './config.js'
 
 export interface PlaybookInfo {
@@ -56,6 +59,52 @@ export interface ProposalResult {
   playbook?: PlaybookInfo
 }
 
+function resolvePlaybooksDir(): string | null {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url))
+    const candidates = [
+      path.resolve(here, 'references', 'playbooks'),
+      path.resolve(here, '..', 'references', 'playbooks'),
+    ]
+    for (const dir of candidates) {
+      if (fs.existsSync(dir)) return dir
+    }
+  } catch {}
+  return null
+}
+
+function findCustomPlaybookInTask(task: string): PlaybookInfo | undefined {
+  const dir = resolvePlaybooksDir()
+  if (!dir) return undefined
+  try {
+    const lowerTask = task.toLowerCase()
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.md'))
+    for (const file of files) {
+      const slug = file.slice(0, -3)
+      if (PLAYBOOKS[slug]) continue
+      const content = fs.readFileSync(path.join(dir, file), 'utf-8')
+      const titleLine = content.split('\n').find((l) => l.trim().startsWith('# '))
+      const rawTitle = titleLine ? titleLine.trim().slice(2).trim() : slug
+      const cleanTitle = rawTitle.replace(/\s*\(`[^`]+`\)\s*$/, '').trim()
+      if (!lowerTask.includes(slug.toLowerCase()) && (!cleanTitle || !lowerTask.includes(cleanTitle.toLowerCase()))) {
+        continue
+      }
+      const roles: string[] = []
+      for (const line of content.split('\n')) {
+        const m = line.match(/^\|\s*`([a-zA-Z0-9_-]+)`\s*\|/)
+        if (m && m[1] !== 'role') roles.push(m[1])
+      }
+      return {
+        slug,
+        title: cleanTitle || slug,
+        roles: roles.length > 0 ? roles : ['director', 'coder'],
+        stages: `自定义编队契约 (references/playbooks/${file})`,
+      }
+    }
+  } catch {}
+  return undefined
+}
+
 /**
  * 确定性任务提示词解析器与确认卡拼装器
  * 摆脱小模型长文本注意力衰减与推理幻觉，百分之百确定性输出规范确认卡
@@ -99,7 +148,7 @@ export function parseTaskToProposal(task: string, config?: PluginConfig): Propos
       matchedPlaybook = PLAYBOOKS.academic_deep_research
     }
     if (!matchedPlaybook) {
-      matchedPlaybook = PLAYBOOKS.web_fullstack_app
+      matchedPlaybook = findCustomPlaybookInTask(task) || PLAYBOOKS.web_fullstack_app
     }
 
     const pb = matchedPlaybook
@@ -107,7 +156,10 @@ export function parseTaskToProposal(task: string, config?: PluginConfig): Propos
     const actionDesc = `启动虚拟工作室「${pb.title}」并发协作`
     const modelLabel = '（多 Tab 角色矩阵）'
     const modelTarget = '架构定界 (AI Studio Hydrogen / Neon) + 研发沙盒 (Gemini 官网云端运行) + 视觉资产 (Flow 零点数特权)'
-    const thinkingConfig = '各 Tab 错峰 3.5s 派发 · 后台静默轮询 · 自动解包写入工作区'
+    const thinkingConfig = '各 Tab 错峰 3.5s 派发 · 后台静默轮询 · 自动解包写入会话隔离区'
+    const directorMode = cfg.directorMode === 'external'
+      ? `外包给外部 AI Studio (${cfg.directorModel || 'gemini-4-hydrogen'})`
+      : '本地模型掌舵 (推荐 · 保持全局上下文)'
 
     const filesLine = extractedFiles.length > 0 ? `- 📁 挂载文件：[${extractedFiles.join(', ')}]` : ''
     const cardLines = [
@@ -116,6 +168,7 @@ export function parseTaskToProposal(task: string, config?: PluginConfig): Propos
       '',
       `- 🎯 执行渠道：${channel}`,
       `- 📋 启用编队：${pb.title} (${pb.slug})`,
+      `- 🧭 总监模式：${directorMode}`,
       `- 👥 协同角色：[${pb.roles.join(', ')}]`,
     ]
 
@@ -131,11 +184,12 @@ export function parseTaskToProposal(task: string, config?: PluginConfig): Propos
       `  - 🎨 视觉素材：Google Flow (Nano Banana 2.1 享受 0 扣点特权)`,
       `- 🌊 规划波次：${pb.stages}`,
       `- ⚙️ 推演配置：${thinkingConfig}`,
-      '- 🔄 话题隔离：各角色独立 Tab 绑定 (.web-team.json 持久化)',
+      '- 🔄 话题隔离：会话级独立花名册与交付沙盒 (.gemini-teams/[sessionId]/)',
+      '- 🔐 安全提醒：若在 gemini-spark 开启云端联网，请勿向 Task 传入 API Key 或敏感凭据',
       '',
       '👉 请确认是否启动 Wave 并发外包执行？',
       '- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化错峰派发多 Tab 并行执行',
-      '- 回复 「花名册」：查阅当前项目团队各角色绑定的标签页与 Google Drive 状态',
+      '- 回复 「花名册」：查阅当前会话团队各角色绑定的标签页状态',
       '- 回复 「取消」：中止并发外包，改由本地单模型作答'
     )
 
@@ -307,6 +361,9 @@ export function parseTaskToProposal(task: string, config?: PluginConfig): Propos
     `  - ${modelTarget}${modelNote ? ` ${modelNote}` : ''}`,
     `- ⚙️ 推演配置：${thinkingConfig}`,
     '- 🔄 话题隔离：new_chat: true（预设开启全新独立对话）',
+    ...(site === 'gemini' && entry === 'task'
+      ? ['- 🔐 安全提醒：若已开启 gemini-spark 云端联网，严禁向 Task 传入 API Key 或敏感凭据']
+      : []),
     '',
     '👉 请确认是否发包执行？',
     '- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行',

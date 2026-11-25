@@ -36,7 +36,7 @@
    - 预装开发工具：`python3 (3.11.2)`, `node (v18.20.4)`, `npm (9.2.0)`, `git (2.39.5)`, `gcc (12.2.0)`, `libreoffice (7.4.7.2)`, `chromium (156.0)`（可直接做无头浏览器自动化测试网页/Canvas）。
    - 预装多媒体/数据库：`ffmpeg (5.1.9)`, `PIL/Pillow (11.1.0)`, `cv2/OpenCV (4.11.0)`, `pydub`, `numpy`, `pandas`, `matplotlib`, `requests`。
    - 【超强输入能力】：① 支持原生 **Google Drive 检索读取**（可直接读取上游 AI Studio 员工存进 Drive 的架构/源码 JSON）；② 支持 **Import code** 直接导入整个**本地代码文件夹**或 **GitHub 仓库**！
-   - 缺失与硬限制：①【完全断网】，严禁 `pip install`、`npm install` 或访问外网 API；② 未安装 `go`/`pandoc`/`convert`/`pygame`/`zip` CLI；③ 要求打包输出文件时，必须明确写明【用 Python 标准库 `zipfile` 打包导出 `.zip`】。
+   - 网络权限与硬限制：①【云主机联网（`gemini.google.com/gemini-spark`）】：开启“允许远程计算机访问网络”后支持自由 `pip/npm install`、联网抓包或调外部 API（**安全红线：联网期间所有任务共用同一台远程计算机，严禁给 Task 发送 API Key、私密凭证或敏感隐私数据**；未开启时处于离线沙盒，禁外网装包）；② 未安装 `go`/`pandoc`/`convert`/`pygame`/`zip` CLI；③ 要求打包输出文件时，必须明确写明【用 Python 标准库 `zipfile` 打包导出 `.zip`】。
    - 模型分级：主程架构/复杂 Debug/无头自测用 `4 Neon`；素材后期加工（抠图/切图/混音/转码）、数据处理、轻量脚本用 `4 Hydrogen` 省额度。
 3. 整包外包公司 — AI Studio Build（`/apps`，`MAX + Gemini 4 Neon`）：
    - 仅用于需要从零整包导出可运行 Web 前端的项目；但 Build 团队“极喜欢擅自发挥加料（乱添页、假数据、多余组件）”。
@@ -60,7 +60,7 @@
 - **先在这里由你（总监）直接敲死跨角色共享的接口契约**：明确所有文件目录名、全局变量/API 字段契约、以及 `assets/` 下所有图片与音频的精确相对路径与文件名清单，**使 Wave 1 能同时并发启动数据、代码、Flow 美术、Lyria/TTS 音频 4+ 个独立标签页**。
 - **按 Wave 分组列出每个员工的完整 Prompt**（Wave 2/3 下游 Task 员工可直接指明去 Google Drive 读取 Wave 1 上游员工的 `[项目名] <role>` 文档，或指明导入本地代码文件夹）：
   - 给代码/数据员工的 Prompt **必须写死**：`严禁使用 Canvas 几何绘制或 WebAudio 振荡器伪造替代缺失的外部美术/音频资产！必须只输出一个纯 JSON 代码块 {"相对路径": "完整文件内容"}，以便自动解包落盘`。
-  - 给 Gemini Task 的 Prompt **必须写明**断网禁用 `pip/npm install` 与用 Python `zipfile` 导出；给 Build 的 Prompt **必须内嵌**防加料负面清单；占位点用 `{{用户选择}}` 标出。
+  - 给 Gemini Task 的 Prompt **必须写明**安全隔离要求（联网已开时可用 `pip/npm install` 但禁传 API Key/机密；未开则禁用外网装包）与用 Python `zipfile` 导出；给 Build 的 Prompt **必须内嵌**防加料负面清单；占位点用 `{{用户选择}}` 标出。
 
 ## 3. 新编队沉淀建议（仅当现有编队库未覆盖此主流场景时输出）
 若你认为当前任务类型具有大众通用复用价值，附带一段建议的 `playbook add` 参数草案（`--name`、`--title`、`--scenarios` 与简明分工摘要），**提示本地调度接口先征得用户同意后再决定是否保存**到 `references/playbooks/`。

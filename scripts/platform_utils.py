@@ -455,10 +455,10 @@ def _get_windows_listening_ports(target_pids: set[int]) -> dict[int, list[int]]:
     return {pid: sorted(ports) for pid, ports in pid_ports.items()}
 
 
-def find_windows_servers_via_win32() -> list[dict]:
-    """纯 Python ctypes 零子进程调用 Win32 API 发现含 --csrf_token 的 Antigravity 语言服务器与监听端口。"""
+def find_windows_servers_status() -> tuple[list[dict], bool]:
+    """纯 Python ctypes 零子进程探测含 --csrf_token 的 Antigravity 语言服务器，并返回 (candidates, win32_ok)。"""
     if sys.platform != "win32":
-        return []
+        return [], False
 
     import ctypes
     from ctypes import wintypes
@@ -523,7 +523,7 @@ def find_windows_servers_via_win32() -> list[dict]:
     matched_pids: list[int] = []
     snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
     if not snap or snap == INVALID_HANDLE_VALUE:
-        return []
+        return [], False
     try:
         pe = PROCESSENTRY32W()
         pe.dwSize = ctypes.sizeof(PROCESSENTRY32W)
@@ -538,7 +538,7 @@ def find_windows_servers_via_win32() -> list[dict]:
         kernel32.CloseHandle(snap)
 
     if not matched_pids:
-        return []
+        return [], True
 
     # 2. 获取候选进程的完整可执行路径与命令行
     proc_infos: list[tuple[int, str, str]] = []
@@ -582,7 +582,8 @@ def find_windows_servers_via_win32() -> list[dict]:
             kernel32.CloseHandle(h_proc)
 
     if not proc_infos:
-        return []
+        # 已成功用 Win32 原生枚举并检查过所有目标进程命令行，无需外部命令兜底
+        return [], True
 
     # 3. 批量查监听端口
     pid_ports = _get_windows_listening_ports({pid for pid, _, _ in proc_infos})
@@ -602,11 +603,48 @@ def find_windows_servers_via_win32() -> list[dict]:
             "score": score,
         })
 
+    return candidates, True
+
+
+def find_windows_servers_via_win32() -> list[dict]:
+    """纯 Python ctypes 零子进程调用 Win32 API 发现含 --csrf_token 的 Antigravity 语言服务器与监听端口。"""
+    candidates, _ = find_windows_servers_status()
     return candidates
 
 
+def is_ai_chrome_configured(custom_dir: str = "", home: Path | None = None) -> bool:
+    """判断本机是否已由用户完成独立 AI Chrome Profile (~/.gemini-web-chrome/Default) 初始化配置。"""
+    prof = get_ai_chrome_profile_dir(home=home, custom_dir=custom_dir)
+    return (prof / "Default").is_dir()
+
+
+def _read_linux_xdg_user_dir(key: str, home_dir: Path) -> Path | None:
+    """从 ~/.config/user-dirs.dirs 读取 XDG 用户目录（如中文 Ubuntu 下 XDG_DESKTOP_DIR="$HOME/桌面"）。"""
+    cfg = home_dir / ".config" / "user-dirs.dirs"
+    if not cfg.is_file():
+        return None
+    try:
+        for line in cfg.read_text(encoding="utf-8", errors="ignore").splitlines():
+            s = line.strip()
+            if not s or s.startswith("#") or "=" not in s:
+                continue
+            k, v = s.split("=", 1)
+            if k.strip() != key:
+                continue
+            val = v.strip().strip('"').strip("'")
+            val = val.replace("$HOME", str(home_dir))
+            if val.startswith("~"):
+                val = str(home_dir / val[2:] if val.startswith("~/") else home_dir)
+            p = Path(val)
+            if p.is_dir():
+                return p
+    except Exception:
+        pass
+    return None
+
+
 def _resolve_desktop_dir(sys_name: str | None = None, home: Path | None = None) -> Path:
-    """跨平台定位用户桌面目录（Windows 兼容 OneDrive 重定向桌面）。"""
+    """跨平台定位用户桌面目录（Windows 兼容 OneDrive；Linux 兼容 XDG_DESKTOP_DIR 如 ~/桌面）。"""
     sys_low = (sys_name or platform.system()).lower()
     home_dir = home or Path.home()
     if sys_low.startswith("win"):
@@ -625,6 +663,13 @@ def _resolve_desktop_dir(sys_name: str | None = None, home: Path | None = None) 
                     return p
         except Exception:
             pass
+    elif sys_low == "linux":
+        xdg_desk = _read_linux_xdg_user_dir("XDG_DESKTOP_DIR", home_dir)
+        if xdg_desk is not None:
+            return xdg_desk
+        zh_desk = home_dir / "桌面"
+        if zh_desk.is_dir():
+            return zh_desk
     desktop = home_dir / "Desktop"
     return desktop if desktop.exists() else home_dir
 
@@ -788,15 +833,61 @@ def launch_ai_chrome(
         "stderr": subprocess.DEVNULL,
         "stdin": subprocess.DEVNULL,
     }
+    launched_pid: int | None = None
     if platform.system().lower().startswith("win"):
-        popen_kwargs["creationflags"] = (
-            getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
-            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
-        )
+        # 优先使用 WMI Win32_Process.Create 拉起 Chrome，彻底脱离终端 Job Object，命令退出后不被系统连坐回收
+        try:
+            ps_cmd_str = " ".join(f'"{c}"' if (" " in str(c) or "=" in str(c)) else str(c) for c in cmd)
+            ps_escaped = ps_cmd_str.replace("'", "''")
+            wmi_res = subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    f"$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{{ CommandLine = '{ps_escaped}' }}; "
+                    "if ($r.ReturnValue -eq 0) { Write-Output $r.ProcessId } else { exit 1 }",
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=6,
+            )
+            if wmi_res.returncode == 0 and wmi_res.stdout.strip().isdigit():
+                launched_pid = int(wmi_res.stdout.strip())
+        except Exception:
+            launched_pid = None
+
+        if launched_pid is None:
+            base_flags = (
+                getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+            )
+            breakaway = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0x01000000)
+            try:
+                proc = subprocess.Popen(cmd, creationflags=(base_flags | breakaway), **popen_kwargs)
+            except OSError:
+                proc = subprocess.Popen(cmd, creationflags=base_flags, **popen_kwargs)
+            launched_pid = proc.pid
     else:
         popen_kwargs["start_new_session"] = True
+        if platform.system().lower() == "linux" and not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+            env_copy = dict(os.environ)
+            uid = os.getuid() if hasattr(os, "getuid") else 1000
+            run_dir = Path(f"/run/user/{uid}")
+            if (run_dir / "wayland-0").exists():
+                env_copy.setdefault("XDG_RUNTIME_DIR", str(run_dir))
+                env_copy.setdefault("WAYLAND_DISPLAY", "wayland-0")
+            if Path("/tmp/.X11-unix/X0").exists():
+                env_copy.setdefault("DISPLAY", ":0")
+            elif Path("/tmp/.X11-unix/X1").exists():
+                env_copy.setdefault("DISPLAY", ":1")
+            if (run_dir / "bus").exists():
+                env_copy.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path={run_dir / 'bus'}")
+            popen_kwargs["env"] = env_copy
+        proc = subprocess.Popen(cmd, **popen_kwargs)
+        launched_pid = proc.pid
 
-    proc = subprocess.Popen(cmd, **popen_kwargs)
     deadline = time.time() + max(1.0, float(wait_ready_sec))
     ver = None
     while time.time() < deadline:
@@ -814,7 +905,7 @@ def launch_ai_chrome(
         "already_running": False,
         "first_run_login_needed": is_first_profile,
         "cdp_http_ready": ver is not None,
-        "pid": proc.pid,
+        "pid": launched_pid,
         "port": port_int,
         "profile_dir": str(prof),
         "ws_url": (ver or {}).get("webSocketDebuggerUrl") or f"http://127.0.0.1:{port_int}",

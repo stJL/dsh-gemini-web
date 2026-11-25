@@ -732,6 +732,150 @@ class TestHighSpeedChannelBAndWave(unittest.TestCase):
                 )
             self.assertEqual(fail_res["status"], "failed")
             self.assertIn("权限遭拒", fail_res["results"][0]["error"])
+            self.assertTrue(fail_res.get("suggestions"))
+            self.assertIn("Gemini Web", fail_res["suggestions"][0])
+
+    def test_v12_gemini_missing_mode_btn_and_503_fallback(self) -> None:
+        """验证新版 Gemini 首页缺失 bard-mode-menu-button 时安全降级，及 AI Studio 503 高需求识别与备选降级。"""
+        from unittest.mock import MagicMock, patch
+        empty_loc = MagicMock()
+        empty_loc.first = empty_loc
+        empty_loc.count.return_value = 0
+
+        fake_page = MagicMock()
+        fake_page.locator.return_value = empty_loc
+        self.assertEqual(gw.select_model(fake_page, "hydrogen"), "default (not shown)")
+        gw.select_thinking_level(fake_page, "high")
+
+        # wait_gemini_ready 当 bard-mode-menu-button 不渲染时也不应报错
+        box_loc = MagicMock()
+        box_loc.first = box_loc
+        mode_loc = MagicMock()
+        mode_loc.first = mode_loc
+        mode_loc.wait_for.side_effect = TimeoutError("not rendered on fresh page")
+        p_ready = MagicMock()
+        p_ready.locator.side_effect = lambda sel: box_loc if "textbox" in sel else mode_loc
+        gw.wait_gemini_ready(p_ready, timeout_ms=5000)
+
+        self.assertTrue(gw._is_high_demand_error("error 14: Failed to generate content: service is unavailable (503)"))
+        self.assertTrue(gw._is_high_demand_error("Model isn't available right now. Please wait a minute and try again."))
+        self.assertIn("Gemini Web", gw._cross_channel_fallback_hint("aistudio"))
+        self.assertIn("AI Studio", gw._cross_channel_fallback_hint("gemini"))
+        self.assertIn("AI Studio", gw._cross_channel_fallback_hint("flow"))
+        self.assertFalse(gw._is_high_demand_error("SyntaxError: unexpected token"))
+        self.assertEqual(gw._resolve_fallback_model_id("gemini-4-hydrogen", "auto"), "gemini-3.8-flash")
+        self.assertEqual(gw._resolve_fallback_model_id("gemini-4-neon", "auto"), "gemini-4-hydrogen")
+        self.assertEqual(gw._resolve_fallback_model_id("gemini-4-argon", "auto"), "gemini-4-hydrogen")
+        self.assertEqual(gw._resolve_fallback_model_id("gemini-4-neon", "none"), "")
+
+    def test_v12_wave_resume_task_net_and_mcp(self) -> None:
+        """验证 wave --resume 断点续传、gemini-spark 开关控制、doctor 与 stdio MCP 接口。"""
+        from unittest.mock import MagicMock, patch
+        with tempfile.TemporaryDirectory() as td:
+            proj = Path(td)
+            out_done = proj / "done.md"
+            out_done.write_text("ALREADY_OK", encoding="utf-8")
+            out_retry = proj / "retry.md"
+            roster_file = proj / ".web-team.json"
+            gw.execute_roster(
+                action="set",
+                roster_file=str(roster_file),
+                role="done_worker",
+                site="aistudio",
+                model="gemini-4-neon",
+                url="https://aistudio.google.com/prompts/1DONE",
+                status="done",
+            )
+            gw.execute_roster(
+                action="set",
+                roster_file=str(roster_file),
+                role="retry_worker",
+                site="gemini_task",
+                model="gemini-4-hydrogen",
+                url="https://gemini.google.com/app/RETRY1",
+                status="timeout",
+            )
+
+            dispatched_roles: list[str] = []
+
+            def _fake_ask(browser, prompt="", tab_url_hint="", **kwargs):
+                dispatched_roles.append(tab_url_hint)
+                p = MagicMock()
+                p.is_closed.return_value = False
+                p.evaluate.return_value = {
+                    "url": "https://gemini.google.com/app/RETRY1",
+                    "model": "Hydrogen",
+                    "running": False,
+                    "answer": "RETRIED_OK",
+                    "text": "RETRIED_OK",
+                    "images": [],
+                    "hasActionToolbar": True,
+                }
+                mr_loc = MagicMock()
+                mr_loc.count.return_value = 1
+                p.locator.return_value = mr_loc
+                return {"status": "dispatched", "model": "Hydrogen", "url": "https://gemini.google.com/app/RETRY1", "_page": p, "_before_count": 0}
+
+            tasks = [
+                {"role": "done_worker", "site": "aistudio", "model": "neon", "prompt": "skip me", "out_file": "done.md"},
+                {"role": "retry_worker", "site": "gemini_task", "model": "hydrogen", "prompt": "retry me", "out_file": "retry.md"},
+            ]
+            with patch.object(gw, "execute_ask", side_effect=_fake_ask):
+                res = gw.execute_wave(
+                    browser=object(),
+                    tasks=tasks,
+                    roster_file=str(roster_file),
+                    project="ResumeDemo",
+                    project_dir=str(proj),
+                    timeout_sec=10,
+                    poll_interval_sec=0.05,
+                    stagger_sec=0.0,
+                    resume=True,
+                )
+            self.assertEqual(res["status"], "ok")
+            self.assertEqual(res["succeeded"], 2)
+            # 仅 retry_worker 被再次调度，done_worker 直接断点跳过
+            self.assertEqual(dispatched_roles, ["https://gemini.google.com/app/RETRY1"])
+            skipped_item = [x for x in res["results"] if x["role"] == "done_worker"][0]
+            self.assertTrue(skipped_item.get("resumed_skipped"))
+            self.assertEqual(out_retry.read_text(encoding="utf-8"), "RETRIED_OK")
+
+            # 验证 gemini-spark task-net status 与 enable
+            spark_loc = MagicMock()
+            spark_loc.first = spark_loc
+            spark_loc.count.return_value = 0
+            spark_loc.is_visible.return_value = False
+            spark_page = MagicMock()
+            spark_page.url = "https://gemini.google.com/gemini-spark"
+            spark_page.locator.return_value = spark_loc
+            fake_ctx = MagicMock()
+            fake_ctx.new_page.return_value = spark_page
+            fake_browser = MagicMock()
+            fake_browser.contexts = [fake_ctx]
+            with patch.object(
+                gw,
+                "_read_spark_network_switch",
+                side_effect=[
+                    {"found": True, "enabled": False, "ariaLabel": "远程计算机的网络访问权限", "id": "sw-1"},
+                    {"found": True, "enabled": True, "ariaLabel": "远程计算机的网络访问权限", "id": "sw-1"},
+                ],
+            ):
+                tnet_res = gw.execute_task_network(fake_browser, action="enable")
+            self.assertEqual(tnet_res["status"], "ok")
+            self.assertTrue(tnet_res["network_enabled"])
+            self.assertTrue(tnet_res["changed"])
+
+            # 验证原生 MCP manifest 与 roster_manage 调用
+            manifest_names = {t["name"] for t in gw._mcp_tools_manifest()}
+            self.assertTrue({"web_doctor", "task_network", "gemini_ask", "aistudio_playground", "flow_generate", "web_wave", "roster_manage"}.issubset(manifest_names))
+            mcp_roster = gw._handle_mcp_tool_call("roster_manage", {"action": "list", "file": str(roster_file)})
+            self.assertEqual(mcp_roster["count"], 2)
+
+            # 验证 is_ai_chrome_configured 检测与 select_entry_mode 异步等待
+            fake_home = proj / "home"
+            self.assertFalse(pu.is_ai_chrome_configured(home=fake_home))
+            (pu.get_ai_chrome_profile_dir(home=fake_home) / "Default").mkdir(parents=True)
+            self.assertTrue(pu.is_ai_chrome_configured(home=fake_home))
 
 
 if __name__ == "__main__":

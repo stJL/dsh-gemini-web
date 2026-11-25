@@ -291,12 +291,14 @@ def detect_chrome_cdp(
             cdp_mode = "chrome_ui_approval_required"
 
     found_chrome = chrome_bins[0] if chrome_bins else None
+    ai_configured = platform_utils.is_ai_chrome_configured(custom_dir=ai_dir)
     return {
         "cdp_active": cdp_ws_url is not None,
         "cdp_http_ready": cdp_http_ready,
         "cdp_mode": cdp_mode,
         "cdp_port": cdp_port,
         "is_dedicated_ai_chrome": is_dedicated_ai_chrome,
+        "ai_chrome_configured": ai_configured,
         "ai_chrome_profile_dir": str(ai_profile),
         "ai_chrome_default_port": int(ai_port),
         "active_port_file": active_port_file,
@@ -617,11 +619,13 @@ def main() -> None:
 
     safety_rules = [
         "严禁 AI 擅自 taskkill / 强杀用户正在运行的日常 Chrome 进程，也严禁修改或复制用户默认 Chrome User Data 目录。",
-        "严禁 AI 未经用户明确同意擅自运行 --setup-ai-chrome / --launch-ai-chrome 拉起需重新登录的新浏览器；新建独立 Chrome Profile 完全开源本地运行（数据仅存本机 ~/.gemini-web-chrome，不触碰日常账号、不上传任何凭证），是否开启必须由用户自己决定。",
+        "严禁 AI 未经用户明确同意首次运行 --setup-ai-chrome 新建需重新登录的隔离 Profile；但若探测到 ai_chrome_configured=true（用户已自备 ~/.gemini-web-chrome），离线时可直接运行 --launch-ai-chrome（或由 gemini_web.py 自动拉起）无需重复询问。",
     ]
 
     if cdp_info["cdp_http_ready"] and venv_info["dependencies_ready"]:
         recommended_channel = "B"
+    elif cdp_info.get("ai_chrome_configured") and venv_info["dependencies_ready"]:
+        recommended_channel = "B_autostart"
     elif agentlimb_info["configured"]:
         recommended_channel = "A"
     elif cdp_info["cdp_active"] and venv_info["dependencies_ready"]:
@@ -640,6 +644,11 @@ def main() -> None:
         tag = "用户已启用的专用 AI Chrome" if cdp_info.get("is_dedicated_ai_chrome") else f"Chrome CDP({cdp_info.get('cdp_port')})"
         next_actions.append(
             f"检测到高速通道 B ({tag}) 已处于运行状态，优先使用 `gemini_web.py daemon` + `wave` 并发引擎。"
+        )
+    elif recommended_channel == "B_autostart":
+        next_actions.append(
+            "检测到用户已自备独立 AI Chrome (~/.gemini-web-chrome) 但当前未启动，AI 可直接运行 `setup_skill.py --launch-ai-chrome` "
+            "（或直接调用 gemini_web.py 自动拉起 `9229`）直连高速通道 B，无需反复询问。"
         )
     elif recommended_channel == "A":
         next_actions.append(
@@ -685,7 +694,9 @@ def main() -> None:
     else:
         a_tag = "ready" if agentlimb_info["configured"] else "off"
         b_tag = cdp_info["cdp_mode"]
-        if cdp_info.get("cdp_port"):
+        if not cdp_info["cdp_http_ready"] and cdp_info.get("ai_chrome_configured"):
+            b_tag = f"configured_offline:{args.ai_chrome_port}"
+        elif cdp_info.get("cdp_port"):
             b_tag = f"{b_tag}:{cdp_info['cdp_port']}"
         deps_tag = "ok" if venv_info["dependencies_ready"] else "missing"
         print(

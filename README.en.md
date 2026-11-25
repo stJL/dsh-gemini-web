@@ -2,7 +2,7 @@
 
 [English](README.en.md) | [简体中文](README.md)
 
-[![Version](https://img.shields.io/badge/version-v0.2.1-blue.svg?style=flat-square)](package.json)
+[![Version](https://img.shields.io/badge/version-v0.3.0--beta.1-blue.svg?style=flat-square)](package.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
 [![Upstream Sync](https://github.com/stJL/dsh-gemini-web/actions/workflows/sync-upstream.yml/badge.svg)](https://github.com/stJL/dsh-gemini-web/actions/workflows/sync-upstream.yml)
 [![DSH](https://img.shields.io/badge/DeepSeek--Harness-Plugin-6366f1.svg?style=flat-square)](https://github.com/stJL/dsh-gemini-web)
@@ -34,16 +34,17 @@ This project is built upon the collaborative spirit and passion of the open-sour
 
 Built on top of [@582835293/gemini-web-agent](https://github.com/582835293/gemini-web-agent)'s browser automation core, this plugin adapts and extends functionality specifically for DeepSeek Harness (DSH):
 
-| Module | Upstream Foundation (`gemini-web-agent`) | DSH Extension (`dsh-gemini-web`) |
+| Module | Upstream Foundation (`gemini-web-agent`) | DSH Extension (`dsh-gemini-web` v0.3.0-beta.1) |
 | :--- | :--- | :--- |
-| **Interface** | Python Command Line (CLI) execution | Native DSH Desktop GUI settings panel, status badges, and live quota monitors |
-| **Browser Channel** | CDP (port 9222) connection | AgentLimb 100% zero-popup tunnel, plus auto-discovery for Chrome/Edge/Brave |
-| **Fallback Ladder** | Static hardcoded fallback chain | Visual 1~5 model reordering (`↑`/`↓`), Smart vs. Strict single-model toggles |
-| **AI Studio** | Web chat & code generation dispatches | Extra High disabled (prevents 403 freeze), Paid-tier charge filter |
-| **Google Flow** | Automated web image generation | Canvas 0-credit infinite generation (Nano Banana 2.1), daily reset detection |
-| **Local File Analysis**| Basic text input handling | Direct zero-popup mounting of local code, logs, and PDFs into 1M context |
-| **File Delivery** | Terminal text output | Auto-saving code/media to `downloads/` with clickable Markdown local links |
-| **Dispatch Protocol** | Direct script dispatch | "Ask-Before-Dispatch" confirmation cards with anti-history-inertia constraints |
+| **Interface** | Python Command Line (CLI) execution | Native DSH Desktop GUI panel, Chat-Room Slots, status badges & live quota monitors |
+| **Browser Channel** | CDP (port 9222) connection | AgentLimb zero-popup tunnel (multi-port `revoked` skip) + CDP auto-discovery |
+| **Virtual Studio** | Single task / manual Wave scripting | **Wave Engine**: 5 Official Playbooks + Dual-track Custom Squads (GUI Builder / local `.md`) |
+| **Session Isolation** | Direct write to target workspace | `.gemini-teams/<sessionId>/` isolated sandboxes, review drawer & one-click safe merge |
+| **Fallback Ladder** | Static hardcoded fallback chain | Visual 1~5 model reordering (`↑`/`↓`), Smart vs. Strict mode, 1~5 thinking levels |
+| **AI Studio** | Web chat & code generation dispatches | Free-tier guards (`Paid` filter, `Extra High` lock); PRO unlocks `Neon` & `Lyria` Music |
+| **Google Flow** | Automated web image generation | Canvas 0-credit generation (`Nano Banana 2.1`), daily/monthly reset detection |
+| **Local File Analysis**| Basic text input handling | Zero-popup mounting into 1M context; secret filtering on `gemini-spark` tasks |
+| **Dispatch Protocol** | Direct script dispatch | Mandatory "Ask-Before-Dispatch" proposal card + interactive choice buttons |
 
 ---
 
@@ -92,15 +93,15 @@ flowchart TD
     Core -. Fallback .-> CDP
     
     subgraph GoogleSites ["Three External Google Compute Endpoints"]
-        AIS["Google AI Studio\n• key_off free tier\n• 1M Token Context Window\n• Hydrogen / Argon / Flash\n• Thinking Level (Extra-High Locked)"]
-        Flow["Google Flow\n• Dedicated credit pool (50 credits/day)\n• Canvas 0-credit image generation\n• Nano Banana 2.1 2K generation"]
-        Web["Gemini Web Portal\n• 5-hour rolling free chat pool\n• Chat & Task web research modes"]
+        AIS["Google AI Studio\n• key_off free tier / PRO unlocks Neon & Lyria\n• 1M Token Context Window\n• Hydrogen / Flash / Image / Music"]
+        Flow["Google Flow\n• Free 50/day · PRO monthly credit pool\n• Canvas 0-credit image generation\n• Nano Banana 2.1 generation"]
+        Web["Gemini Web Portal\n• 5-hour rolling chat pool\n• Chat & Task sandbox (Debian 12)"]
     end
     
     AL --> GoogleSites
     CDP -.-> GoogleSites
     
-    GoogleSites --> Delivery["Automated Output Delivery\n• Code auto-extracted & saved to downloads/\n• Clickable file:/// local links returned"]
+    GoogleSites --> Delivery["Automated Output & Isolated Review\n• Single tasks save to downloads/ with file:/// links\n• Wave outputs isolate in .gemini-teams/<sessionId>/ until merged"]
     Delivery --> DSH
 ```
 
@@ -117,18 +118,23 @@ flowchart TD
 
 ### 3. Deep Integration with Three Google Endpoints & Anti-Billing Locks
 * **Google AI Studio (`aistudio.google.com`)**:
-  - Operates by default under the **`key_off` free tier** (no paid API key bound), granting a full 1M-token context window.
-  - **Anti-Paid Billing Safeguard**: Actively filters out models flagged as `Paid` (such as `gemini-4-carbon`), refusing to invoke paid routes unless explicitly directed by the user.
-  - **Extra High Safety Lock**: Activating `Extra High` thinking on the free tier triggers Google 403 Permission Denied errors and hanging states. This option is safely locked in both the GUI and the dispatch engine.
+  - Operates by default under the **`key_off` free tier** (no paid API key bound) with a full 1M-token context window; primary coding model is **`gemini-4-hydrogen`** (legacy `Argon` alias automatically maps to `Hydrogen`).
+  - **Anti-Paid Billing Safeguard**: Dynamically detects account entitlements, filters out models flagged as `Paid` (e.g. `gemini-4-carbon`, `genie-4`), and locks `--fallback-model none` so free accounts never silently escalate to paid models.
+  - **Free vs. PRO Adaptation**: `Extra High` thinking is locked on free accounts to avoid 403 hangs; when signed into a **PRO account**, automatically unlocks `gemini-4-neon` (including `Extra High`) and **Lyria Music Studio (`lyria-3.5` / `lyria-3-pro-preview`)** audio generation saved locally as `.mp3`.
 * **Google Flow (`flow.google.com`)**:
-  - **Credit Reset Mechanics**: Free accounts automatically replenish 50 credits daily; advanced tiers maintain independent pools.
+  - **Credit Reset Mechanics**: Free accounts automatically replenish 50 credits daily; PRO accounts maintain a dedicated monthly pool (e.g. 1,000+ credits).
   - **🎨 Canvas 0-Credit Image Generation Privilege (Crucial!)**: Generating 2K images with Nano Banana 2.1 / Pro inside the bottom canvas prompt box **consumes 0 credits (`Generating will use 0 credits`)**, enabling virtually unlimited high-res image generation!
   - **⚠️ Paid Credit Pitfalls**: Opening the right-side Conversational Agent panel or requesting video generation (Omni / Veo) consumes credits. Stick to the bottom canvas prompt box for free image creation.
-
 * **Gemini Web Portal (`gemini.google.com`)**:
-  - Features an independent 5-hour rolling free conversation pool supporting general chat and web-connected task research. Tabs are automatically closed upon completion.
+  - Features an independent 5-hour rolling conversation pool supporting general `Chat` and `Task` (Debian 12 cloud sandbox) modes; gracefully falls back within 3 seconds when a free account lacks the `Task` button.
+  - Automatically filters sensitive local credential files (`.env`, `*.pem`, `*.key`, `id_rsa*`) during networked `gemini-spark` runs, and immediately detects `google.com/sorry` CAPTCHA challenges (`captcha_blocked: true`) without attempting automated bypasses.
 
-### 4. Strict "Ask-Before-Dispatch" Protocol
+### 4. Wave Virtual Studio, Custom Squads & Session Isolation (New in v0.3.0-beta.1)
+* **🌊 Staggered Multi-Role Concurrency & Resume**: Coordinates AI Studio (architecture/coding), Gemini Web (research), and Google Flow / Lyria (visuals/audio) with `3.5s` staggered dispatch, persistent `1-Tab-1-Role` binding, `--resume` recovery, and automatic JSON-to-file unpacking.
+* **📚 Dual-Track Playbooks**: Ships with 5 official playbooks (Web Full-Stack, Academic Research, Content/Video/Media, Data/Office, Interactive Game Studio) plus custom squad creation via either the visual GUI **("➕ Build Custom Squad")** or local Markdown editing (**"📂 Open Folder"**, see `custom_squad.md.example`).
+* **📦 Session Deliverable Review & Chat-Room Slots**: Wave outputs land in session-isolated `.gemini-teams/<sessionId>/wave_<timestamp>/` directories for inspection before clicking **"🚀 Merge to Project"**; optional Chat-Room Slots (`enableChatSlots`) add quick-launch actions in the DSH composer and header.
+
+### 5. Strict "Ask-Before-Dispatch" Protocol
 To guarantee transparency, predictability, and complete control, the plugin enforces an uncompromising two-step interaction cycle:
 1. **Step 1: Render Dispatch Proposal Card**  
    Upon receiving a task, the AI is strictly prohibited from dispatching immediately or invoking local subagents. It must first display a structured proposal card and halt output:
@@ -153,13 +159,13 @@ To guarantee transparency, predictability, and complete control, the plugin enfo
    - Replying with parameter adjustments: Updates settings and dispatches directly.
    - Replying `Cancel`: Halts external calls and answers locally.
 
-### 5. Sequential Fallback Ladder
+### 6. Sequential Fallback Ladder
 * **Adaptive Mode**: When AI Studio encounters peak queue congestion, rate limits, or timeouts, execution cascades smoothly through backup tiers:
   $$\text{Tier 1 (Hydrogen)} \longrightarrow \text{Tier 2 (Flash)} \longrightarrow \text{Tier 3 (Flash Lite)} \longrightarrow \text{Gemini Web Portal}$$
 * **Strict Mode**: Switching to "🛑 Strict Mode" locks execution to a single designated model without any downgrade attempts.
 * **GUI Reordering**: Freely add, remove, and reorder Tier 1~5 models using `↑` and `↓` buttons in the settings dashboard.
 
-### 6. Automated File Landing & Clickable Hyperlink Delivery
+### 7. Automated File Landing & Clickable Hyperlink Delivery
 * Source code blocks and generated assets (PNG images, MP4 videos, MP3 audio, project ZIPs) are automatically extracted by background runners and saved to the DSH workspace `downloads/` directory.
 * Delivered with standardized, clickable absolute Markdown hyperlinks:
   ```markdown
@@ -168,7 +174,7 @@ To guarantee transparency, predictability, and complete control, the plugin enfo
   ```
 * Prevents small host models from encountering Server-Sent Event (SSE) stream interruptions (`Incomplete JSON segment`) when copying long code outputs.
 
-### 7. Multi-modal File, Log & Paper PDF Attachment (1M Context)
+### 8. Multi-modal File, Log & Paper PDF Attachment (1M Context)
 * **1M Token Zero-Overhead Throughput**: Injects local `.txt`, `.log`, `.pdf`, `.py`, `.cpp`, or image files directly into Google AI Studio via `DataTransfer` (Channel A) or Chromium `DOM.setFileInputFiles` (Channel B) without any modal dialogs.
 * **Eliminates Local Context Window Overflow**: Local models no longer need to ingest hundreds of thousands of lines of logs. Simply pass file paths, and Google AI Studio's 1M-token free tier performs deep cross-modal reasoning.
 * **Concurrent Multi-File Mounting**: Supports attaching multiple reference files simultaneously.
@@ -282,8 +288,8 @@ The sync script:
 ## 🤝 Feedback & Contribution
 
 > [!NOTE]
-> 💡 **Project Status & Public Beta Notice**:  
-> This plugin is currently in **Public Beta**. Because Google's web endpoints (AI Studio, Gemini Web, Google Flow) frequently update their front-end interfaces, DOM selectors, and A/B test variations without notice—and because operating systems (Linux, macOS, Windows), browser builds, and proxy environments vary—**testing has currently been conducted on a limited set of maintainer machines. Unforeseen edge cases or selector regressions may still exist.**
+> 💡 **Project Status & Release Notice (`v0.3.0-beta.1`)**:  
+> This plugin evolves continuously as a **Public Beta**—**`v0.3.0-beta.1` serves as the official 0.3.0 release on `main`**. Because Google's web endpoints (AI Studio, Gemini Web, Google Flow / Lyria) frequently update their front-end interfaces, DOM selectors, and A/B test variations without notice—and because operating systems (Linux, macOS, Windows), browser builds, account tiers (Free vs. PRO), and network environments vary—**while both Free and PRO end-to-end flows have been verified on maintainer hardware, unforeseen edge cases or unknown bugs may still surface in the wild.** Community testing and feedback are warmly welcomed!
 
 > [!TIP]
 > 🌱 **A Note to the Open-Source Community (The Vibe Coding Journey)**:  

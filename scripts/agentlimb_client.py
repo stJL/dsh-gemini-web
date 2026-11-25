@@ -18,30 +18,66 @@ from typing import Any, Dict, List, Optional, Tuple
 DEFAULT_PORTS: Tuple[int, ...] = tuple(range(8765, 8781))
 
 
-def get_bridge_url(host: str = "127.0.0.1", ports: Tuple[int, ...] = DEFAULT_PORTS) -> str:
-    """Probe the health endpoints of candidate bridge ports and return the active /api/tool URL."""
+def _bridge_priority(data: Dict[str, Any]) -> Tuple[int, int]:
+    """Rank bridge /health responses so authorized & active bridges win over revoked/idle ports."""
+    if not isinstance(data, dict) or not data.get("ok"):
+        return (-1, 0)
+    authorized = bool(data.get("authorized"))
+    active_browser = bool(data.get("activeBrowser"))
+    denied = bool(data.get("denied"))
+    browsers = data.get("browserList") or []
+    has_auth_browser = any(isinstance(b, dict) and b.get("authorized") for b in browsers)
+    has_any_browser = active_browser or bool(browsers) or bool(data.get("browsers"))
+
+    if authorized and (active_browser or has_auth_browser) and not denied:
+        return (4, 1 if data.get("stage") == "ready" else 0)
+    if authorized and not denied:
+        return (3, 1 if has_any_browser else 0)
+    if has_any_browser and not denied and data.get("authorized") is not False:
+        return (2, 0)
+    if not denied:
+        return (1, 0)
+    return (0, 0)
+
+
+def _select_best_bridge(
+    host: str = "127.0.0.1",
+    ports: Tuple[int, ...] = DEFAULT_PORTS,
+) -> Tuple[int, Optional[Dict[str, Any]]]:
+    """Probe candidate bridge ports and return (best_port, health_payload)."""
+    best_port = ports[0]
+    best_data: Optional[Dict[str, Any]] = None
+    best_score: Tuple[int, int] = (-1, -1)
+
     for port in ports:
         try:
             req = urllib.request.Request(f"http://{host}:{port}/health")
             with urllib.request.urlopen(req, timeout=1.0) as resp:
                 if resp.status == 200:
-                    return f"http://{host}:{port}/api/tool"
+                    data = json.loads(resp.read().decode("utf-8"))
+                    score = _bridge_priority(data)
+                    if score > best_score:
+                        best_score = score
+                        best_port = port
+                        best_data = data
+                        if score[0] >= 4:
+                            break
         except Exception:
             continue
-    return f"http://{host}:{ports[0]}/api/tool"
+
+    return best_port, best_data
+
+
+def get_bridge_url(host: str = "127.0.0.1", ports: Tuple[int, ...] = DEFAULT_PORTS) -> str:
+    """Probe the health endpoints of candidate bridge ports and return the active /api/tool URL."""
+    best_port, _ = _select_best_bridge(host=host, ports=ports)
+    return f"http://{host}:{best_port}/api/tool"
 
 
 def get_status(host: str = "127.0.0.1", ports: Tuple[int, ...] = DEFAULT_PORTS) -> Optional[Dict[str, Any]]:
-    """Return the health and connected browser info from the active bridge."""
-    for port in ports:
-        try:
-            req = urllib.request.Request(f"http://{host}:{port}/health")
-            with urllib.request.urlopen(req, timeout=1.0) as resp:
-                if resp.status == 200:
-                    return json.loads(resp.read().decode("utf-8"))
-        except Exception:
-            continue
-    return None
+    """Return the health and connected browser info from the best available active bridge."""
+    _, best_data = _select_best_bridge(host=host, ports=ports)
+    return best_data
 
 
 def call_tool(

@@ -34,20 +34,78 @@ MODEL_MAP = {
     "gemini-4-argon": "gemini-4-argon",
     "neon": "gemini-4-neon",
     "gemini-4-neon": "gemini-4-neon",
+    "carbon": "gemini-4-carbon",
+    "gemini-4-carbon": "gemini-4-carbon",
+    "decision": "gemini-decision-1",
+    "gemini-decision-1": "gemini-decision-1",
     "nano": "gemini-nano-banana-2.1",
     "nano2.1": "gemini-nano-banana-2.1",
+    "nano-banana": "gemini-nano-banana-2.1",
     "gemini-nano-banana-2.1": "gemini-nano-banana-2.1",
+    "nano-lite": "gemini-3.1-flash-lite-image",
+    "nano2-lite": "gemini-3.1-flash-lite-image",
+    "flash-lite-image": "gemini-3.1-flash-lite-image",
+    "gemini-3.1-flash-lite-image": "gemini-3.1-flash-lite-image",
+    "nano2": "gemini-3.1-flash-image",
+    "gemini-3.1-flash-image": "gemini-3.1-flash-image",
+    "nano-pro": "gemini-3-pro-image",
+    "gemini-3-pro-image": "gemini-3-pro-image",
     "omni": "gemini-omni-1.2-flash",
     "omni1.2": "gemini-omni-1.2-flash",
     "gemini-omni-1.2-flash": "gemini-omni-1.2-flash",
+    "tts": "gemini-3.8-flash-tts",
+    "flash-tts": "gemini-3.8-flash-tts",
+    "gemini-3.8-flash-tts": "gemini-3.8-flash-tts",
+    "tts-lite": "gemini-3.8-flash-lite-tts",
+    "gemini-3.8-flash-lite-tts": "gemini-3.8-flash-lite-tts",
     "lyria": "lyria-3.5",
     "lyria-3.5": "lyria-3.5",
+    "lyria-3-pro": "lyria-3-pro-preview",
+    "lyria-3-pro-preview": "lyria-3-pro-preview",
+    "lyria-pro": "lyria-3-pro-preview",
+    "research": "deep-research-preview-04-2026",
+    "deep-research-preview-04-2026": "deep-research-preview-04-2026",
 }
 
 
 def resolve_model_id(model_name: str) -> str:
-    key = (model_name or "flash").strip().lower()
+    key = (model_name or "hydrogen").strip().lower()
     return MODEL_MAP.get(key, key)
+
+
+def _wait_aistudio_hydrated(tab_id: int, timeout: float = 15.0) -> bool:
+    """等待 AI Studio 輸入框與模型選擇器水合就緒，避免未水合前搶點 Run 觸發 Permission denied。"""
+    if not wait_for_selector(tab_id, 'textarea[aria-label="Enter a prompt"]', timeout=timeout):
+        return False
+    deadline = time.time() + 6.0
+    js = """(() => {
+      const sel = document.querySelector('.model-selector-card, [data-test-id="model-selector"], ms-model-selector-v3');
+      const txt = (sel ? sel.innerText : '') || '';
+      return txt.trim().length > 0;
+    })()"""
+    while time.time() < deadline:
+        try:
+            if agentlimb_client.eval_js(js, tab_id=tab_id).get("result", {}).get("result") is True:
+                time.sleep(0.6)
+                return True
+        except Exception:
+            pass
+        time.sleep(0.35)
+    return True
+
+
+def _get_aistudio_selected_model_text(tab_id: int) -> str:
+    try:
+        res = agentlimb_client.eval_js(
+            """(() => {
+              const sel = document.querySelector('.model-selector-card, [data-test-id="model-selector"], ms-model-selector-v3');
+              return (sel ? sel.innerText : '') || '';
+            })()""",
+            tab_id=tab_id,
+        )
+        return (res.get("result", {}).get("result", "") or "").lower()
+    except Exception:
+        return ""
 
 
 def wait_for_selector(tab_id: int, selector: str, timeout: float = 15.0) -> bool:
@@ -67,12 +125,17 @@ def wait_for_selector(tab_id: int, selector: str, timeout: float = 15.0) -> bool
 import base64
 
 FALLBACK_LADDER = {
+    "gemini-4-carbon": ["gemini-4-neon", "gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"],
     "gemini-4-neon": ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"],
     "gemini-4-argon": ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"],
     "gemini-4-hydrogen": ["gemini-3.8-flash", "gemini-3.5-flash-lite"],
     "gemini-3.8-flash": ["gemini-3.5-flash-lite"],
     "gemini-3.5-flash-lite": [],
     "gemini-decision-1": ["gemini-4-argon", "gemini-4-hydrogen", "gemini-3.8-flash"],
+    "gemini-nano-banana-2.1": ["gemini-3.1-flash-lite-image", "flow"],
+    "gemini-3-pro-image": ["gemini-3.1-flash-lite-image", "flow"],
+    "gemini-3.1-flash-image": ["gemini-3.1-flash-lite-image", "flow"],
+    "gemini-3.1-flash-lite-image": ["flow"],
 }
 
 
@@ -81,7 +144,11 @@ def get_fallback_ladder(model_id: str) -> list[str]:
     mid = (model_id or "").lower()
     if mid in FALLBACK_LADDER:
         return FALLBACK_LADDER[mid]
-    if any(k in mid for k in ("pro", "ultra", "neon", "argon", "max", "reason")):
+    if any(k in mid for k in ("image", "nano")):
+        return ["gemini-3.1-flash-lite-image", "flow"]
+    if any(k in mid for k in ("carbon", "ultra")):
+        return ["gemini-4-neon", "gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"]
+    if any(k in mid for k in ("pro", "neon", "argon", "max", "reason")):
         return ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"]
     elif any(k in mid for k in ("hydrogen", "plus", "standard", "flash")):
         return ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
@@ -347,13 +414,75 @@ def _run_gemini_web_task(
         current_tab_url = target_tab.get("url", "")
         if new_chat:
             agentlimb_client.call_tool("navigate", {"tabId": tab_id, "url": target_url})
+            time.sleep(0.8)
 
     def _execute():
+        # 先檢查是否被 Google 風控重導向至 google.com/sorry 人機驗證頁（嚴禁繞過，立即回報）
+        try:
+            cur_u = str(agentlimb_client.eval_js("location.href", tab_id=tab_id).get("result", {}).get("result", "") or "")
+            if "google.com/sorry" in cur_u.lower() or "/sorry/index" in cur_u.lower():
+                return {
+                    "ok": False,
+                    "site": "gemini",
+                    "error": "Gemini 官网触发 Google 人机验证 (google.com/sorry)，请在可见浏览器窗口手动完成验证后重试。",
+                    "captcha_blocked": True,
+                }
+        except Exception:
+            pass
+
         ready = wait_for_selector(tab_id, 'div[role="textbox"]', timeout=15.0)
         if not ready:
+            try:
+                cur_u = str(agentlimb_client.eval_js("location.href", tab_id=tab_id).get("result", {}).get("result", "") or "")
+                if "google.com/sorry" in cur_u.lower() or "/sorry/index" in cur_u.lower():
+                    return {
+                        "ok": False,
+                        "site": "gemini",
+                        "error": "Gemini 官网触发 Google 人机验证 (google.com/sorry)，请在可见浏览器窗口手动完成验证后重试。",
+                        "captcha_blocked": True,
+                    }
+            except Exception:
+                pass
             return {"ok": False, "error": "Gemini 官网页面加载超时（未找到输入框）"}
 
-        # 0. 未雨綢繆：動態能級探測與全自動解鎖選模 (完全適應未來 Gemini 5、各類會員階層與無菜单模式)
+        # 0. 若指定 entry == "task"，等待延迟水合的对话/任务分段切换器并切入「任务 (Task)」模式（免费号无 Task 按钮时 3s 快速放行）
+        if (entry or "").strip().lower() == "task":
+            task_switch_js = """(async () => {
+              const wait = ms => new Promise(r => setTimeout(r, ms));
+              const findTaskBtn = () => {
+                const btns = Array.from(document.querySelectorAll('gem-segmented-button button, button'));
+                return btns.find(b => {
+                  const rect = b.getBoundingClientRect();
+                  if (rect.width <= 0 || rect.height <= 0) return false;
+                  return /^\\s*(任务|任務|Task)\\s*$/i.test((b.innerText || b.textContent || '').trim());
+                }) || null;
+              };
+              let taskBtn = null;
+              for (let i = 0; i < 6; i++) {
+                taskBtn = findTaskBtn();
+                if (taskBtn) break;
+                await wait(500);
+              }
+              if (!taskBtn) return { ok: false, enteredTask: false, reason: 'task_btn_not_found' };
+              if ((taskBtn.getAttribute('aria-pressed') || '').toLowerCase() !== 'true') {
+                taskBtn.click();
+                for (let i = 0; i < 12; i++) {
+                  await wait(200);
+                  if ((taskBtn.getAttribute('aria-pressed') || '').toLowerCase() === 'true') break;
+                }
+              }
+              await wait(450);
+              return {
+                ok: true,
+                enteredTask: (taskBtn.getAttribute('aria-pressed') || '').toLowerCase() === 'true'
+              };
+            })()"""
+            try:
+                agentlimb_client.eval_js(task_switch_js, tab_id=tab_id)
+            except Exception:
+                pass
+
+        # 0.5 未雨綢繆：動態能級探測與全自動解鎖選模 (完全適應未來 Gemini 5、各類會員階層與無菜单模式)
         ml = (model or "").lower()
         if any(k in ml for k in ("argon", "neon", "pro", "ultra", "complex", "code", "deeper", "reason")):
             target_intent = "reasoning"
@@ -436,10 +565,11 @@ def _run_gemini_web_task(
             const bestModelName = (lines.length > 1 ? lines[1] : lines[0]).trim();
             const coreName = bestModelName.replace(/^\d+\s*/, '').toLowerCase();
 
+            const bestIdx = unlocked.indexOf(best);
             // 若目前選中的模型即為最佳可用模型，关闭菜单退出
             if (currentPickerLabel.toLowerCase().includes(coreName)) {
                 if (picker.getAttribute('aria-expanded') === 'true') picker.click();
-                return { ok: true, switched: false, activeModel: bestModelName, score: score(best, intent) };
+                return { ok: true, switched: false, activeModel: bestModelName, score: score(best, bestIdx, intent) };
             }
 
             // 点击切換至最佳解鎖模型
@@ -448,7 +578,7 @@ def _run_gemini_web_task(
             best.el.click();
             await wait(250);
 
-            return { ok: true, switched: true, activeModel: bestModelName, score: score(best, intent) };
+            return { ok: true, switched: true, activeModel: bestModelName, score: score(best, bestIdx, intent) };
         })(""" + json.dumps(target_intent) + ")"
 
         detected_web_model = "Auto"
@@ -477,24 +607,43 @@ def _run_gemini_web_task(
         agentlimb_client.eval_js(fill_js, tab_id=tab_id)
         time.sleep(0.3)
 
-        # 3. 点击发送
-        send_js = """(() => {
-          const sendBtn = document.querySelector('button[aria-label*="Send message" i], button[aria-label*="发送訊息" i], button[aria-label*="发送" i], button.send-button');
-          if (sendBtn) {
+        # 3. 点击发送（含残留文本补送兜底，防止后台页首次点击未触发提交）
+        send_js = """(async () => {
+          const wait = ms => new Promise(r => setTimeout(r, ms));
+          const findSend = () => document.querySelector('button[aria-label*="Send message" i], button[aria-label*="发送訊息" i], button[aria-label*="发送" i], button.send-button');
+          const sendBtn = findSend();
+          if (sendBtn && !sendBtn.disabled) {
             sendBtn.click();
-            return true;
           }
-          return false;
+          await wait(700);
+          const tb = document.querySelector('div[role="textbox"]');
+          const left = tb ? (tb.innerText || tb.textContent || '').trim() : '';
+          if (left.length > 0) {
+            const retryBtn = findSend();
+            if (retryBtn && !retryBtn.disabled) {
+              retryBtn.click();
+            } else if (tb) {
+              tb.focus();
+              tb.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+            }
+          }
+          return Boolean(sendBtn);
         })()"""
         agentlimb_client.eval_js(send_js, tab_id=tab_id)
 
-        # 4. 监控生成
+        # 4. 监控生成（含 503/限流 Toast 快速失败检测 + 20s 未启动快速止损）
         deadline = time.time() + timeout_sec
+        start_grace_deadline = time.time() + min(25.0, float(timeout_sec))
         has_started = False
         stable_ticks = 0
+        fast_fail_err = ""
         while time.time() < deadline:
             time.sleep(0.5)
             poll_js = f"""(() => {{
+              const errRe = /权限遭拒|permission denied|503|service is unavailable|isn't available right now|high demand|spikes in demand|error\\s*14|quota|rate limit|resource exhausted/i;
+              const toast = Array.from(document.querySelectorAll('.mat-mdc-snack-bar-container, simple-snack-bar, [role="alert"]'))
+                .map(e => (e.innerText || e.textContent || '').trim())
+                .find(t => t && errRe.test(t));
               const responses = Array.from(document.querySelectorAll('model-response'));
               const newResponses = responses.slice({initial_responses});
               let running = false;
@@ -507,22 +656,34 @@ def _run_gemini_web_task(
                 }}
               }}
               const last = newResponses.length > 0 ? newResponses[newResponses.length - 1] : null;
-              const text = last ? (last.innerText || '').trim() : '';
+              const md = last ? (last.querySelector('.markdown, message-content, [data-test-id="message-content"]') || last) : null;
+              const isBusy = Boolean(md && md.getAttribute('aria-busy') === 'true');
+              const mdInner = md ? (md.innerText || '').trim() : '';
+              const mdTc = md ? (md.textContent || '').trim() : '';
+              const text = (mdInner || mdTc).trim();
               return {{
-                running: running,
+                running: running || isBusy,
                 newCount: newResponses.length,
                 hasContent: text.length > 0,
-                textLen: text.length
+                textLen: text.length,
+                toastError: toast || ''
               }};
             }})()"""
             p = agentlimb_client.eval_js(poll_js, tab_id=tab_id)
             res_obj = p.get("result", {}).get("result", {})
+            if res_obj.get("toastError"):
+                fast_fail_err = res_obj["toastError"][:240]
+                break
             running = res_obj.get("running", False)
             new_count = res_obj.get("newCount", 0)
             has_content = res_obj.get("hasContent", False)
 
             if running or new_count > 0:
                 has_started = True
+
+            if not has_started and time.time() > start_grace_deadline:
+                fast_fail_err = "Gemini 官网超过 25 秒未进入生成状态（请确认 Chrome 窗口未最小化且页面已就绪）"
+                break
 
             if has_started and not running and has_content:
                 stable_ticks += 1
@@ -531,7 +692,19 @@ def _run_gemini_web_task(
             else:
                 stable_ticks = 0
 
-        # 5. 提取回應
+        if fast_fail_err:
+            return {
+                "ok": False,
+                "site": "gemini",
+                "model": f"gemini.google.com ({detected_web_model})",
+                "fell_back": False,
+                "output": "",
+                "files": [],
+                "error": f"Gemini 官网返回错误: {fast_fail_err}",
+                "elapsed_sec": round(time.time() - t0, 2),
+            }
+
+        # 5. 提取回應（当 p.pending / reveal 动画导致 innerText 为空时，自动回退读取非代码段落与 textContent）
         extract_js = f"""(() => {{
           const responses = Array.from(document.querySelectorAll('model-response'));
           const newResponses = responses.slice({initial_responses});
@@ -539,6 +712,11 @@ def _run_gemini_web_task(
           if (!last) return {{ text: '', images: [] }};
           const md = last.querySelector('.markdown, message-content, [data-test-id="message-content"]') || last;
           let text = (md.innerText || '').trim();
+          if (!text) {{
+            const ps = Array.from(md.querySelectorAll('p, li, pre')).filter(el => !el.closest('code-block'));
+            text = ps.map(el => (el.textContent || '').trim()).filter(Boolean).join('\\n').trim();
+            if (!text) text = (md.textContent || '').trim();
+          }}
           text = text.replace(/^Gemini said\\s*/i, '').trim();
 
           const imgs = Array.from(last.querySelectorAll('img')).map(i => i.src).filter(s => s && !s.includes('avatar') && !s.includes('googleusercontent.com/a/'));
@@ -645,40 +823,145 @@ def _run_flow_task(
         if not ready:
             return {"ok": False, "error": "Google Flow 画布加载超时（未找到输入框）"}
 
-        # 記錄生成前的媒體 URLs
+        # 等待 Flow 工具欄與右側 Agent 面板完整水合
+        time.sleep(1.5)
+
+        # 0.2 關閉右側 Agent 欄並關閉 Flow Agent 開關，切回直出畫布模式（露出 Settings trigger）
+        agentlimb_client.eval_js("""(async () => {
+          const wait = ms => new Promise(r => setTimeout(r, ms));
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const rp = Array.from(document.querySelectorAll('button')).find(b =>
+              (b.innerText || '').includes('right_panel_close') ||
+              ((b.getAttribute('aria-label') || '') === 'Close' && b.getBoundingClientRect().x > 700)
+            );
+            if (rp) { rp.click(); await wait(500); }
+            const fa = document.querySelector('button[aria-label="Flow Agent"][aria-pressed="true"], button[aria-label*="智能体"][aria-pressed="true"]');
+            if (fa) { fa.click(); await wait(650); }
+            const trig = document.querySelector('button.settings-trigger-button, button[aria-label="Settings trigger"], button[aria-label="设置触发器"]');
+            if (trig && trig.getBoundingClientRect().width > 0) break;
+            await wait(450);
+          }
+          return true;
+        })()""", tab_id=tab_id)
+
+        # 0.5 開啟 Settings trigger 選擇 Image + Nano Banana 2.1 + x1（0 點數免費）
+        agentlimb_client.eval_js("""(async () => {
+          const wait = ms => new Promise(r => setTimeout(r, ms));
+          const trig = document.querySelector('button.settings-trigger-button, button[aria-label="Settings trigger"], button[aria-label="设置触发器"]');
+          if (!trig || trig.getBoundingClientRect().width <= 0) return false;
+          trig.click(); await wait(400);
+          const pickTxt = re => Array.from(document.querySelectorAll('.cdk-overlay-pane button, .cdk-overlay-pane [role="option"], .cdk-overlay-pane [role="menuitem"], .cdk-overlay-pane mat-option'))
+            .find(el => el.offsetParent && re.test((el.innerText || '').trim()));
+          pickTxt(/^(图片|圖片|Image)$/i)?.click(); await wait(180);
+          const modelBtn = Array.from(document.querySelectorAll('.cdk-overlay-pane button')).find(b => /banana|veo|omni|model/i.test(b.innerText || ''));
+          if (modelBtn && !/nano\\s*banana\\s*2\\.1/i.test(modelBtn.innerText || '')) {
+            modelBtn.click(); await wait(350);
+            const panes = document.querySelectorAll('.cdk-overlay-pane');
+            const lastPane = panes[panes.length - 1];
+            const nb21 = lastPane && Array.from(lastPane.querySelectorAll('[role="menuitem"], [role="option"], button')).find(el => /nano\\s*banana\\s*2\\.1/i.test((el.innerText || '').trim()));
+            if (nb21) { nb21.click(); await wait(250); }
+          }
+          pickTxt(/^x1$/i)?.click(); await wait(180);
+          const backdrop = document.querySelector('.cdk-overlay-backdrop');
+          if (backdrop) backdrop.click(); else document.body.click();
+          await wait(200);
+          return true;
+        })()""", tab_id=tab_id)
+
+        # 記錄生成前的媒體 URLs（僅計算已載入完成的大圖或生成的視頻，排除 gstatic 示例圖）
         collect_js = """(() => {
             const urls = [];
-            for (const el of document.querySelectorAll('img[src*="flow-content.google"], img[src*="/asb/"], img[src^="blob:"], video[src*="flow-content.google"], video[src*="/asb/"]')) {
-                const src = el.getAttribute('src') || el.currentSrc || '';
-                if (src && el.naturalWidth !== 0) urls.push(src);
+            for (const el of document.querySelectorAll('img, video, video source')) {
+                const src = el.getAttribute('src') || el.currentSrc || el.src || '';
+                if (!src) continue;
+                if (src.includes('googleusercontent.com/') || src.includes('gstatic.com/aitestkitchen') || src.includes('avatar') || src.endsWith('.svg')) continue;
+                if (el.tagName === 'IMG' && (!el.complete || (el.naturalWidth || 0) < 96)) continue;
+                urls.push(src);
             }
             return Array.from(new Set(urls));
         })()"""
         before_urls = set(agentlimb_client.eval_js(collect_js, tab_id=tab_id).get("result", {}).get("result", []))
 
-        # 填寫提示词 (TrustedHTML 兼容)
-        fill_js = f"""(() => {{
-          const tb = document.querySelector('div.ProseMirror, div[role="textbox"]');
-          if (!tb) return false;
-          tb.focus();
-          document.execCommand('selectAll', false, null);
-          document.execCommand('insertText', false, {json.dumps(task)});
-          tb.dispatchEvent(new Event('input', {{ bubbles: true }}));
-          return true;
-        }})()"""
-        agentlimb_client.eval_js(fill_js, tab_id=tab_id)
-        time.sleep(0.3)
+        # 填寫提示词（優先使用 AgentLimb form_input，保底使用 ProseMirror insertText）
+        try:
+            agentlimb_client.call_tool(
+                "form_input",
+                {"tabId": tab_id, "selector": 'div.ProseMirror, div[role="textbox"]', "value": task},
+            )
+        except Exception:
+            fill_js = f"""(() => {{
+              const tb = document.querySelector('div.ProseMirror, div[role="textbox"]');
+              if (!tb) return false;
+              tb.focus();
+              document.execCommand('selectAll', false, null);
+              document.execCommand('insertText', false, {json.dumps(task)});
+              tb.dispatchEvent(new Event('input', {{ bubbles: true }}));
+              return true;
+            }})()"""
+            agentlimb_client.eval_js(fill_js, tab_id=tab_id)
+        time.sleep(0.5)
 
-        # 点击開始生成
-        click_js = """(() => {
-            const btn = document.querySelector('button[aria-label*="生成" i], button[aria-label*="Generate" i], button.generate-icon-button, button.mat-mdc-tooltip-trigger:has(.material-symbols-outlined)');
-            if (btn) {
-                btn.click();
-                return true;
-            }
-            return false;
+        # 点击開始生成：Flow 需要真實可信滑鼠點擊（computer click），純 JS .click() 會被 Angular 忽略
+        ready_btn_js = """(() => {
+            const winZero = (window.innerWidth === 0 || window.innerHeight === 0);
+            const btns = Array.from(document.querySelectorAll('button[aria-label="Start generation"], button[aria-label="开始生成"], button[aria-label="開始生成"], button.generate-icon-button'));
+            const btn = btns.find(b => {
+                const r = b.getBoundingClientRect();
+                return r.width > 0 && r.height > 0 && !b.disabled && b.getAttribute('aria-disabled') !== 'true';
+            });
+            if (!btn) return { ok: false, winZero, reason: 'not_found_or_disabled' };
+            const r = btn.getBoundingClientRect();
+            return { ok: true, winZero, x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
         })()"""
-        agentlimb_client.eval_js(click_js, tab_id=tab_id)
+        btn_info = agentlimb_client.eval_js(ready_btn_js, tab_id=tab_id).get("result", {}).get("result", {})
+        if btn_info and btn_info.get("winZero"):
+            return {
+                "ok": False,
+                "error": "Chrome 浏览器窗口当前处于最小化或 0x0 不可见状态（innerWidth=0），Google Flow 需要保持窗口展开（可放在后台桌面但勿最小化）才能执行真实鼠标点击。",
+            }
+        if not btn_info or not btn_info.get("ok"):
+            return {"ok": False, "error": "Google Flow 生成按钮未就绪或仍处于禁用状态"}
+
+        def _click_flow_submit():
+            agentlimb_client.call_tool("tab_activate", {"tabId": tab_id})
+            time.sleep(0.4)
+            try:
+                c_res = agentlimb_client.call_tool(
+                    "computer",
+                    {
+                        "tabId": tab_id,
+                        "action": "click",
+                        "selector": 'button[aria-label="Start generation"], button[aria-label="开始生成"], button[aria-label="開始生成"], button.generate-icon-button',
+                    },
+                )
+                if c_res.get("result", {}).get("ok"):
+                    return True
+            except Exception:
+                pass
+            try:
+                c_res = agentlimb_client.call_tool(
+                    "computer",
+                    {"tabId": tab_id, "action": "click", "x": btn_info["x"], "y": btn_info["y"]},
+                )
+                return bool(c_res.get("result", {}).get("ok"))
+            except Exception:
+                return False
+
+        clicked_ok = _click_flow_submit()
+        if clicked_ok:
+            # 確認提示詞已清空送出；若仍殘留在輸入框則重試點擊一次
+            time.sleep(1.5)
+            still_has_prompt = agentlimb_client.eval_js(
+                """(() => {
+                    const tb = document.querySelector('div.ProseMirror, div[role="textbox"]');
+                    const txt = (tb?.innerText || '').trim();
+                    const pct = /\\b\\d{1,3}%\\b/.test(document.body.innerText || '');
+                    return !pct && txt.length > 0;
+                })()""",
+                tab_id=tab_id,
+            ).get("result", {}).get("result", False)
+            if still_has_prompt:
+                _click_flow_submit()
 
         # 监控生成新文件
         deadline = time.time() + timeout_sec
@@ -699,8 +982,10 @@ def _run_flow_task(
         out_path.mkdir(parents=True, exist_ok=True)
         for idx, u in enumerate(new_urls, 1):
             data_url = u
-            if u.startswith("blob:"):
-                data_url = _fetch_blob_as_data_url(tab_id, u)
+            if u.startswith(("blob:", "http:", "https:")):
+                fetched = _fetch_blob_as_data_url(tab_id, u)
+                if fetched and fetched.startswith("data:"):
+                    data_url = fetched
             if data_url.startswith("data:"):
                 saved = _save_data_url(data_url, out_path, f"flow_nano_{idx}")
                 if saved:
@@ -734,9 +1019,236 @@ def _run_flow_task(
                 pass
 
 
+_ACCOUNT_PAID_MODELS_CACHE: dict[str, Any] = {"ts": 0.0, "paid": None}
+
+
+def _get_account_paid_models(force_refresh: bool = False) -> set[str]:
+    """動態取得當前帳號在 AI Studio 上仍被標記為 Paid 的模型集合（快取 120 秒）。"""
+    default_paid = {
+        "gemini-4-neon", "gemini-4-carbon", "gemini-4-argon",
+        "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-pro-latest",
+        "gemini-nano-banana-2.1", "gemini-omni-1.2-flash", "genie-4",
+    }
+    now = time.time()
+    if (
+        not force_refresh
+        and _ACCOUNT_PAID_MODELS_CACHE.get("paid") is not None
+        and (now - float(_ACCOUNT_PAID_MODELS_CACHE.get("ts") or 0.0)) < 120.0
+    ):
+        return set(_ACCOUNT_PAID_MODELS_CACHE["paid"])
+    try:
+        discovered = discover_available_models()
+        if discovered.get("status") == "ok" and isinstance(discovered.get("models"), list):
+            paid_set = {m["id"].lower() for m in discovered["models"] if m.get("paid") and m.get("id")}
+            _ACCOUNT_PAID_MODELS_CACHE["ts"] = now
+            _ACCOUNT_PAID_MODELS_CACHE["paid"] = set(paid_set)
+            return paid_set
+    except Exception:
+        pass
+    return default_paid
+
+
+def _aistudio_tune_thinking_and_dialogs(tab_id: int, thinking_level: str = "high") -> None:
+    """依帳號實際解鎖狀態設定 AI Studio Thinking Level（PRO 解鎖時放行 Extra High，否則自動降回 High）並關掉干擾彈窗。"""
+    tl_raw = (thinking_level or "high").strip().lower()
+    if tl_raw in ("extra_high", "extra-high", "xhigh", "max"):
+        desired = "extra_high"
+    elif tl_raw in ("medium", "low"):
+        desired = tl_raw
+    else:
+        desired = "high"
+
+    tune_js = f"""(async (desiredLevel) => {{
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      try {{
+        const tl = document.querySelector('mat-select[aria-label*="Thinking"], [aria-label*="Thinking"]');
+        if (tl) {{
+          const curTxt = (tl.innerText || '').toLowerCase();
+          const curIsExtra = curTxt.includes('extra');
+          if (curIsExtra || desiredLevel) {{
+            tl.click();
+            await wait(250);
+            const opts = Array.from(document.querySelectorAll('.cdk-overlay-pane mat-option')).filter(
+              o => o.getAttribute('aria-disabled') !== 'true' && !/\\bpaid\\b/i.test(o.innerText || '')
+            );
+            let target = null;
+            if (desiredLevel === 'extra_high') {{
+              target = opts.find(o => /extra/i.test(o.innerText || ''))
+                    || opts.find(o => /^high$/i.test((o.innerText || '').trim()))
+                    || opts.find(o => /high/i.test(o.innerText || '') && !/extra/i.test(o.innerText || ''));
+            }} else if (desiredLevel === 'medium') {{
+              target = opts.find(o => /medium/i.test(o.innerText || ''));
+            }} else if (desiredLevel === 'low') {{
+              target = opts.find(o => /low/i.test(o.innerText || ''));
+            }} else {{
+              target = opts.find(o => /^high$/i.test((o.innerText || '').trim()))
+                    || opts.find(o => /high/i.test(o.innerText || '') && !/extra/i.test(o.innerText || ''))
+                    || opts.find(o => /medium/i.test(o.innerText || ''))
+                    || opts.find(o => !/extra/i.test(o.innerText || ''));
+            }}
+            if (target) {{
+              target.click();
+              await wait(200);
+            }} else {{
+              document.body.click();
+              await wait(150);
+            }}
+          }}
+        }}
+        const dismissBtn = Array.from(document.querySelectorAll('button')).find(b =>
+          /dismiss|close/i.test(b.innerText || '') || /close/i.test(b.getAttribute('aria-label') || '')
+        );
+        if (dismissBtn && dismissBtn.closest('[role="dialog"], mat-dialog-container')) {{
+          dismissBtn.click();
+          await wait(150);
+        }}
+      }} catch(e) {{}}
+      return true;
+    }})({json.dumps(desired)})"""
+    try:
+        agentlimb_client.eval_js(tune_js, tab_id=tab_id)
+    except Exception:
+        pass
+
+
+def _run_aistudio_music_task(
+    task: str,
+    model: str = "lyria-3-pro-preview",
+    timeout_sec: int = 180,
+    download_dir: str = "",
+    keep_tab: bool = False,
+) -> dict:
+    """在 AI Studio /new_music (Lyria) 生成音訊並儲存本機（自動偵測免費帳號付費牆）。"""
+    t0 = time.time()
+    eff_model = resolve_model_id(model or "lyria-3-pro-preview")
+    target_url = f"https://aistudio.google.com/new_music?model={eff_model}" if eff_model.startswith("lyria") else "https://aistudio.google.com/new_music"
+
+    nav_res = agentlimb_client.call_tool("tab_new", {"url": target_url, "active": True})
+    tab_id = nav_res.get("result", {}).get("tab", {}).get("id") or nav_res.get("id") or nav_res.get("tabId")
+    if not tab_id:
+        return {"ok": False, "site": "lyria", "error": "无法创建 AI Studio Music 标签页"}
+
+    try:
+        deadline_ready = time.time() + 18.0
+        ready_state = {}
+        while time.time() < deadline_ready:
+            st = agentlimb_client.eval_js(
+                """(() => {
+                  const body = (document.body?.innerText || '').toLowerCase();
+                  const paywall = /go further with ai studio|choose a google ai plan|set up api billing|upgrade to unlock/i.test(body);
+                  const inp = document.querySelector('textarea[aria-label="Prompt input"], textarea[aria-label="Enter a prompt"]');
+                  const emptyBtn = document.querySelector('button.empty-state__title-button');
+                  return {
+                    paywall,
+                    hasInput: Boolean(inp && inp.getBoundingClientRect().width > 0),
+                    hasEmptyBtn: Boolean(emptyBtn && emptyBtn.getBoundingClientRect().width > 0),
+                    url: location.href
+                  };
+                })()""",
+                tab_id=tab_id,
+            ).get("result", {}).get("result", {})
+            ready_state = st or {}
+            if ready_state.get("paywall") or ready_state.get("hasInput") or ready_state.get("hasEmptyBtn"):
+                break
+            time.sleep(0.5)
+
+        if ready_state.get("paywall"):
+            return {
+                "ok": False,
+                "site": "lyria",
+                "model": eff_model,
+                "paid_only": True,
+                "error": "AI Studio 音乐台 (Lyria) 在当前账号下已锁定为付费升级功能，跳过此步。",
+                "elapsed_sec": round(time.time() - t0, 2),
+            }
+
+        if not ready_state.get("hasInput") and ready_state.get("hasEmptyBtn"):
+            agentlimb_client.eval_js('document.querySelector("button.empty-state__title-button")?.click()', tab_id=tab_id)
+            if not wait_for_selector(tab_id, 'textarea[aria-label="Prompt input"], textarea[aria-label="Enter a prompt"]', timeout=12.0):
+                return {"ok": False, "site": "lyria", "model": eff_model, "error": "AI Studio Music 输入框未就绪"}
+
+        before_count = agentlimb_client.eval_js(
+            'Array.from(document.querySelectorAll("audio")).filter(a => Boolean(a.currentSrc || a.src)).length',
+            tab_id=tab_id,
+        ).get("result", {}).get("result", 0)
+
+        agentlimb_client.call_tool(
+            "form_input",
+            {"tabId": tab_id, "selector": 'textarea[aria-label="Prompt input"], textarea[aria-label="Enter a prompt"]', "value": task},
+        )
+        time.sleep(0.3)
+        agentlimb_client.eval_js('document.querySelector("button.ctrl-enter-submits")?.click()', tab_id=tab_id)
+
+        deadline = time.time() + timeout_sec
+        audio_srcs = []
+        while time.time() < deadline:
+            time.sleep(1.0)
+            poll = agentlimb_client.eval_js(
+                f"""(() => {{
+                  const errText = Array.from(document.querySelectorAll('.error, mat-error, [role="alert"], mat-dialog-container, .snack-bar-container'))
+                    .map(e => (e.innerText || '').trim()).filter(Boolean).join(' ').toLowerCase();
+                  const body = (document.body?.innerText || '').toLowerCase();
+                  const combined = errText + ' ' + body;
+                  const errMatch = combined.match(/(permission denied|权限遭拒|go further with ai studio|choose a google ai plan|set up api billing|failed to generate[^\\n]*)/i);
+                  const err = errMatch ? errMatch[0].slice(0, 220) : '';
+                  const composing = Array.from(document.querySelectorAll('button')).some(b => /stop composing|stop|cancel/i.test(b.innerText || ''));
+                  const count = Array.from(document.querySelectorAll('audio')).filter(a => Boolean(a.currentSrc || a.src)).length;
+                  return {{ err, composing, count, newCount: count > {int(before_count)} }};
+                }})()""",
+                tab_id=tab_id,
+            ).get("result", {}).get("result", {})
+            if poll.get("err"):
+                is_paid = any(k in poll["err"] for k in ("upgrade", "go further", "choose a google ai plan", "billing", "permission denied"))
+                return {
+                    "ok": False,
+                    "site": "lyria",
+                    "model": eff_model,
+                    "paid_only": is_paid,
+                    "error": f"AI Studio Music 返回错误: {poll['err']}",
+                    "elapsed_sec": round(time.time() - t0, 2),
+                }
+            if poll.get("newCount") and not poll.get("composing"):
+                all_srcs = agentlimb_client.eval_js(
+                    'Array.from(document.querySelectorAll("audio")).map(a => a.currentSrc || a.src || "").filter(Boolean)',
+                    tab_id=tab_id,
+                    timeout=20.0,
+                ).get("result", {}).get("result", [])
+                audio_srcs = all_srcs[int(before_count):]
+                break
+
+        if not audio_srcs:
+            return {"ok": False, "site": "lyria", "model": eff_model, "error": f"等待 AI Studio Lyria 生成超时 ({timeout_sec} 秒)"}
+
+        saved_files = []
+        out_path = Path(download_dir).resolve() if download_dir else (Path.cwd() / "downloads").resolve()
+        for idx, src in enumerate(audio_srcs, 1):
+            data_url = _fetch_blob_as_data_url(tab_id, src) if src.startswith("blob:") else src
+            if data_url.startswith("data:"):
+                saved = _save_data_url(data_url, out_path, f"aistudio_music_{idx}")
+                if saved:
+                    saved_files.append(saved)
+
+        return {
+            "ok": bool(saved_files or audio_srcs),
+            "site": "lyria",
+            "model": eff_model,
+            "fell_back": False,
+            "output": f"已在 AI Studio (new_music · {eff_model}) 成功生成音訊，共產出 {len(saved_files) or len(audio_srcs)} 個音訊文件。",
+            "files": saved_files,
+            "error": "",
+            "elapsed_sec": round(time.time() - t0, 2),
+        }
+    finally:
+        if not keep_tab and tab_id:
+            try:
+                agentlimb_client.call_tool("tab_close", {"tabId": tab_id})
+            except Exception:
+                pass
+
+
 def run_agent_task(
     task: str,
-    model: str = "gemini-3.8-flash",
+    model: str = "gemini-4-hydrogen",
     site: str = "aistudio",
     entry: str = "chat",
     thinking_level: str = "high",
@@ -765,6 +1277,16 @@ def run_agent_task(
             keep_tab=keep_tab,
         )
 
+    # 站點分支：如果是 AI Studio Lyria 音樂台
+    if site.lower() in ("lyria", "music", "aistudio-music") or resolve_model_id(model).startswith("lyria"):
+        return _run_aistudio_music_task(
+            task=task,
+            model=model,
+            timeout_sec=timeout_sec,
+            download_dir=download_dir,
+            keep_tab=keep_tab,
+        )
+
     # 站點分支：如果是 gemini.google.com
     if site.lower() in ("gemini", "gemini.google.com", "gemini_web", "gemini-web"):
         return _run_gemini_web_task(
@@ -784,7 +1306,7 @@ def run_agent_task(
     target_tab = None
     for t in tabs:
         url = t.get("url", "")
-        if "aistudio.google.com" in url:
+        if "aistudio.google.com/prompts/" in url:
             target_tab = t
             break
 
@@ -800,9 +1322,12 @@ def run_agent_task(
         tab_id = target_tab.get("id")
         agentlimb_client.call_tool("tab_activate", {"tabId": tab_id})
         current_tab_url = target_tab.get("url", "")
-        # 若要求开启新对话，或當前标签页不在 /prompts/，導航至新聊天室
-        if new_chat or "/prompts/" not in current_tab_url:
+        cur_model_txt = _get_aistudio_selected_model_text(tab_id) if "/prompts/" in current_tab_url else ""
+        model_mismatch = bool(initial_model_id and cur_model_txt and initial_model_id.lower() not in cur_model_txt)
+        # 若要求开启新对话，或當前标签页不在 /prompts/，或既有标签页模型与指定模型不符，導航至新聊天室
+        if new_chat or "/prompts/" not in current_tab_url or model_mismatch:
             agentlimb_client.call_tool("navigate", {"tabId": tab_id, "url": target_url})
+            time.sleep(1.2)
 
     def _attempt_run(current_model_id: str) -> tuple[bool, str, list[str], str]:
         # 1. 填寫任務提示词
@@ -816,57 +1341,8 @@ def run_agent_task(
         )
         time.sleep(0.3)
 
-        # 1.2 封印 Extra High：檢測並確保 Thinking Level 不超過 High，避免免費池 Permission Denied 與分鐘級假死
-        safe_thinking = "high"
-        if thinking_level and thinking_level.lower() in ("medium", "low"):
-            safe_thinking = thinking_level.lower()
-
-        tune_js = f"""(async (desiredLevel) => {{
-          const wait = ms => new Promise(r => setTimeout(r, ms));
-          try {{
-            // 檢查並調試 Thinking Level 下拉菜单
-            const tl = document.querySelector('mat-select[aria-label*="Thinking"], [aria-label*="Thinking"]');
-            if (tl) {{
-              const curTxt = (tl.innerText || '').toLowerCase();
-              if (curTxt.includes('extra') || desiredLevel) {{
-                tl.click();
-                await wait(250);
-                const opts = Array.from(document.querySelectorAll('.cdk-overlay-pane mat-option')).filter(
-                  o => o.getAttribute('aria-disabled') !== 'true' && !/\\bpaid\\b/i.test(o.innerText || '')
-                );
-                // 严格封印 Extra High：優先選擇 High，其次 Medium，絕不選 Extra High
-                let target = null;
-                if (desiredLevel === 'medium') {{
-                  target = opts.find(o => /medium/i.test(o.innerText || ''));
-                }} else if (desiredLevel === 'low') {{
-                  target = opts.find(o => /low/i.test(o.innerText || ''));
-                }} else {{
-                  target = opts.find(o => /^high$/i.test((o.innerText || '').trim()))
-                        || opts.find(o => /high/i.test(o.innerText || '') && !/extra/i.test(o.innerText || ''))
-                        || opts.find(o => /medium/i.test(o.innerText || ''))
-                        || opts.find(o => !/extra/i.test(o.innerText || ''));
-                }}
-                if (target) {{
-                  target.click();
-                  await wait(200);
-                }} else {{
-                  document.body.click();
-                  await wait(150);
-                }}
-              }}
-            }}
-            // 自動关闭任何干擾彈窗（如 Link a paid API key）
-            const dismissBtn = Array.from(document.querySelectorAll('button')).find(b => 
-              /dismiss|close/i.test(b.innerText || '') || /close/i.test(b.getAttribute('aria-label') || '')
-            );
-            if (dismissBtn && dismissBtn.closest('[role="dialog"], mat-dialog-container')) {{
-              dismissBtn.click();
-              await wait(150);
-            }}
-          }} catch(e) {{}}
-          return true;
-        }})('{safe_thinking}')"""
-        agentlimb_client.eval_js(tune_js, tab_id=tab_id)
+        # 1.2 依帳號解鎖狀態設定 Thinking Level（PRO 放行 Extra High，免費池自動退回 High）
+        _aistudio_tune_thinking_and_dialogs(tab_id, thinking_level=thinking_level)
 
         # 1.5 記錄点击前初始 turns 數量與廣播器狀態
         init_js = """(() => {
@@ -889,7 +1365,7 @@ def run_agent_task(
         has_started_generating = False
 
         # 智能思考閾值與任務量級研判 (三大策略：adaptive, custom, strict)
-        is_deep_reasoning = any(k in current_model_id.lower() for k in ["argon", "hydrogen", "decision"])
+        is_deep_reasoning = any(k in current_model_id.lower() for k in ["argon", "hydrogen", "neon", "carbon", "decision", "pro"])
         heavy_keywords = [
             "c++", "cpp", "rust", "红黑树", "red-black", "算法", "演算法", "架構",
             "從零", "完整實作", "生產級", "完整代碼", "重構", "design pattern",
@@ -923,8 +1399,11 @@ def run_agent_task(
         stuck_threshold = time.time() + thinking_limit
         last_seen_text_len = 0
         last_seen_thought_len = 0
+        prev_poll_text_len = 0
+        prev_poll_thought_len = 0
         last_feedback_time = time.time()
         stable_ticks = 0
+        empty_done_ticks = 0
         completed = False
 
         while time.time() < deadline:
@@ -976,7 +1455,7 @@ def run_agent_task(
                   n => !Array.from(thoughtSet).some(t => t.contains(n)) && (n.innerText || '').trim().length > 0
                 );
                 if (nonThoughtCmarks.length > 0) hasOutput = true;
-                if (mt.querySelectorAll('img[src^="blob:"], video[src^="blob:"]').length > 0) {{
+                if (mt.querySelectorAll('img[src^="blob:"], img[src^="data:image/"], video[src^="blob:"], video source[src]').length > 0) {{
                   hasMedia = true;
                   hasOutput = true;
                 }}
@@ -1001,20 +1480,23 @@ def run_agent_task(
               const runBtnAria = (runBtn?.getAttribute('aria-label') || '').trim();
               const isStop = /\\b(Stop|Cancel)\\b/i.test(runBtnTxt) || /\\b(Stop|Cancel)\\b/i.test(runBtnAria);
               const spinner = document.querySelector('mat-spinner, mat-progress-bar, .spinner, .loading');
-              running = Boolean(isStop || spinner);
+              running = running || Boolean(isStop || spinner);
 
               const lastModelTurn = modelTurns.length > 0 ? modelTurns[modelTurns.length - 1] : null;
               if (lastModelTurn) {{
                 try {{ lastModelTurn.scrollIntoView({{ block: 'nearest', behavior: 'instant' }}); }} catch(e) {{}}
                 const rawTurnText = (lastModelTurn.innerText || lastModelTurn.textContent || '').trim();
                 const cleanTurnText = rawTurnText.replace(/(more_vert|thumb_up|thumb_down|edit|\\d+(\\.\\d+)?s)/g, '').trim();
-                if (cleanTurnText.length > 0) {{
+                const hasDoneFooter = Boolean(lastModelTurn.querySelector('button[aria-label="Good response"], button[aria-label="Bad response"], .model-run-time-pill'));
+                const vscContent = lastModelTurn.querySelector('.virtual-scroll-container .turn-content');
+                const isVirtualUnmounted = Boolean(vscContent && vscContent.children.length === 0);
+                if (cleanTurnText.length > 0 || (hasDoneFooter && isVirtualUnmounted)) {{
                   hasOutput = true;
                 }}
               }}
 
-              const errorEls = Array.from(document.querySelectorAll('.error, mat-error, .snack-bar-container, [data-test-id*="error"]'));
-              const errorMessages = errorEls.map(e => (e.innerText || '').trim()).filter(Boolean).join(' ');
+              const errorEls = Array.from(document.querySelectorAll('.error, mat-error, .snack-bar-container, .mat-mdc-snack-bar-container, simple-snack-bar, [role="alert"], [data-test-id*="error"], mat-dialog-container, [role="dialog"]'));
+              const errorMessages = errorEls.map(e => (e.innerText || e.textContent || '').trim()).filter(Boolean).join(' ');
               const announcer = document.querySelector('.cdk-live-announcer-element')?.innerText || '';
 
               return {{
@@ -1075,9 +1557,19 @@ def run_agent_task(
             # 檢測伺服器錯誤、配額耗盡或權限拒絕（立即終止退出，絕不乾等）
             combined_err = f"{last_text} {last_turn_full} {error_messages}".lower()
             fatal_errors = [
+                ("go further with ai studio", "該模型在 AI Studio 需升級 Google AI 方案或綁定付費 API Key (Paid-only)"),
+                ("set up api billing", "該模型需啟用付費 API 計費 (Paid-only)"),
+                ("choose a google ai plan", "該模型需升級 Google AI 付費方案 (Paid-only)"),
                 ("permission denied", "当前 Google 账号无权访问 (Permission denied)"),
+                ("权限遭拒", "当前 Google 账号无权访问 (权限遭拒)"),
                 ("check your account permissions", "账号权限不足 (Check your account permissions)"),
                 ("model isn't available", "Google 免費池該模型暫不可用"),
+                ("isn't available right now", "Google 免費池該模型暫不可用 (High demand)"),
+                ("please wait a minute and try again", "Google 免費池高負載限流，請稍後再試"),
+                ("high demand", "Google 免費池高負載排隊 (High demand / 503)"),
+                ("spikes in demand", "Google 免費池流量尖峰限流 (503)"),
+                ("error 14", "Google 免費池高負載錯誤 (Error 14 / 503)"),
+                ("503", "Google 服務暫時不可用 (503)"),
                 ("internal error", "Google 服务器内部错误 (Internal error)"),
                 ("quota exceeded", "达到免费池配额限额 (Quota exceeded)"),
                 ("rate limit", "达到请求频率限制 (Rate limit)"),
@@ -1095,12 +1587,17 @@ def run_agent_task(
                 if err_key in combined_err:
                     return False, "", [], f"【立即終止】{current_model_id} {err_desc}"
 
-            # 檢測真正卡死 (思考或生成狀態超過時限且文本與思考皆完全無任何增長)
+            # 檢測真正卡死 (未進入生成態超過 15 秒，或思考/生成超過時限且無任何增長)
+            if not has_started_generating and (time.time() - (stuck_threshold - thinking_limit)) > 15.0:
+                return False, "", [], f"模型未響應或受限於帳號權限：{current_model_id} 超過 15 秒未開始生成"
             if running and time.time() > stuck_threshold:
                 return False, "", [], f"免费池排队拥塞：{current_model_id} 思考或生成超過 {int(thinking_limit)} 秒無增長卡死"
 
-            # 正常完成信號：已開始生成過，且不在 running 狀態，且已有輸出
-            if has_started_generating and not running and has_output:
+            # 正常完成信號：已開始生成過，且不在 running 狀態，且已有輸出，且文本已真正停止增長
+            text_still_growing = (total_text_len != prev_poll_text_len or thought_text_len != prev_poll_thought_len)
+            prev_poll_text_len = total_text_len
+            prev_poll_thought_len = thought_text_len
+            if has_started_generating and not running and has_output and not text_still_growing:
                 # 若廣播器出現新的 Response ready，或非 running 下連續 3 個 tick (1.5秒) 穩定無變動
                 is_new_announcer = (announcer != initial_announcer and "response ready" in announcer.lower())
                 if is_new_announcer:
@@ -1113,144 +1610,29 @@ def run_agent_task(
             else:
                 stable_ticks = 0
 
+            if has_started_generating and not running and not has_output and not text_still_growing:
+                empty_done_ticks += 1
+                if empty_done_ticks >= 8:
+                    return False, "", [], f"{current_model_id} 已停止生成但未返回有效內容"
+            else:
+                empty_done_ticks = 0
+
         if not completed:
             return False, "", [], f"执行超时 ({actual_timeout} 秒，思考閾值 {int(thinking_limit)} 秒)"
 
-        # 4. 提取生成結果（強制滾動以喚醒 Angular 虛擬滾動 Virtual Scrolling）
-        extract_js = f"""(() => {{
-          const turns = Array.from(document.querySelectorAll('ms-chat-turn'));
-          const newTurns = turns.slice({initial_turns});
-          const modelTurns = (newTurns.length > 0 ? newTurns : turns).filter(t => {{
-            const container = t.querySelector('.chat-turn-container');
-            const cls = (container ? container.className : t.className) || '';
-            if (/\\buser\\b/i.test(cls) || t.querySelector('textarea, ms-text-chunk[data-role="user"]')) return false;
-            return /\\bmodel\\b/i.test(cls) || t.innerText.includes('Model ') || Boolean(t.querySelector('.model, .model-author, [data-role="model"], ms-cmark-node, ms-code-block'));
-          }});
-
-          if (modelTurns.length > 0) {{
-            const lastTurn = modelTurns[modelTurns.length - 1];
-            lastTurn.scrollIntoView({{ behavior: 'instant', block: 'end' }});
-            const scroller = document.querySelector('ms-chat, .chat-container, cdk-virtual-scroll-viewport, .scrollable-container');
-            if (scroller) scroller.scrollTop = scroller.scrollHeight;
-          }}
-
-          const sep = String.fromCharCode(10) + String.fromCharCode(10);
-          const nl = String.fromCharCode(10);
-          let turnTexts = [];
-          let imgs = [];
-          let audios = [];
-          let videos = [];
-
-          for (const mt of modelTurns) {{
-            // 排除純思考容器
-            const rawThoughtPanels = Array.from(mt.querySelectorAll('mat-expansion-panel')).filter(
-              el => !el.closest('ms-code-block') && !el.querySelector('ms-code-block, pre, code')
-            );
-            const thoughtEls = Array.from(mt.querySelectorAll('ms-thought-chunk, .thought-container')).concat(rawThoughtPanels);
-            const thoughtSet = new Set(thoughtEls);
-
-            const cmarkNodes = Array.from(mt.querySelectorAll('ms-cmark-node')).filter(
-              el => !Array.from(thoughtSet).some(t => t.contains(el)) && !el.parentElement.closest('ms-cmark-node')
-            );
-
-            if (cmarkNodes.length > 0) {{
-              const tText = cmarkNodes.map(el => {{
-                const codeBlocks = Array.from(el.querySelectorAll('ms-code-block'));
-                if (codeBlocks.length > 0) {{
-                  const clone = el.cloneNode(true);
-                  clone.querySelectorAll('ms-code-block').forEach(cb => {{
-                    const lang = cb.getAttribute('data-test-language') || '';
-                    const codeEl = cb.querySelector('code');
-                    // 使用 textContent 讀取原始代碼記憶體樹，徹底防止 Chromium 離屏/detached DOM 布局排版截斷
-                    const codeText = codeEl ? (codeEl.textContent || '') : '';
-                    const mdBlock = document.createTextNode(nl + '```' + lang + nl + codeText.trim() + nl + '```' + nl);
-                    if (cb.parentNode) cb.parentNode.replaceChild(mdBlock, cb);
-                  }});
-                  return (clone.textContent || '').trim();
-                }}
-                return (el.textContent || el.innerText || '').trim();
-              }}).filter(Boolean).join(sep);
-              if (tText) turnTexts.push(tText);
-            }} else {{
-              // 若無獨立 cmark，但有代碼塊
-              const codeBlocks = Array.from(mt.querySelectorAll('ms-code-block')).filter(
-                el => !Array.from(thoughtSet).some(t => t.contains(el))
-              );
-              if (codeBlocks.length > 0) {{
-                const cTexts = codeBlocks.map(cb => {{
-                  const lang = cb.getAttribute('data-test-language') || '';
-                  const codeEl = cb.querySelector('code');
-                  const codeText = codeEl ? (codeEl.textContent || '') : '';
-                  return '```' + lang + nl + codeText.trim() + nl + '```';
-                }});
-                turnTexts.push(cTexts.join(sep));
-              }}
-            }}
-
-            Array.from(mt.querySelectorAll('img')).forEach(i => {{
-              if (i.src && !i.src.includes('avatar') && !i.src.includes('googleusercontent.com/a/')) {{
-                imgs.push(i.src);
-              }}
-            }});
-            Array.from(mt.querySelectorAll('audio, audio source')).forEach(a => {{
-              const s = a.src || a.getAttribute('src');
-              if (s) audios.push(s);
-            }});
-            Array.from(mt.querySelectorAll('video, video source')).forEach(v => {{
-              const s = v.src || v.getAttribute('src');
-              if (s) videos.push(s);
-            }});
-          }}
-
-          return {{
-            text: turnTexts.join(sep),
-            images: Array.from(new Set(imgs)),
-            audios: Array.from(new Set(audios)),
-            videos: Array.from(new Set(videos))
-          }};
-        }})()"""
-        ext = agentlimb_client.eval_js(extract_js, tab_id=tab_id)
-        res_data = ext.get("result", {}).get("result", {})
-        final_text = res_data.get("text", "")
-
-        saved_files = []
-        if out_path:
-            # 處理圖片
-            for idx, img_src in enumerate(res_data.get("images", []), 1):
-                data_url = img_src
-                if img_src.startswith("blob:"):
-                    data_url = _fetch_blob_as_data_url(tab_id, img_src)
-                if data_url.startswith("data:"):
-                    saved = _save_data_url(data_url, out_path, f"gemini_img_{idx}")
-                    if saved:
-                        saved_files.append(saved)
-            # 處理音訊
-            for idx, audio_src in enumerate(res_data.get("audios", []), 1):
-                data_url = audio_src
-                if audio_src.startswith("blob:"):
-                    data_url = _fetch_blob_as_data_url(tab_id, audio_src)
-                if data_url.startswith("data:"):
-                    saved = _save_data_url(data_url, out_path, f"gemini_audio_{idx}")
-                    if saved:
-                        saved_files.append(saved)
-            # 處理视频
-            for idx, video_src in enumerate(res_data.get("videos", []), 1):
-                data_url = video_src
-                if video_src.startswith("blob:"):
-                    data_url = _fetch_blob_as_data_url(tab_id, video_src)
-                if data_url.startswith("data:"):
-                    saved = _save_data_url(data_url, out_path, f"gemini_video_{idx}")
-                    if saved:
-                        saved_files.append(saved)
+        # 4. 提取生成結果（共用於單發與 Wave，含虛擬捲動卸載時的 Copy as markdown 兜底）
+        final_text, saved_files = _aistudio_extract_turn_payload(tab_id, initial_turns, out_path)
 
         if final_text or saved_files:
+            if not final_text and saved_files:
+                final_text = f"已完成內容生成（模型: {current_model_id}），共產出 {len(saved_files)} 個多媒體檔案。"
             return True, final_text, saved_files, ""
 
         return False, "", [], f"执行超时 ({timeout_sec} 秒)"
 
     try:
-        # 等待输入框就緒
-        ready = wait_for_selector(tab_id, 'textarea[aria-label="Enter a prompt"]', timeout=15.0)
+        # 等待输入框與模型選擇器水合就緒
+        ready = _wait_aistudio_hydrated(tab_id, timeout=15.0)
         if not ready:
             return {"ok": False, "error": "AI Studio 页面加载超时（未找到输入框）"}
 
@@ -1264,7 +1646,26 @@ def run_agent_task(
             sys.stderr.flush()
 
         # 初次尝试
-        success, output, files, err = _attempt_run(initial_model_id)
+        success, output, out_files, err = _attempt_run(initial_model_id)
+        paid_only_models = _get_account_paid_models()
+        # AI Studio 偶發閃現 "permission denied. Please try again"：針對當前帳號已解鎖的模型先原地重載重試一次
+        if not success and initial_model_id.lower() not in paid_only_models and any(
+            k in (err or "").lower() for k in ("permission denied", "权限遭拒", "please try again")
+        ):
+            sys.stderr.write(f"🔄 [Gemini Web Agent] {initial_model_id} 遭遇免費池瞬時權限抖動，等待 1.5s 重新水合重試...\n")
+            sys.stderr.flush()
+            time.sleep(1.5)
+            try:
+                agentlimb_client.call_tool("tab_close", {"tabId": tab_id})
+            except Exception:
+                pass
+            nav_retry = agentlimb_client.call_tool("tab_new", {"url": target_url, "active": True})
+            tab_id = nav_retry.get("result", {}).get("tab", {}).get("id") or nav_retry.get("id") or nav_retry.get("tabId")
+            _wait_aistudio_hydrated(tab_id, timeout=15.0)
+            if files:
+                _aistudio_attach_files_agentlimb(tab_id, files)
+            success, output, out_files, err = _attempt_run(initial_model_id)
+        files = out_files
         active_model = initial_model_id
         fell_back = False
         fallback_chain = [initial_model_id]
@@ -1273,8 +1674,11 @@ def run_agent_task(
         # 注意：若 thinking_policy == "strict"，auto_fallback 必定为 False，绝不走入以下降级
         if not success and auto_fallback and thinking_policy != "strict":
             # 依次使用阶梯备援（支持用户自定义阶梯配置与未来模型动态推导）
-            if fallback_ladder and len(fallback_ladder) > 0:
+            is_image_model = any(k in initial_model_id.lower() for k in ("image", "nano"))
+            if fallback_ladder and len(fallback_ladder) > 0 and not is_image_model:
                 raw_ladder = fallback_ladder
+            elif is_image_model:
+                raw_ladder = get_fallback_ladder(initial_model_id)
             else:
                 raw_ladder = get_fallback_ladder(initial_model_id) + ["gemini.google.com"]
 
@@ -1285,7 +1689,26 @@ def run_agent_task(
                 if not target_clean:
                     continue
 
-                if target_clean.lower() in ("gemini", "gemini.google.com", "gemini_web", "gemini-web"):
+                if target_clean.lower() in ("flow", "flow.google.com", "google_flow"):
+                    flow_res = _run_flow_task(
+                        task=task,
+                        model="gemini-nano-banana-2.1",
+                        timeout_sec=timeout_sec,
+                        download_dir=download_dir,
+                        keep_tab=keep_tab,
+                    )
+                    if flow_res.get("ok"):
+                        success = True
+                        output = flow_res.get("output", "")
+                        files = flow_res.get("files", [])
+                        err = ""
+                        active_model = flow_res.get("model") or "flow.google.com"
+                        fallback_chain.append(active_model)
+                        fell_back = True
+                        break
+                    else:
+                        fallback_chain.append("flow.google.com (失败)")
+                elif target_clean.lower() in ("gemini", "gemini.google.com", "gemini_web", "gemini-web"):
                     web_res = _run_gemini_web_task(
                         task=task,
                         model=initial_model_id,
@@ -1309,8 +1732,16 @@ def run_agent_task(
                 else:
                     fallback_chain.append(target_clean)
                     fb_url = f"https://aistudio.google.com/prompts/new_chat?model={target_clean}"
-                    agentlimb_client.call_tool("navigate", {"tabId": tab_id, "url": fb_url})
-                    wait_for_selector(tab_id, 'textarea[aria-label="Enter a prompt"]', timeout=15.0)
+                    try:
+                        agentlimb_client.call_tool("tab_close", {"tabId": tab_id})
+                    except Exception:
+                        pass
+                    nav_fb = agentlimb_client.call_tool("tab_new", {"url": fb_url, "active": True})
+                    tab_id = nav_fb.get("result", {}).get("tab", {}).get("id") or nav_fb.get("id") or nav_fb.get("tabId")
+                    _wait_aistudio_hydrated(tab_id, timeout=15.0)
+                    time.sleep(1.0)
+                    if files:
+                        _aistudio_attach_files_agentlimb(tab_id, files)
 
                     fb_success, fb_output, fb_files, fb_err = _attempt_run(target_clean)
                     if fb_success:
@@ -1471,8 +1902,21 @@ def check_gemini_usage(include_flow: bool = True) -> dict:
 
     gemini_result = {}
     try:
-        ready = wait_for_selector(tab_id, '[data-testid="current-usage"], [data-usage-island-root]', timeout=15.0)
-        if not ready:
+        def _is_sorry_url() -> bool:
+            try:
+                u = str(agentlimb_client.eval_js("location.href", tab_id=tab_id).get("result", {}).get("result", "") or "").lower()
+                return "google.com/sorry" in u or "/sorry/index" in u
+            except Exception:
+                return False
+
+        ready = False if _is_sorry_url() else wait_for_selector(tab_id, '[data-testid="current-usage"], [data-usage-island-root]', timeout=15.0)
+        if _is_sorry_url():
+            gemini_result = {
+                "status": "error",
+                "captcha_blocked": True,
+                "error": "Gemini 官网触发 Google 人机验证 (google.com/sorry)，请在可见浏览器窗口手动完成验证后重试。",
+            }
+        elif not ready:
             gemini_result = {"status": "error", "error": "用量页面加载超时"}
         else:
             eval_res = agentlimb_client.eval_js(
@@ -1543,7 +1987,7 @@ def discover_available_models() -> dict:
     created_tab = False
     for t in tabs:
         url = t.get("url", "")
-        if "aistudio.google.com" in url:
+        if "aistudio.google.com/prompts/" in url:
             target_tab = t
             break
 
@@ -1607,6 +2051,530 @@ def discover_available_models() -> dict:
                 pass
 
 
+def _import_gemini_web():
+    """按需匯入同目錄 gemini_web 共用花名冊、路徑解析與 JSON 解包邏輯。"""
+    if "playwright" not in sys.modules:
+        try:
+            import playwright.sync_api  # noqa: F401
+        except ImportError:
+            from unittest.mock import MagicMock
+            pw_mod = MagicMock()
+            sys.modules["playwright"] = pw_mod
+            sys.modules["playwright.sync_api"] = pw_mod.sync_api
+    import gemini_web as gw
+    return gw
+
+
+def _aistudio_extract_turn_payload(tab_id: int, initial_turns: int, out_path: Path | None) -> tuple[str, list[str]]:
+    """從 AI Studio 當前標籤頁提取新增模型回覆文本與媒體文件（含最小化/虛擬捲動卸載時的 Copy as markdown 兜底）。"""
+    extract_js = f"""(() => {{
+      const turns = Array.from(document.querySelectorAll('ms-chat-turn'));
+      const newTurns = turns.slice({initial_turns});
+      const modelTurns = (newTurns.length > 0 ? newTurns : turns).filter(t => {{
+        const container = t.querySelector('.chat-turn-container');
+        const cls = (container ? container.className : t.className) || '';
+        if (/\\buser\\b/i.test(cls) || t.querySelector('textarea, ms-text-chunk[data-role="user"]')) return false;
+        return /\\bmodel\\b/i.test(cls) || t.innerText.includes('Model ') || Boolean(t.querySelector('.model, .model-author, [data-role="model"], ms-cmark-node, ms-code-block'));
+      }});
+      if (modelTurns.length > 0) {{
+        const lastTurn = modelTurns[modelTurns.length - 1];
+        try {{ lastTurn.scrollIntoView({{ behavior: 'instant', block: 'end' }}); }} catch(e) {{}}
+        const scroller = document.querySelector('ms-chat, .chat-container, cdk-virtual-scroll-viewport, .scrollable-container');
+        if (scroller) scroller.scrollTop = scroller.scrollHeight;
+      }}
+      const sep = String.fromCharCode(10) + String.fromCharCode(10);
+      const nl = String.fromCharCode(10);
+      let turnTexts = [], imgs = [], audios = [], videos = [];
+      for (const mt of modelTurns) {{
+        const rawThoughtPanels = Array.from(mt.querySelectorAll('mat-expansion-panel')).filter(
+          el => !el.closest('ms-code-block') && !el.querySelector('ms-code-block, pre, code')
+        );
+        const thoughtSet = new Set(Array.from(mt.querySelectorAll('ms-thought-chunk, .thought-container')).concat(rawThoughtPanels));
+        const cmarkNodes = Array.from(mt.querySelectorAll('ms-cmark-node')).filter(
+          el => !Array.from(thoughtSet).some(t => t.contains(el)) && !el.parentElement.closest('ms-cmark-node')
+        );
+        if (cmarkNodes.length > 0) {{
+          const tText = cmarkNodes.map(el => {{
+            if (el.querySelectorAll('ms-code-block').length > 0) {{
+              const clone = el.cloneNode(true);
+              clone.querySelectorAll('ms-code-block').forEach(cb => {{
+                const lang = cb.getAttribute('data-test-language') || '';
+                const codeText = cb.querySelector('code')?.textContent || '';
+                const mdBlock = document.createTextNode(nl + '```' + lang + nl + codeText.trim() + nl + '```' + nl);
+                if (cb.parentNode) cb.parentNode.replaceChild(mdBlock, cb);
+              }});
+              return (clone.textContent || '').trim();
+            }}
+            return (el.textContent || el.innerText || '').trim();
+          }}).filter(Boolean).join(sep);
+          if (tText) turnTexts.push(tText);
+        }} else {{
+          const codeBlocks = Array.from(mt.querySelectorAll('ms-code-block')).filter(el => !Array.from(thoughtSet).some(t => t.contains(el)));
+          if (codeBlocks.length > 0) {{
+            turnTexts.push(codeBlocks.map(cb => '```' + (cb.getAttribute('data-test-language') || '') + nl + (cb.querySelector('code')?.textContent || '').trim() + nl + '```').join(sep));
+          }}
+        }}
+        Array.from(mt.querySelectorAll('img')).forEach(i => {{ if (i.src && !i.src.includes('avatar') && !i.src.includes('googleusercontent.com/a/')) imgs.push(i.src); }});
+        Array.from(mt.querySelectorAll('audio, audio source')).forEach(a => {{ const s = a.src || a.getAttribute('src'); if (s) audios.push(s); }});
+        Array.from(mt.querySelectorAll('video, video source')).forEach(v => {{ const s = v.src || v.getAttribute('src'); if (s) videos.push(s); }});
+      }}
+      return {{ text: turnTexts.join(sep), images: Array.from(new Set(imgs)), audios: Array.from(new Set(audios)), videos: Array.from(new Set(videos)) }};
+    }})()"""
+    res_data = agentlimb_client.eval_js(extract_js, tab_id=tab_id).get("result", {}).get("result", {})
+    final_text = res_data.get("text", "")
+
+    # 若瀏覽器最小化/虛擬捲動導致 DOM 未掛載 turn-content，透過 more_vert -> Copy as markdown 非破壞性攔截取出完整輸出
+    if not final_text:
+        copy_js = f"""(async () => {{
+          const turns = Array.from(document.querySelectorAll('ms-chat-turn'));
+          const newTurns = turns.slice({initial_turns});
+          const modelTurns = (newTurns.length > 0 ? newTurns : turns).filter(t => {{
+            const container = t.querySelector('.chat-turn-container');
+            const cls = (container ? container.className : t.className) || '';
+            if (/\\buser\\b/i.test(cls) || t.querySelector('textarea, ms-text-chunk[data-role="user"]')) return false;
+            return /\\bmodel\\b/i.test(cls) || Boolean(t.querySelector('button[aria-label="Open options"], button[aria-label="Good response"]'));
+          }});
+          const mt = modelTurns.length > 0 ? modelTurns[modelTurns.length - 1] : null;
+          const mbtn = mt ? mt.querySelector('button[aria-label="Open options"]') : null;
+          if (!mbtn) return '';
+          let captured = '';
+          const origWT = navigator.clipboard && Clipboard.prototype.writeText;
+          const origExec = document.execCommand.bind(document);
+          if (origWT) {{
+            Clipboard.prototype.writeText = async function(txt) {{ captured = txt || ''; return Promise.resolve(); }};
+          }}
+          document.execCommand = function(cmd, ...args) {{
+            if (cmd === 'copy') {{
+              const ae = document.activeElement;
+              const sel = window.getSelection()?.toString() || '';
+              captured = (ae && (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT') && ae.value) ? ae.value : sel;
+              return true;
+            }}
+            return origExec(cmd, ...args);
+          }};
+          try {{
+            mbtn.click();
+            await new Promise(r => setTimeout(r, 250));
+            const items = Array.from(document.querySelectorAll('.cdk-overlay-pane [role="menuitem"], .cdk-overlay-pane button'));
+            const target = items.find(b => /copy as markdown/i.test(b.innerText || '')) || items.find(b => /copy as text/i.test(b.innerText || ''));
+            if (target) {{
+              target.click();
+              await new Promise(r => setTimeout(r, 250));
+            }} else {{
+              document.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'Escape', bubbles: true }}));
+            }}
+          }} finally {{
+            if (origWT) Clipboard.prototype.writeText = origWT;
+            document.execCommand = origExec;
+          }}
+          return (captured || '').trim();
+        }})()"""
+        try:
+            copied = agentlimb_client.eval_js(copy_js, tab_id=tab_id).get("result", {}).get("result", "")
+            if copied:
+                final_text = copied
+        except Exception:
+            pass
+
+    saved_files: list[str] = []
+    if out_path:
+        media_groups = [
+            (res_data.get("images", []), "gemini_img"),
+            (res_data.get("audios", []), "gemini_audio"),
+            (res_data.get("videos", []), "gemini_video"),
+        ]
+        for urls, prefix in media_groups:
+            for idx, media_src in enumerate(urls, 1):
+                du = _fetch_blob_as_data_url(tab_id, media_src) if media_src.startswith("blob:") else media_src
+                if du.startswith("data:"):
+                    saved = _save_data_url(du, out_path, f"{prefix}_{idx}")
+                    if saved:
+                        saved_files.append(saved)
+    return final_text, saved_files
+
+
+def execute_wave_agentlimb(
+    tasks: list[dict],
+    roster_file: str = ".web-team.json",
+    project: str = "",
+    project_dir: str = ".",
+    timeout_sec: int = 360,
+    stagger_sec: float = 2.0,
+    resume: bool = False,
+    keep_tabs: bool = False,
+) -> dict:
+    """通道 A（AgentLimb）多 Tab 並發波次引擎：免獨立 AI Chrome，自動識別付費牆並降級免費主力模型。"""
+    t0 = time.time()
+    if not isinstance(tasks, list) or not tasks:
+        raise ValueError("wave 任务列表 tasks 不能为空。")
+
+    st = agentlimb_client.get_status()
+    if not st or not st.get("ok"):
+        raise RuntimeError("AgentLimb Bridge (8765) 未在线或扩展未连接")
+
+    gw = _import_gemini_web()
+    base_dir = Path(project_dir or ".").expanduser().resolve()
+    base_dir.mkdir(parents=True, exist_ok=True)
+    roster_path = gw._resolve_task_path(roster_file or ".web-team.json", base_dir)
+
+    seen_roles: set[str] = set()
+    for idx, t in enumerate(tasks):
+        if not isinstance(t, dict):
+            raise ValueError(f"wave 第 {idx + 1} 项任务必须是 JSON 对象。")
+        r_name = str(t.get("role") or f"worker_{idx + 1}").strip()
+        if r_name in seen_roles:
+            raise ValueError(f"wave 中存在重复角色 '{r_name}'，同一波次内每个角色只能出现一次。")
+        seen_roles.add(r_name)
+
+    # 動態探測當前帳號解鎖狀態（PRO 帳號自動放行 Neon/Argon/Carbon，免費號自動降級）
+    paid_models = _get_account_paid_models()
+
+    pending: list[dict] = []
+    results: list[dict] = []
+
+    for idx, raw_task in enumerate(tasks):
+        task = dict(raw_task)
+        role = str(task.get("role") or f"worker_{idx + 1}").strip()
+        site = str(task.get("site") or "aistudio").strip().lower()
+        req_model = str(task.get("model") or "").strip()
+        prompt = str(task.get("prompt") or "")
+        prompt_file = str(task.get("prompt_file") or "").strip()
+        if not prompt and prompt_file:
+            prompt = Path(gw._resolve_task_path(prompt_file, base_dir)).read_text(encoding="utf-8")
+
+        out_file_resolved = gw._resolve_task_path(str(task.get("out_file") or ""), base_dir)
+        unpack_dir_resolved = gw._resolve_task_path(str(task.get("unpack_json_dir") or ""), base_dir)
+        existing_role = gw._roster_lookup_role(roster_path, role)
+        if resume and gw._is_wave_task_resumable_done(existing_role, out_file_resolved, unpack_dir_resolved):
+            results.append({
+                "role": role,
+                "site": existing_role.get("site") or site,
+                "status": "ok",
+                "resumed_skipped": True,
+                "url": existing_role.get("url") or "",
+                "saved_text_file": out_file_resolved or None,
+                "elapsed_sec": 0.0,
+            })
+            continue
+
+        if not prompt:
+            results.append({"role": role, "site": site, "status": "error", "error": "缺少 prompt 或 prompt_file"})
+            continue
+
+        files_resolved = [gw._resolve_task_path(f, base_dir) for f in (task.get("files") or []) if str(f).strip()]
+        dl_dir = gw._resolve_task_path(str(task.get("download_dir") or ""), base_dir) or str(base_dir)
+        thinking_level = str(task.get("thinking_level") or "high").strip().lower()
+        if thinking_level in ("extra_high", "extra-high", "xhigh", "max"):
+            thinking_level = "extra_high"
+
+        if site in ("lyria", "music", "aistudio-music"):
+            try:
+                music_res = _run_aistudio_music_task(
+                    task=prompt,
+                    model=req_model or "lyria-3-pro-preview",
+                    timeout_sec=int(task.get("timeout_sec") or timeout_sec),
+                    download_dir=dl_dir,
+                    keep_tab=keep_tabs,
+                )
+                if not music_res.get("ok"):
+                    gw.execute_roster(
+                        action="set", roster_file=roster_path, role=role, site="lyria",
+                        model=str(music_res.get("model") or "lyria-3-pro-preview"), status="failed", project=project,
+                    )
+                    results.append({
+                        "role": role,
+                        "site": "lyria",
+                        "status": "error",
+                        "paid_only": bool(music_res.get("paid_only")),
+                        "error": music_res.get("error") or "AI Studio Lyria 执行失败",
+                    })
+                else:
+                    gw.execute_roster(
+                        action="set", roster_file=roster_path, role=role, site="lyria",
+                        model=str(music_res.get("model") or "lyria-3-pro-preview"), status="done", project=project,
+                    )
+                    results.append({
+                        "role": role,
+                        "site": "lyria",
+                        "status": "ok",
+                        "model": music_res.get("model"),
+                        "saved_files": music_res.get("files", []),
+                        "elapsed_sec": music_res.get("elapsed_sec", 0.0),
+                    })
+            except Exception as exc:
+                gw.execute_roster(action="set", roster_file=roster_path, role=role, site="lyria", model="lyria-3-pro-preview", status="failed", project=project)
+                results.append({"role": role, "site": "lyria", "status": "error", "error": str(exc)})
+            continue
+
+        # 通道 A 將 build 映射為 AI Studio 免費主力模型輸出（同樣支援 unpack_json_dir 寫入電腦）
+        eff_site = "aistudio" if site in ("build", "playground") else site
+
+        if eff_site == "aistudio":
+            eff_model = resolve_model_id(req_model or "gemini-4-hydrogen")
+            downgraded_from = ""
+            if eff_model.lower() in paid_models and "paid" not in req_model.lower():
+                downgraded_from = eff_model
+                eff_model = "gemini-4-hydrogen"
+
+            target_url = f"https://aistudio.google.com/prompts/new_chat?model={eff_model}"
+            try:
+                nav = agentlimb_client.call_tool("tab_new", {"url": target_url, "active": True})
+                tab_id = nav.get("result", {}).get("tab", {}).get("id") or nav.get("id") or nav.get("tabId")
+                if not tab_id or not _wait_aistudio_hydrated(tab_id, timeout=15.0):
+                    raise RuntimeError("AI Studio 页面加载超时")
+                if files_resolved:
+                    _aistudio_attach_files_agentlimb(tab_id, files_resolved)
+                agentlimb_client.call_tool(
+                    "form_input",
+                    {"tabId": tab_id, "selector": 'textarea[aria-label="Enter a prompt"]', "value": prompt},
+                )
+                time.sleep(0.3)
+                _aistudio_tune_thinking_and_dialogs(tab_id, thinking_level)
+                init_res = agentlimb_client.eval_js(
+                    "({turns: document.querySelectorAll('ms-chat-turn').length, announcer: document.querySelector('.cdk-live-announcer-element')?.innerText || ''})",
+                    tab_id=tab_id,
+                ).get("result", {}).get("result", {})
+                agentlimb_client.eval_js('document.querySelector("button.ctrl-enter-submits")?.click()', tab_id=tab_id)
+                cur_url = agentlimb_client.eval_js("location.href", tab_id=tab_id).get("result", {}).get("result", target_url)
+                gw.execute_roster(
+                    action="set", roster_file=roster_path, role=role,
+                    title=str(task.get("title") or task.get("role_title") or ""),
+                    site=site, model=eff_model, thinking_level=thinking_level,
+                    tab_id=str(tab_id), url=str(cur_url),
+                    duty=str(task.get("duty") or ""), status="running", project=project,
+                )
+                pending.append({
+                    "role": role, "site": site, "entry": "aistudio", "model": eff_model,
+                    "downgraded_from": downgraded_from, "tab_id": tab_id, "url": str(cur_url),
+                    "prompt": prompt, "files": files_resolved,
+                    "before_turns": init_res.get("turns", 0), "initial_announcer": init_res.get("announcer", ""),
+                    "out_file": out_file_resolved, "unpack_json_dir": unpack_dir_resolved, "download_dir": dl_dir,
+                    "started_at": time.time(), "has_started": False, "stable_ticks": 0,
+                    "prev_len": 0, "retry_count": 0,
+                })
+            except Exception as exc:
+                gw.execute_roster(action="set", roster_file=roster_path, role=role, site=site, model=eff_model, status="failed", project=project)
+                results.append({"role": role, "site": site, "status": "error", "error": str(exc)})
+
+        elif eff_site in ("gemini_task", "gemini", "gemini_chat", "task", "chat"):
+            eff_entry = "chat" if eff_site in ("gemini_chat", "chat") else str(task.get("entry") or "task")
+            try:
+                web_res = _run_gemini_web_task(
+                    task=prompt, model=req_model or "hydrogen",
+                    timeout_sec=int(task.get("timeout_sec") or timeout_sec),
+                    new_chat=True, download_dir=dl_dir, keep_tab=keep_tabs, entry=eff_entry,
+                )
+                if not web_res.get("ok"):
+                    raise RuntimeError(web_res.get("error") or "Gemini Web 执行失败")
+                text_body = web_res.get("output", "") or ""
+                rec: dict = {
+                    "role": role, "site": site, "entry": eff_entry, "status": "ok",
+                    "model": web_res.get("model", "gemini.google.com"),
+                    "saved_files": web_res.get("files", []),
+                    "text_chars": len(text_body),
+                    "elapsed_sec": web_res.get("elapsed_sec", 0.0),
+                }
+                if out_file_resolved:
+                    p_out = Path(out_file_resolved)
+                    p_out.parent.mkdir(parents=True, exist_ok=True)
+                    p_out.write_text(text_body, encoding="utf-8")
+                    rec["saved_text_file"] = str(p_out)
+                if unpack_dir_resolved:
+                    rec["unpacked_files"] = gw._unpack_json_from_text(text_body, unpack_dir_resolved)
+                gw.execute_roster(
+                    action="set", roster_file=roster_path, role=role,
+                    site=site, model=str(rec["model"]), status="done", project=project,
+                )
+                results.append(rec)
+            except Exception as exc:
+                gw.execute_roster(action="set", roster_file=roster_path, role=role, site=site, model=req_model or "Auto", status="failed", project=project)
+                results.append({"role": role, "site": site, "status": "error", "error": str(exc)})
+
+        elif eff_site == "flow":
+            try:
+                flow_res = _run_flow_task(
+                    task=prompt, model=req_model or "gemini-nano-banana-2.1",
+                    timeout_sec=int(task.get("timeout_sec") or timeout_sec),
+                    download_dir=dl_dir, keep_tab=keep_tabs,
+                )
+                if not flow_res.get("ok"):
+                    raise RuntimeError(flow_res.get("error") or "Google Flow 执行失败")
+                gw.execute_roster(
+                    action="set", roster_file=roster_path, role=role,
+                    site="flow", model=str(flow_res.get("model") or "Nano Banana 2.1"), status="done", project=project,
+                )
+                results.append({
+                    "role": role, "site": "flow", "status": "ok",
+                    "model": flow_res.get("model"), "saved_files": flow_res.get("files", []),
+                    "elapsed_sec": flow_res.get("elapsed_sec", 0.0),
+                })
+            except Exception as exc:
+                gw.execute_roster(action="set", roster_file=roster_path, role=role, site="flow", model="Nano Banana 2.1", status="failed", project=project)
+                results.append({"role": role, "site": "flow", "status": "error", "error": str(exc)})
+        else:
+            results.append({"role": role, "site": site, "status": "error", "error": f"wave 暂不支持的站点类型: {site}"})
+
+        if idx < len(tasks) - 1 and stagger_sec > 0 and eff_site == "aistudio":
+            time.sleep(float(stagger_sec))
+
+    # 輪詢所有 AI Studio 並發分頁
+    deadline = time.time() + max(30, int(timeout_sec))
+    while pending and time.time() < deadline:
+        still_pending: list[dict] = []
+        for item in pending:
+            tab_id = item["tab_id"]
+            role = item["role"]
+            try:
+                agentlimb_client.call_tool("tab_activate", {"tabId": tab_id})
+                poll_js = f"""(() => {{
+                  let running = false;
+                  for (const b of document.querySelectorAll('button')) {{
+                    const r = b.getBoundingClientRect();
+                    if (r.width <= 0 || r.height <= 0) continue;
+                    const txt = (b.innerText || '').trim();
+                    const aria = (b.getAttribute('aria-label') || '').trim();
+                    if (/editing/i.test(aria) || /editing/i.test(txt)) continue;
+                    if (/\\b(Stop|Cancel)\\b/i.test(txt) || /\\b(Stop|Cancel)\\b/i.test(aria)) {{ running = true; break; }}
+                  }}
+                  const spinner = document.querySelector('mat-spinner, mat-progress-bar, .spinner, .loading');
+                  running = running || Boolean(spinner);
+                  const turns = Array.from(document.querySelectorAll('ms-chat-turn')).slice({item['before_turns']});
+                  const modelTurns = turns.filter(t => {{
+                    const c = t.querySelector('.chat-turn-container');
+                    const cls = (c ? c.className : t.className) || '';
+                    if (/\\buser\\b/i.test(cls) || t.querySelector('textarea')) return false;
+                    return /\\bmodel\\b/i.test(cls) || t.innerText.includes('Model ') || Boolean(t.querySelector('ms-cmark-node, ms-code-block, img[src^="data:image/"], img[src^="blob:"]'));
+                  }});
+                  let totalLen = 0;
+                  modelTurns.forEach(mt => {{ totalLen += (mt.textContent || '').trim().length; }});
+                  const errTxt = Array.from(document.querySelectorAll('.error, mat-error, .snack-bar-container, .mat-mdc-snack-bar-container, [role="alert"]'))
+                    .map(e => (e.innerText || '').trim()).filter(Boolean).join(' ') + ' ' + modelTurns.map(m => m.innerText || '').join(' ');
+                  const hasMedia = modelTurns.some(mt => mt.querySelectorAll('img[src^="blob:"], img[src^="data:image/"], video[src^="blob:"], video source[src]').length > 0);
+                  const hasDoneFooter = modelTurns.some(mt => Boolean(mt.querySelector('button[aria-label="Good response"], button[aria-label="Bad response"], .model-run-time-pill')));
+                  const hasOutput = hasMedia || hasDoneFooter || modelTurns.some(mt => (mt.textContent || '').replace(/(more_vert|thumb_up|thumb_down|edit)/g, '').trim().length > 0);
+                  const announcer = document.querySelector('.cdk-live-announcer-element')?.innerText || '';
+                  return {{ running, hasModelTurn: modelTurns.length > 0, hasOutput, totalLen, errTxt: errTxt.toLowerCase(), announcer }};
+                }})()"""
+                st_res = agentlimb_client.eval_js(poll_js, tab_id=tab_id).get("result", {}).get("result", {})
+                running = st_res.get("running", False)
+                has_output = st_res.get("hasOutput", False)
+                total_len = st_res.get("totalLen", 0)
+                err_txt = st_res.get("errTxt", "")
+                if running or st_res.get("hasModelTurn"):
+                    item["has_started"] = True
+
+                # 若 AI Studio 免費池偶發 Permission denied 或擁塞，自動原地重試或降級下一階免費模型
+                if any(k in err_txt for k in ("permission denied", "权限遭拒", "high demand", "503", "isn't available right now", "failed to generate")):
+                    ladder = ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.5-flash-lite"]
+                    if item["retry_count"] == 0 and item["model"] in ladder:
+                        next_model = item["model"]
+                    else:
+                        next_model = next((m for m in ladder if m != item["model"]), "")
+                    if next_model and item["retry_count"] < 2:
+                        item["retry_count"] += 1
+                        item["model"] = next_model
+                        item["has_started"] = False
+                        item["stable_ticks"] = 0
+                        item["prev_len"] = 0
+                        fb_url = f"https://aistudio.google.com/prompts/new_chat?model={next_model}"
+                        agentlimb_client.call_tool("navigate", {"tabId": tab_id, "url": fb_url})
+                        _wait_aistudio_hydrated(tab_id, timeout=15.0)
+                        if item["files"]:
+                            _aistudio_attach_files_agentlimb(tab_id, item["files"])
+                        agentlimb_client.call_tool(
+                            "form_input",
+                            {"tabId": tab_id, "selector": 'textarea[aria-label="Enter a prompt"]', "value": item["prompt"]},
+                        )
+                        time.sleep(0.3)
+                        init_res = agentlimb_client.eval_js(
+                            "({turns: document.querySelectorAll('ms-chat-turn').length, announcer: document.querySelector('.cdk-live-announcer-element')?.innerText || ''})",
+                            tab_id=tab_id,
+                        ).get("result", {}).get("result", {})
+                        item["before_turns"] = init_res.get("turns", 0)
+                        agentlimb_client.eval_js('document.querySelector("button.ctrl-enter-submits")?.click()', tab_id=tab_id)
+                        still_pending.append(item)
+                        continue
+                    raise RuntimeError(f"AI Studio 返回错误: {err_txt[:180]}")
+
+                if item["has_started"] and not running and has_output and total_len == item["prev_len"]:
+                    item["stable_ticks"] += 1
+                else:
+                    item["stable_ticks"] = 0
+                item["prev_len"] = total_len
+
+                if item["stable_ticks"] < 2:
+                    still_pending.append(item)
+                    continue
+
+                text_body, saved_files = _aistudio_extract_turn_payload(tab_id, item["before_turns"], Path(item["download_dir"]))
+                final_url = agentlimb_client.eval_js("location.href", tab_id=tab_id).get("result", {}).get("result", item["url"])
+                rec = {
+                    "role": role,
+                    "site": item["site"],
+                    "entry": "aistudio-agentlimb",
+                    "status": "ok",
+                    "model": item["model"],
+                    "downgraded_from": item["downgraded_from"] or None,
+                    "url": str(final_url),
+                    "text_chars": len(text_body),
+                    "saved_files": saved_files,
+                    "elapsed_sec": round(time.time() - item["started_at"], 2),
+                }
+                if item["out_file"]:
+                    p_out = Path(item["out_file"])
+                    p_out.parent.mkdir(parents=True, exist_ok=True)
+                    p_out.write_text(text_body, encoding="utf-8")
+                    rec["saved_text_file"] = str(p_out)
+                if item["unpack_json_dir"]:
+                    try:
+                        rec["unpacked_files"] = gw._unpack_json_from_text(text_body, item["unpack_json_dir"])
+                    except Exception:
+                        rec["unpacked_files"] = _extract_and_save_code(text_body, item["prompt"], item["unpack_json_dir"])
+                if not item["out_file"] and not rec.get("unpacked_files"):
+                    rec["text_preview"] = text_body[:600]
+                gw.execute_roster(
+                    action="set", roster_file=roster_path, role=role,
+                    site=item["site"], model=item["model"], tab_id=str(tab_id),
+                    url=str(final_url), status="done", project=project,
+                )
+                results.append(rec)
+                if not keep_tabs:
+                    try:
+                        agentlimb_client.call_tool("tab_close", {"tabId": tab_id})
+                    except Exception:
+                        pass
+            except Exception as exc:
+                gw.execute_roster(action="set", roster_file=roster_path, role=role, status="failed", project=project)
+                results.append({"role": role, "site": item["site"], "status": "error", "error": str(exc)})
+                if not keep_tabs:
+                    try:
+                        agentlimb_client.call_tool("tab_close", {"tabId": tab_id})
+                    except Exception:
+                        pass
+        pending = still_pending
+        if pending:
+            time.sleep(0.8)
+
+    for item in pending:
+        gw.execute_roster(action="set", roster_file=roster_path, role=item["role"], status="failed", project=project)
+        results.append({"role": item["role"], "site": item["site"], "status": "error", "error": f"波次轮询超时 ({timeout_sec}s)"})
+        if not keep_tabs:
+            try:
+                agentlimb_client.call_tool("tab_close", {"tabId": item["tab_id"]})
+            except Exception:
+                pass
+
+    all_ok = all(r.get("status") == "ok" for r in results)
+    return {
+        "status": "ok" if all_ok else "partial",
+        "channel": "agentlimb",
+        "project_dir": str(base_dir),
+        "roster_file": str(roster_path),
+        "results": results,
+        "elapsed_sec": round(time.time() - t0, 2),
+    }
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -1620,10 +2588,21 @@ if __name__ == "__main__":
 
     p_models = subparsers.add_parser("models", help="動態探索可用模型")
 
+    p_wave = subparsers.add_parser("wave", help="通道 A 多 Tab 並發波次執行")
+    p_wave.add_argument("--spec", required=True, help="Wave JSON 規格文件路徑")
+    p_wave.add_argument("--project-dir", default=".")
+    p_wave.add_argument("--roster-file", default=".web-team.json")
+    p_wave.add_argument("--project", default="")
+    p_wave.add_argument("--timeout", type=int, default=360)
+    p_wave.add_argument("--stagger", type=float, default=2.0)
+    p_wave.add_argument("--resume", action="store_true")
+    p_wave.add_argument("--keep-tabs", action="store_true")
+    p_wave.add_argument("--json", action="store_true", dest="as_json")
+
     p_task = subparsers.add_parser("task", help="执行 Agent 任務")
     p_task.add_argument("task_prompt", nargs="*", help="任務提示词")
     p_task.add_argument("--prompt", default="", help="任務提示词 (可選，或直接傳入 positional 參數)")
-    p_task.add_argument("--model", default="gemini-3.8-flash")
+    p_task.add_argument("--model", default="gemini-4-hydrogen")
     p_task.add_argument("--site", default="aistudio")
     p_task.add_argument("--entry", default="chat", help="入口模式：chat 或 task")
     p_task.add_argument("--thinking-level", default="high")
@@ -1653,8 +2632,27 @@ if __name__ == "__main__":
         print(json.dumps(res, ensure_ascii=False))
         sys.exit(0)
 
+    # 如果傳入了 wave 子命令
+    if len(sys.argv) > 1 and sys.argv[1] == "wave":
+        args = parser.parse_args()
+        spec_raw = json.loads(Path(args.spec).expanduser().resolve().read_text(encoding="utf-8"))
+        spec_tasks = spec_raw["tasks"] if isinstance(spec_raw, dict) and "tasks" in spec_raw else spec_raw
+        spec_project = args.project or (spec_raw.get("project", "") if isinstance(spec_raw, dict) else "")
+        res = execute_wave_agentlimb(
+            tasks=spec_tasks,
+            roster_file=args.roster_file,
+            project=spec_project,
+            project_dir=args.project_dir,
+            timeout_sec=args.timeout,
+            stagger_sec=args.stagger,
+            resume=args.resume,
+            keep_tabs=args.keep_tabs,
+        )
+        print(json.dumps(res, ensure_ascii=False))
+        sys.exit(0)
+
     # 彈性相容：如果使用者直接傳入參數或旗標 (如 --model 或直接寫提示词) 而未帶 task，自動補上 task
-    if len(sys.argv) > 1 and sys.argv[1] not in ("usage", "models", "task", "-h", "--help"):
+    if len(sys.argv) > 1 and sys.argv[1] not in ("usage", "models", "wave", "task", "-h", "--help"):
         sys.argv.insert(1, "task")
 
     # 执行 task 子命令
