@@ -555,6 +555,20 @@ function saveConfig(cfg) {
   }
   return merged;
 }
+function getWorkspaceRoot() {
+  try {
+    const wsFile = path2.join(os2.homedir(), ".dsh", "storages", "workspace.json");
+    if (fs2.existsSync(wsFile)) {
+      const data = JSON.parse(fs2.readFileSync(wsFile, "utf-8"));
+      const defId = data?.global?.defaultWorkspaceId;
+      const wsPath = data?.tables?.workspaces?.[defId]?.path;
+      if (wsPath && fs2.existsSync(wsPath)) {
+        return wsPath;
+      }
+    }
+  } catch {}
+  return process.cwd();
+}
 
 // src/bridge/runner.ts
 var execFileAsync = promisify(execFile);
@@ -663,7 +677,6 @@ import path4 from "node:path";
 import fs4 from "node:fs";
 import os3 from "node:os";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
-
 // src/proposal.ts
 import fs3 from "node:fs";
 import path3 from "node:path";
@@ -754,6 +767,20 @@ function findCustomPlaybook(query) {
   } catch {}
   return;
 }
+function isExistingLocalFile(rawPath) {
+  const candidates = [
+    path3.isAbsolute(rawPath) ? rawPath : null,
+    path3.resolve(process.cwd(), rawPath),
+    path3.resolve(getWorkspaceRoot(), rawPath)
+  ].filter(Boolean);
+  for (const c of candidates) {
+    try {
+      if (fs3.existsSync(c) && fs3.statSync(c).isFile())
+        return true;
+    } catch {}
+  }
+  return false;
+}
 function extractFilesFromTask(task, explicitFiles) {
   const files = Array.isArray(explicitFiles) ? explicitFiles.map((f) => String(f).trim()).filter(Boolean) : [];
   const pushUnique = (f) => {
@@ -768,8 +795,9 @@ function extractFilesFromTask(task, explicitFiles) {
   const fileRegex = /\b(?:(?:\.?\.?\/)?[a-zA-Z0-9_\-]+\/)*[a-zA-Z0-9_\-]+\.(?:ts|tsx|js|jsx|py|json|md|txt|pdf|png|jpg|jpeg|gif|webp|csv|log|yaml|yml|rs|go|cpp|c|h|java|html|css|sh)\b/gi;
   while ((match = fileRegex.exec(task)) !== null) {
     const f = match[0].trim();
-    if (!f.includes("google.com"))
+    if (!f.includes("google.com") && isExistingLocalFile(f)) {
       pushUnique(f);
+    }
   }
   return files;
 }
@@ -1024,21 +1052,7 @@ function parseTaskToProposal(task, config, overrides) {
 // src/bridge/agent-executor.ts
 var execFileAsync2 = promisify2(execFile2);
 function getWorkspaceDownloadDir() {
-  try {
-    const wsFile = path4.join(os3.homedir(), ".dsh", "storages", "workspace.json");
-    if (fs4.existsSync(wsFile)) {
-      const data = JSON.parse(fs4.readFileSync(wsFile, "utf-8"));
-      const defId = data?.global?.defaultWorkspaceId;
-      const wsPath = data?.tables?.workspaces?.[defId]?.path;
-      if (wsPath && fs4.existsSync(wsPath)) {
-        return path4.join(wsPath, "downloads");
-      }
-    }
-  } catch {}
-  return path4.join(process.cwd(), "downloads");
-}
-function getWorkspaceRoot() {
-  return path4.dirname(getWorkspaceDownloadDir());
+  return path4.join(getWorkspaceRoot(), "downloads");
 }
 function sanitizeSessionId(sessionId) {
   const cleaned = (sessionId || "default").trim().replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 64);

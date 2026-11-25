@@ -90,4 +90,13 @@ describe('v0.4.0 Light-Gate & Empowered Agent Platform', () => {
     expect(clean.tasks[1].files).toEqual(['/repo/.env', '/repo/src/app.py'])
     expect(clean.tasks[1].thinking_level).toBe('medium')
   })
+
+  it('ignores non-existent output filenames like index.html or board.json in preview card', () => {
+    const res = parseTaskToProposal('請幫我生成極簡番茄鐘 index.html 並持久化到 nonexistent_board_999.json', DEFAULT_CONFIG, {
+      site: 'aistudio',
+      model: 'gemini-3.8-flash',
+    })
+    expect(res.files).toEqual([])
+    expect(res.card).not.toContain('挂载文件')
+  })
 })

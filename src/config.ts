@@ -83,3 +83,18 @@ export function saveConfig(cfg: Partial<PluginConfig>): PluginConfig {
   }
   return merged
 }
+
+export function getWorkspaceRoot(): string {
+  try {
+    const wsFile = path.join(os.homedir(), '.dsh', 'storages', 'workspace.json')
+    if (fs.existsSync(wsFile)) {
+      const data = JSON.parse(fs.readFileSync(wsFile, 'utf-8'))
+      const defId = data?.global?.defaultWorkspaceId
+      const wsPath = data?.tables?.workspaces?.[defId]?.path
+      if (wsPath && fs.existsSync(wsPath)) {
+        return wsPath
+      }
+    }
+  } catch {}
+  return process.cwd()
+}

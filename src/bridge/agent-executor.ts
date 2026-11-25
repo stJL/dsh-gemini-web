@@ -5,7 +5,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { detectDualChannel, findAgentLimbScript, findCliScript, findPythonVenv, getPluginDir } from './detector.js'
-import { PluginConfig, loadConfig } from '../config.js'
+import { PluginConfig, getWorkspaceRoot, loadConfig } from '../config.js'
+export { getWorkspaceRoot } from '../config.js'
 import { parseTaskToProposal, WaveTaskInput } from '../proposal.js'
 
 const execFileAsync = promisify(execFile)
@@ -48,22 +49,7 @@ export interface AgentTaskResult {
 }
 
 export function getWorkspaceDownloadDir(): string {
-  try {
-    const wsFile = path.join(os.homedir(), '.dsh', 'storages', 'workspace.json')
-    if (fs.existsSync(wsFile)) {
-      const data = JSON.parse(fs.readFileSync(wsFile, 'utf-8'))
-      const defId = data?.global?.defaultWorkspaceId
-      const wsPath = data?.tables?.workspaces?.[defId]?.path
-      if (wsPath && fs.existsSync(wsPath)) {
-        return path.join(wsPath, 'downloads')
-      }
-    }
-  } catch {}
-  return path.join(process.cwd(), 'downloads')
-}
-
-export function getWorkspaceRoot(): string {
-  return path.dirname(getWorkspaceDownloadDir())
+  return path.join(getWorkspaceRoot(), 'downloads')
 }
 
 export function sanitizeSessionId(sessionId?: string): string {

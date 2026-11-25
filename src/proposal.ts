@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { PluginConfig, loadConfig } from './config.js'
+import { PluginConfig, getWorkspaceRoot, loadConfig } from './config.js'
 
 export interface PlaybookInfo {
   slug: string
@@ -131,6 +131,21 @@ function findCustomPlaybook(query: string): PlaybookInfo | undefined {
   return undefined
 }
 
+function isExistingLocalFile(rawPath: string): boolean {
+  const candidates = [
+    path.isAbsolute(rawPath) ? rawPath : null,
+    path.resolve(process.cwd(), rawPath),
+    path.resolve(getWorkspaceRoot(), rawPath),
+  ].filter(Boolean) as string[]
+
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(c) && fs.statSync(c).isFile()) return true
+    } catch {}
+  }
+  return false
+}
+
 function extractFilesFromTask(task: string, explicitFiles?: string[]): string[] {
   const files: string[] = Array.isArray(explicitFiles)
     ? explicitFiles.map((f) => String(f).trim()).filter(Boolean)
@@ -149,7 +164,9 @@ function extractFilesFromTask(task: string, explicitFiles?: string[]): string[] 
   const fileRegex = /\b(?:(?:\.?\.?\/)?[a-zA-Z0-9_\-]+\/)*[a-zA-Z0-9_\-]+\.(?:ts|tsx|js|jsx|py|json|md|txt|pdf|png|jpg|jpeg|gif|webp|csv|log|yaml|yml|rs|go|cpp|c|h|java|html|css|sh)\b/gi
   while ((match = fileRegex.exec(task)) !== null) {
     const f = match[0].trim()
-    if (!f.includes('google.com')) pushUnique(f)
+    if (!f.includes('google.com') && isExistingLocalFile(f)) {
+      pushUnique(f)
+    }
   }
 
   return files
