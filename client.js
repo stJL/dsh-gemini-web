@@ -1410,7 +1410,7 @@ window.__ModuleLoader__.load({
                 border: '1px solid rgba(99, 102, 241, 0.3)',
                 fontWeight: 500,
               }
-            }, 'v0.3.0-beta.1'),
+            }, 'v0.4.0-alpha.1'),
           ]),
           isModal && h('button', {
             onClick: onClose,
@@ -2213,7 +2213,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'gw-card', style: { borderColor: 'rgba(168, 85, 247, 0.4)' } }, [
           h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
             h('div', { className: 'gw-title', style: { color: '#c084fc' } }, t('studio_title')),
-            h('span', { className: 'gw-badge', style: { background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' } }, 'Wave 0.3.0-beta.1')
+            h('span', { className: 'gw-badge', style: { background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' } }, 'Wave 0.4.0-alpha.1')
           ]),
           h('div', { className: 'gw-desc', style: { fontSize: 11, opacity: 0.85, marginBottom: 12 } }, t('studio_desc')),
 

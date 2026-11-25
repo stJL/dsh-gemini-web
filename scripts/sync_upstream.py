@@ -25,17 +25,24 @@ DSH_PLUGIN_DIR = Path(__file__).resolve().parent.parent
 # 需要從原作者倉庫同步的底層核心腳本
 SYNC_SCRIPTS = [
     "scripts/gemini_web.py",
-    "scripts/gemini_agentlimb.py",
-    "scripts/agentlimb_client.py",
     "scripts/platform_utils.py",
     "scripts/setup_skill.py",
 ]
 
-# 需要智慧增量同步的資料夾（僅覆蓋上游自帶檔案，保留 DSH 專屬檔案）
+# 需要智慧增量同步的資料夾（僅新增上游新檔案或同步非受保護檔案，絕不覆蓋 DSH 深度客製檔）
 SYNC_DIRS = [
     "references",
     "tests",
 ]
+
+# 由 DSH 深度維護與實機調優的檔案：禁止在同步時直接覆蓋
+PROTECTED_FILES = {
+    "scripts/agentlimb_client.py",
+    "scripts/gemini_agentlimb.py",
+    "references/models.md",
+    "tests/test_core.py",
+    "tests/test_perf_and_dom.py",
+}
 
 def run_cmd(cmd, cwd=None):
     res = subprocess.run(cmd, cwd=cwd, shell=True, capture_output=True, text=True)
@@ -92,8 +99,70 @@ def apply_dsh_patches():
 
             new_text, count = flow_body_pattern.subn(repl_flow, text, count=1)
             if count > 0:
-                gw_py.write_text(new_text, encoding="utf-8")
+                text = new_text
+                gw_py.write_text(text, encoding="utf-8")
                 print("  [Patch] 已注入 Google Flow 點數重置與週期解析增強補丁至 gemini_web.py")
+
+        # 1b. 守護免費號降級階梯、permission denied 辨識與 Wave 預設 hydrogen（防止被上游預設 neon 蓋掉）
+        gw_changed = False
+        old_fallback = (
+            '_AISTUDIO_FALLBACK_ORDER = {\n'
+            '    "gemini-4-hydrogen": "gemini-4-neon",\n'
+            '    "gemini-4-neon": "gemini-4-hydrogen",\n'
+            '    "gemini-4-argon": "gemini-4-neon",\n'
+            '    "gemini-3.8-flash": "gemini-4-hydrogen",\n'
+            '}'
+        )
+        new_fallback = (
+            '_AISTUDIO_FALLBACK_ORDER = {\n'
+            '    "gemini-4-neon": "gemini-4-hydrogen",\n'
+            '    "gemini-4-argon": "gemini-4-hydrogen",\n'
+            '    "gemini-4-carbon": "gemini-4-hydrogen",\n'
+            '    "gemini-4-hydrogen": "gemini-3.8-flash",\n'
+            '    "gemini-3.8-flash": "gemini-3.5-flash-lite",\n'
+            '}'
+        )
+        if old_fallback in text:
+            text = text.replace(old_fallback, new_fallback)
+            gw_changed = True
+
+        if "permission denied|权限遭拒|check your account permissions" not in text:
+            text_new = text.replace(
+                'r"503|service is unavailable|isn\'t available right now|please wait a minute and try again|high demand|spikes in demand|error\\s*14|resource exhausted|temporarily unavailable"',
+                'r"503|service is unavailable|isn\'t available right now|please wait a minute and try again|high demand|spikes in demand|error\\s*14|resource exhausted|temporarily unavailable|permission denied|权限遭拒|check your account permissions"',
+            )
+            if text_new != text:
+                text = text_new
+                gw_changed = True
+
+        if 'button[aria-label="Flow Agent"][aria-pressed="true"]' not in text and "for (const b of document.querySelectorAll('button'))" in text:
+            fa_snippet = (
+                '            const fa = document.querySelector(\'button[aria-label="Flow Agent"][aria-pressed="true"], button[aria-label*="智能体"][aria-pressed="true"]\');\n'
+                '            if (fa) {\n'
+                '                fa.click();\n'
+                '                return true;\n'
+                '            }\n'
+                "            for (const b of document.querySelectorAll('button'))"
+            )
+            text_new = text.replace("            for (const b of document.querySelectorAll('button'))", fa_snippet, 1)
+            if text_new != text:
+                text = text_new
+                gw_changed = True
+
+        if 'eff_model = model or ("lyria" if site == "lyria" else ("tts" if site == "tts" else "neon"))' in text:
+            text = text.replace(
+                'eff_model = model or ("lyria" if site == "lyria" else ("tts" if site == "tts" else "neon"))',
+                'eff_model = model or ("lyria" if site == "lyria" else ("tts" if site == "tts" else "hydrogen"))',
+            )
+            gw_changed = True
+
+        if 'model=model or "neon"' in text:
+            text = text.replace('model=model or "neon"', 'model=model or "hydrogen"')
+            gw_changed = True
+
+        if gw_changed:
+            gw_py.write_text(text, encoding="utf-8")
+            print("  [Patch] 已確認保留 DSH 免費號降級階梯與權限防護至 gemini_web.py")
 
     # 2. 守護 scripts/gemini_agentlimb.py
     al_py = DSH_PLUGIN_DIR / "scripts" / "gemini_agentlimb.py"
@@ -202,9 +271,12 @@ def main():
             for item in src_d.rglob("*"):
                 if item.is_file():
                     rel = item.relative_to(src_d)
+                    rel_repo = f"{d}/{rel.as_posix()}"
                     target_file = dst_d / rel
+                    if rel_repo in PROTECTED_FILES or (rel_repo.startswith("references/playbooks/") and target_file.exists()):
+                        continue
                     target_file.parent.mkdir(parents=True, exist_ok=True)
-                    # 覆蓋或新增上游檔案，完全不刪除任何既有 DSH 檔案 (如 *.test.ts)
+                    # 覆蓋或新增上游非受保護檔案，完全不刪除或覆蓋 DSH 專屬檔案
                     shutil.copy2(item, target_file)
                     synced_count += 1
             print(f"  ✅ 已增量同步 {d}/ ({synced_count} 個上游檔案，DSH 專屬檔案完好保留)")

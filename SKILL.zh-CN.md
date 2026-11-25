@@ -1,123 +1,56 @@
 ---
 name: gemini-web-agent
 description: >-
-  【必须最优先加载・一律先问后用】当用户提到 AI Studio, Google Flow, Gemini 网页端, Wave, 编队, Playbook, 虚拟工作室, 开发Web工具, 任务看板, 指定 Hydrogen/Flash/Flash-Lite/Neon/Nano Banana/Omni/Lyria, 或输入 `/gemini-web-agent` 时必须调用！
-  1. 单一门禁铁律：唯一合法指令为 `/gemini-web-agent`。
-  2. 先问后用（调用 gemini_preview 与 ask_user_question）：无论用户带命令或日常聊天，宿主 AI 严禁本地直接作答，必须调用 `gemini_preview` 获取确定性提案卡，并立即调用 `ask_user_question` 弹出交互选择栏供用户点击，严禁擅自发包或本地代劳！
-  3. 确认后发包：待用户在选择栏点击确认或回复「1」/「确认」后，调用 `gemini_web_agent` 正式发包。
+  【轻量门禁・先问后用】当用户提到 AI Studio, Google Flow, Lyria, Gemini 网页端, Wave, 编队, Playbook, 虚拟工作室, 指定 Hydrogen/Flash/Flash-Lite/Neon/Nano Banana/Omni/Lyria, 或输入 `/gemini-web-agent` 时加载！
+  1. 第 1 步门禁：调用 `gemini_preview`（可附带结构化 `site`/`model`/`entry`/`wave_tasks`），输出确认卡并立即调用 `ask_question` / `ask_user_question` 等待授权。
+  2. 第 2 步授权编排：确认后按需查阅 `references/` 文档，在用户 GUI 授权的模型与安全护栏内自由调用 `gemini_web_agent` 执行。
 ---
 
-# Gemini Web Agent（确定性工具流与单一门禁架构）
+# Gemini Web Agent（v0.4 轻量门禁与多 Agent 算力平台）
 
-> [!IMPORTANT]
-> **四大核心调度铁律**：
-> 1. **唯一合法命令门禁**：外部 Google 算力调度的唯一合法指令是 `/gemini-web-agent`。
-> 2. **零本地开销与严禁代劳**：严禁本地直接作答，严禁调用 `subagent`（消耗付费 API），严禁使用本地 `read`/`cat`/`bash` 预读取 `@文件`——直接将文件路径交由外部网页端解析！
-> 3. **第 1 步先问后用（必须调用 `gemini_preview` 与提问工具）**：
->    - 严禁自行脑补排版确认卡！必须调用 `gemini_preview(task: "...")` 获得 100% 确定性解析的提案卡；
->    - 在聊天中原样输出卡片 Markdown；
->    - **必须立即调用交互提问工具**（原生 `ask_question` 或 MCP `ask_user_question`）弹出交互选项胶囊：
->      - 原生 `ask_question`（Antigravity 规范，options 为字符串数组）：
->        ```json
->        {
->          "questions": [
->            {
->              "question": "👉 请确认是否发包执行？",
->              "options": [
->                "(Recommended) 确认发包执行",
->                "调整参数",
->                "取消调度（本地作答）"
->              ]
->            }
->          ]
->        }
->        ```
->      - MCP `ask_user_question`：
->        ```json
->        {
->          "questions": [
->            {
->              "id": "gemini_confirm",
->              "question": "👉 请确认是否发包执行？",
->              "options": [
->                { "label": "(Recommended) 确认发包执行" },
->                { "label": "调整参数" },
->                { "label": "取消调度（本地作答）" }
->              ]
->            }
->          ]
->        }
->        ```
->    - **调用完提问工具后彻底停步**，严禁调用任何其他工具（严禁 `run_command`），直接结束本轮回答，等待用户点击确认！
-> 4. **多轮任务循环重置（抗历史惯性）**：确认流程是针对【每一个独立任务】的循环，绝非整场对话只出现一次！每轮新任务都必须执行确认流程，绝不可跳过确认直接作答！
+## 核心契约
+
+1. **先问后用门禁（每个独立任务重置）**：
+   - 优先调用 `gemini_preview(task, ...)` 生成确认卡，并获取当前用户在 **GUI 中授权的配置快照（`~/.dsh/gemini-web-config.json`）**。
+   - 原样输出确认卡 Markdown，立即调用提问工具（原生 `ask_question` 或 MCP `ask_user_question`）弹出按钮，停步等待用户确认。
+2. **授权后由主 AI 自由编排（遵守 GUI 授权与安全底线）**：
+   - 用户确认后，按需查阅 `references/` 目录中的规格手册来规划复杂任务、Wave 多角色矩阵、Lyria 音乐生成或 Gemini `Task` 沙盒。
+   - 严格遵守用户在 GUI 设定的 `fallbackLadder` / `strict` 模式、`thinkingLevel` 与安全护栏（不绕过 `Paid` 过滤，不向 `gemini-spark` 传入 `.env` / 私钥）。
+   - 分析本地文件时直接通过 `files` 传入路径由网页端 1M 上下文挂载分析，无需把超长日志全文重抄进本地对话。
+3. **交付规范**：
+   - 回复中保留降级通知（若有）与可点击的 `file:///` 落地文件绝对路径，无需全量重抄已落盘的超长源码。
 
 ---
 
-## 💡 渠道与受支持模型速查
+## 渠道与模型速查
 
-| 渠道 | 支持指定之模型代号 | 说明 |
+| 站点 (`site`) | 支持模型与入口 | 说明 |
 | :--- | :--- | :--- |
-| **Google AI Studio** | `Hydrogen` (`gemini-4-hydrogen`)<br>`Flash` (`gemini-3.8-flash`)<br>`Flash Lite` (`gemini-3.5-flash-lite`)<br>`Neon` (`gemini-4-neon`) | • 深度推理与长文本首选 `Hydrogen`；<br>• 日常极速首选 `Flash Lite`；<br>• ⚠️ **提示**：旧版实验代号 `Argon` 已被 Google 官方升级合并入 `Hydrogen`，若指定 Argon 将自动映射为 Hydrogen。 |
-| **Gemini 官网** | `Auto` (官方原生模型) | 官网由 Google 原生大模型自动作答与联网增强，无需且无法指定单独模型代号。 |
-| **Wave 虚拟外包工作室** | `Wave 并发引擎`<br>`5 套官方研发编队` | • 多 Tab 错峰并发派单，1 Tab 1 员工持久绑定<br>• 架构定界 ➔ 并行研发 ➔ Debian 12 沙盒单测 ➔ 成果自动解包 |
-| **Google Flow** | `Nano Banana 2.1`<br>`Omni 1.2 / Veo` | • 生图默认享受 0 扣点特权 (`Nano Banana 2.1`)；<br>• 视频生成请指定 `Omni 1.2` 或 `Veo`。 |
+| **`aistudio`** | `gemini-4-hydrogen`（默认，`argon` 自动映射至此）<br>`gemini-3.8-flash`、`gemini-3.5-flash-lite`<br>`gemini-4-neon`（PRO 解锁） | 1M 上下文与免弹窗文件挂载；免费号封印 `Extra High`，PRO 号自动解锁。 |
+| **`gemini`** | `Auto`（`entry: "chat"` 或 `"task"`） | 5 小时滚动池；`task` 运行于 Debian 12 沙盒（多文件打包用 Python `zipfile`；联网时禁传密钥）。 |
+| **`flow`** | `Nano Banana 2.1`（画布 0 扣点）<br>`Omni 1.2 / Veo`（`entry: "canvas"`） | 免费 50 点/日或 PRO 月池；底部画布生图 0 点数消耗。 |
+| **`lyria`** | `lyria-3.5`、`lyria-3-pro-preview`（`entry: "music"`） | PRO 账号解锁 AI Studio 音乐台生成（自动保存本地 `.mp3`）。 |
+| **`wave`** | 结构化 `wave_tasks` 数组或 Playbook | 多 Tab 1-Tab-1-Role 错峰并发；产出隔离保存至 `.gemini-teams/<sessionId>/` 审查后合并。 |
 
 ---
 
-## 一、 第 1 步：生成提案并弹出交互选择栏
+## 第 1 步：确认门禁与交互按钮
 
-收到用户任务指令后，**必须且只能执行以下两步**：
+调用 `gemini_preview` 传入 `task`（可附带已知的 `site`、`entry`、`model`、`thinking_level`、`files`、`playbook`、`wave_tasks`），输出确认卡后立即调用提问工具：
 
-1. **调用 `gemini_preview` 工具**：
-   - 传入参数：`{ "task": "用户的原始完整指令" }`
-   - `gemini_preview` 将由后端代码 100% 确定性解析目标渠道、入口模式、模型阶梯与挂载文件，杜绝任何模型幻觉！
-2. **在聊天中输出卡片，并立即调用 `ask_user_question`**：
-   - 原样输出 `gemini_preview` 返回的卡片 Markdown；
-   - 立即调用 `ask_user_question`（参数同下方模板），聊天界面将自动弹出可点击的选择按钮：
-     ```json
-     {
-       "questions": [
-         {
-           "id": "gemini_confirm",
-           "question": "👉 请确认是否发包执行？",
-           "options": [
-             { "label": "(Recommended) 确认发包执行" },
-             { "label": "调整参数" },
-             { "label": "取消调度（本地作答）" }
-           ]
-         }
-       ]
-     }
-     ```
-   - 结束当前轮次回显，等待用户点击！
+- **原生 `ask_question`**：
+  `{ "questions": [{ "question": "👉 请确认是否发包执行？", "options": ["(Recommended) 确认发包执行", "调整参数", "取消调度（本地作答）"] }] }`
+- **MCP `ask_user_question`**：
+  `{ "questions": [{ "id": "gemini_confirm", "question": "👉 请确认是否发包执行？", "options": [{ "label": "(Recommended) 确认发包执行" }, { "label": "调整参数" }, { "label": "取消调度（本地作答）" }] }] }`
 
 ---
 
-## 二、 第 2 步：授权发包与工具参数
+## 第 2 步：查阅手册与调用 `gemini_web_agent`
 
-当用户确认（点击选择栏「确认发包执行」或回复 `1` / `确认`）后，正式调用 `gemini_web_agent`：
+确认通过后，按需查阅 `references/` 下的机读规范：
+- `references/director_prompt.md`：Debian 12 沙盒边界、`zipfile` 打包规范、`gemini-spark` 密钥红线。
+- `references/models.md`：完整 `model-id` 与 `Paid` / PRO 解锁标记。
+- `references/agentlimb.md`：通道 A 浏览器桥接与选择器规范。
+- `references/playbooks/*.md`：5 套官方编队模板及 `custom_squad.md.example`（定制新编队须经确认卡同意后方可写入）。
 
-| 工具参数 | 说明与传参规范 |
-| :--- | :--- |
-| `task` | 用户的完整需求提示词与任务描述 |
-| `files` | 待上传的本地文件路径数组（若留空，插件将自动从 task 中提取兜底） |
-| `model` | 用户指定的具体模型别名；智能降级模式下留空 |
-| `site` | 目标渠道：`aistudio`（默认）、`flow` 或 `gemini` |
-| `entry` | `chat`（默认）、`task` 或 `canvas` |
-| `thinking_level` | `high`（默认）、`medium` 或 `low` |
-| `thinking_policy` | `adaptive`（默认）、`strict` 或 `custom` |
-| `new_chat` | `true`（默认开启独立新会话） |
-
-**交付规范**：调用完成后，在最终回复中呈现降级通知、可点击的 `file://` 落地文件超链接以及核心架构说明，切忌全量重抄超长代码。
-
----
-
-## 三、 机读参考规范与沙盒约束索引（供 AI 规划与外包拆单查阅）
-
-在规划复杂任务、Wave 多 Tab 编队或派发 Gemini `Task` 任务前，可按需查阅 `references/` 目录下的机读文档：
-- **`references/director_prompt.md`（沙盒边界与总监契约）**：
-  - Gemini Web `Task` 运行在 **Debian 12**（`2C / 7.8G / 19G`，普通用户 `spark`，预装 `python3 3.11` / `node 18` / `gcc 12` / `ffmpeg 5.1` / `libreoffice 7.4` / 无头 `chromium 156` / `PIL` / `cv2` / `pydub` / `pandas` / `matplotlib`）。无 `zip` CLI，多文件打包必须写明使用 **Python `zipfile`**。
-  - **联网与密钥红线（`gemini-spark`）**：未开启 `gemini.google.com/gemini-spark` 远程网络访问时禁用 `pip/npm install`；开启联网后所有任务共用同一台远程主机，**严禁向 Task 发送 API Key、`.env`、私钥或敏感机密数据**。
-- **`references/models.md`（全量模型路由表）**：核对真实 `model-id` 与 `Paid` 付费标记，避免免费账号误触 `4 Neon` 或付费模型。
-- **`references/agentlimb.md`（免重登浏览器宏）**：含 `gem-segmented-button` 延迟水合等待与跨端选择器规范。
-- **`references/playbooks/*.md`（5 大官方编队模板）**：若用户需定制新编队，**必须先按标准格式草拟方案并经确认卡同意后才可沉淀**，严禁在后台无监督擅自调用 `playbook add`。
+随后可直接传入单任务参数（`task`, `site`, `entry`, `model`, `thinking_level`, `thinking_policy`, `files`, `new_chat`, `confirmed: true`）或结构化多角色 Wave 参数（`site: "wave"`, `project`, `wave_tasks: [{ role, site, model, prompt, out_file, unpack_json_dir, thinking_level, files }]`, `resume`, `confirmed: true`）调用 `gemini_web_agent`。
