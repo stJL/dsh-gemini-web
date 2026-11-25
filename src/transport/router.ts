@@ -1,9 +1,26 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { spawn, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import path from 'node:path'
 import { detectDualChannel, detectAgentLimb, findPythonVenv, findAgentLimbScript } from '../bridge/detector.js'
 import { fetchUsage } from '../bridge/runner.js'
-import { executeAgentTask, getRoster, clearRoster, auditRoster, getPlaybooks, getPlaybookDetail, executeWave } from '../bridge/agent-executor.js'
+import {
+  executeAgentTask,
+  getRoster,
+  clearRoster,
+  auditRoster,
+  getPlaybooks,
+  getPlaybookDetail,
+  addPlaybook,
+  executeWave,
+  listSessionDeliveries,
+  mergeSessionDeliveries,
+  openLocalDirectory,
+  getPlaybooksDirectory,
+  getOrCreateSessionWaveDir,
+  getSessionRosterFile,
+  runDoctor,
+} from '../bridge/agent-executor.js'
 import { loadConfig, saveConfig, type PluginConfig } from '../config.js'
 import { PLAYBOOKS } from '../proposal.js'
 
@@ -142,13 +159,13 @@ export function createApiRouter(ctx?: any) {
         }
         if (discovered.length === 0) {
           discovered = [
-            { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite', new: false, paid: false },
-            { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', new: false, paid: false },
-            { id: 'gemini-4-neon', name: 'Gemini 4 Neon', new: true, paid: false },
             { id: 'gemini-4-hydrogen', name: 'Gemini 4 Hydrogen', new: true, paid: false },
-            { id: 'gemini-4-argon', name: 'Gemini 4 Argon', new: false, paid: false },
-            { id: 'gemini-nano-banana-2.1', name: 'Nano Banana 2.1', new: true, paid: false },
-            { id: 'gemini-omni-1.2-flash', name: 'Gemini Omni 1.2 Flash', new: true, paid: false },
+            { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', new: false, paid: false },
+            { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite', new: false, paid: false },
+            { id: 'gemini-4-neon', name: 'Gemini 4 Neon', new: true, paid: true },
+            { id: 'gemini-4-argon', name: 'Gemini 4 Argon', new: false, paid: true },
+            { id: 'gemini-nano-banana-2.1', name: 'Nano Banana 2.1', new: true, paid: true },
+            { id: 'gemini-omni-1.2-flash', name: 'Gemini Omni 1.2 Flash', new: true, paid: true },
           ]
         }
         if (!discovered.some((m: any) => m.id === 'gemini.google.com')) {
@@ -165,27 +182,41 @@ export function createApiRouter(ctx?: any) {
       }
 
       if (routePath === '/roster' && method === 'GET') {
-        const roster = await getRoster()
+        const sessionId = url.searchParams.get('sessionId') || undefined
+        const roster = await getRoster(undefined, sessionId)
         return send(200, roster)
       }
 
       if (routePath === '/roster/clear' && method === 'POST') {
-        const result = await clearRoster()
+        const body = await readBody(req)
+        const result = await clearRoster(undefined, body.sessionId || url.searchParams.get('sessionId') || undefined)
         return send(200, result)
       }
 
       if (routePath === '/roster/audit' && method === 'POST') {
         const body = await readBody(req)
-        const result = await auditRoster(body.projectDir || '.')
+        const result = await auditRoster(body.projectDir, undefined, body.sessionId || undefined)
         return send(200, result)
       }
 
       if (routePath === '/playbooks' && method === 'GET') {
         const pb = await getPlaybooks()
+        const diskList: any[] = pb.ok && Array.isArray(pb.data?.playbooks) ? pb.data.playbooks : []
+        const officialSlugs = new Set(Object.keys(PLAYBOOKS))
+        const customPlaybooks = diskList
+          .filter((item) => item?.name && !officialSlugs.has(item.name))
+          .map((item) => ({ ...item, isCustom: true }))
         return send(200, {
           ok: true,
-          playbooks: pb.ok && pb.data?.playbooks ? pb.data.playbooks : Object.values(PLAYBOOKS),
+          playbooks: diskList.length > 0 ? diskList : Object.values(PLAYBOOKS),
+          customPlaybooks,
         })
+      }
+
+      if (routePath === '/playbooks' && method === 'POST') {
+        const body = await readBody(req)
+        const result = await addPlaybook(body)
+        return send(result.ok ? 200 : 400, result)
       }
 
       if (routePath.startsWith('/playbook/') && method === 'GET') {
@@ -196,11 +227,44 @@ export function createApiRouter(ctx?: any) {
 
       if (routePath === '/wave' && method === 'POST') {
         const body = await readBody(req)
+        const sessionId = body.sessionId || undefined
+        const resume = Boolean(body.resume)
+        const waveDir = body.projectDir || getOrCreateSessionWaveDir(sessionId, resume)
+        const rosterFile = body.rosterFile || getSessionRosterFile(sessionId)
         const result = await executeWave(body.spec || body.tasks, {
-          projectDir: body.projectDir,
+          projectDir: waveDir,
+          rosterFile,
           timeoutSec: body.timeoutSec,
+          resume,
         })
-        return send(200, result)
+        return send(200, { ...result, waveDir, rosterFile })
+      }
+
+      if (routePath === '/deliveries' && method === 'GET') {
+        const sessionId = url.searchParams.get('sessionId') || undefined
+        return send(200, listSessionDeliveries(sessionId))
+      }
+
+      if (routePath === '/deliveries/merge' && method === 'POST') {
+        const body = await readBody(req)
+        return send(200, mergeSessionDeliveries(body.sessionId, body.waveName))
+      }
+
+      if (routePath === '/open-dir' && method === 'POST') {
+        const body = await readBody(req)
+        if (body.target === 'playbooks') {
+          return send(200, openLocalDirectory(getPlaybooksDirectory()))
+        }
+        if (body.target === 'deliveries') {
+          const deliveries = listSessionDeliveries(body.sessionId)
+          const wave = body.waveName ? deliveries.waves.find((w) => w.name === body.waveName) : deliveries.waves[0]
+          return send(200, openLocalDirectory(wave ? wave.path : deliveries.teamDir))
+        }
+        return send(400, { ok: false, error: 'Unsupported directory target' })
+      }
+
+      if (routePath === '/doctor' && method === 'GET') {
+        return send(200, await runDoctor())
       }
 
       return send(404, { error: 'Not found' })

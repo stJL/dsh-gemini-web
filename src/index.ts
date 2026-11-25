@@ -169,6 +169,10 @@ ${buildDynamicCardGuidance()}
               items: { type: 'string' },
               description: '待上传至 Google 网页端分析的本地文件、图片、日志或论文 PDF 绝对/相对路径列表（选填，支持多文件）',
             },
+            resume: {
+              type: 'boolean',
+              description: 'Wave 断点续传：跳过当前会话花名册中已完成的角色，仅重试未完成角色（选填）',
+            },
           },
         },
         output: {
@@ -229,6 +233,7 @@ ${buildDynamicCardGuidance()}
             newChat: args.new_chat,
             sessionId: sessionId,
             files: filesToPass,
+            resume: Boolean(args.resume),
           })
           if (!res.ok) {
             if (res.error?.includes('CONGESTION_HALT')) {
@@ -243,7 +248,8 @@ ${buildDynamicCardGuidance()}
             const pathDisplay = res.fallbackHistory || `\`${initial}\` ➔ 尖峰拥塞 ➔ \`${current}\``
             notice = `> 🔄 **【模型与渠道降级调度流程通知】**\n> - 原选模型/渠道：\`${initial}\`（遭遇 Google AI Studio 免费池尖峰排队）\n> - 调度路径：${pathDisplay}\n> - 最终交付渠道与模型：\`${current}\`（推演与生成成功）\n\n`
           } else if (res.site === 'wave' || args.site === 'wave') {
-            notice = `> 👥 **【Wave 虚拟外包工作室通知】**：本次波次已由 **Wave 并发波次引擎** 顺利派发至多 Tab 并发执行并解包完成。\n\n`
+            const waveLocation = res.waveDir ? `\n> - 📁 会话隔离交付目录：\`${res.waveDir}\`（可在面板确认后一键合并至项目）` : ''
+            notice = `> 👥 **【Wave 虚拟外包工作室通知】**：本次波次已由 **Wave 并发波次引擎** 顺利派发至多 Tab 并发执行并解包完成。${waveLocation}\n\n`
           } else if (res.site === 'gemini' || args.site === 'gemini') {
             notice = `> 🌐 **【执行渠道通知】**：本次任务已由 **Gemini 官网通道 (gemini.google.com)** 顺利执行完成。\n\n`
           } else if (res.site === 'flow' || args.site === 'flow') {

@@ -109,3 +109,15 @@ description: >-
 | `new_chat` | `true`（默认开启独立新会话） |
 
 **交付规范**：调用完成后，在最终回复中呈现降级通知、可点击的 `file://` 落地文件超链接以及核心架构说明，切忌全量重抄超长代码。
+
+---
+
+## 三、 机读参考规范与沙盒约束索引（供 AI 规划与外包拆单查阅）
+
+在规划复杂任务、Wave 多 Tab 编队或派发 Gemini `Task` 任务前，可按需查阅 `references/` 目录下的机读文档：
+- **`references/director_prompt.md`（沙盒边界与总监契约）**：
+  - Gemini Web `Task` 运行在 **Debian 12**（`2C / 7.8G / 19G`，普通用户 `spark`，预装 `python3 3.11` / `node 18` / `gcc 12` / `ffmpeg 5.1` / `libreoffice 7.4` / 无头 `chromium 156` / `PIL` / `cv2` / `pydub` / `pandas` / `matplotlib`）。无 `zip` CLI，多文件打包必须写明使用 **Python `zipfile`**。
+  - **联网与密钥红线（`gemini-spark`）**：未开启 `gemini.google.com/gemini-spark` 远程网络访问时禁用 `pip/npm install`；开启联网后所有任务共用同一台远程主机，**严禁向 Task 发送 API Key、`.env`、私钥或敏感机密数据**。
+- **`references/models.md`（全量模型路由表）**：核对真实 `model-id` 与 `Paid` 付费标记，避免免费账号误触 `4 Neon` 或付费模型。
+- **`references/agentlimb.md`（免重登浏览器宏）**：含 `gem-segmented-button` 延迟水合等待与跨端选择器规范。
+- **`references/playbooks/*.md`（5 大官方编队模板）**：若用户需定制新编队，**必须先按标准格式草拟方案并经确认卡同意后才可沉淀**，严禁在后台无监督擅自调用 `playbook add`。

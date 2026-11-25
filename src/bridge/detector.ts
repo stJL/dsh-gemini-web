@@ -19,9 +19,26 @@ export interface BrowserStatus {
   activePortFile: string | null
   pythonVenv: string | null
   cliScript: string | null
+  autoStartAvailable?: boolean
   multipleInstances?: boolean
   instances?: BrowserInstance[]
   error?: string
+}
+
+export function getAiChromeProfileDir(): string {
+  const customDir = (process.env.GEMINI_WEB_CHROME_DIR || '').trim()
+  if (customDir) {
+    return path.resolve(customDir.startsWith('~') ? path.join(getEffectiveHome(), customDir.slice(1)) : customDir)
+  }
+  return path.join(getEffectiveHome(), '.gemini-web-chrome')
+}
+
+export function isDedicatedAiChromeConfigured(): boolean {
+  try {
+    return fs.existsSync(path.join(getAiChromeProfileDir(), 'Default'))
+  } catch {
+    return false
+  }
 }
 
 export function getEffectiveHome(): string {
@@ -303,19 +320,23 @@ export async function detectBrowserCdpAsync(portOverride?: number): Promise<Brow
     }
   }
 
+  const aiConfigured = isDedicatedAiChromeConfigured()
   return {
     connected: false,
-    browserType: 'None',
-    port: null,
+    browserType: aiConfigured ? 'Gemini AI Chrome (Auto-Start)' : 'None',
+    port: aiConfigured ? 9229 : null,
     wsUrl: null,
     activePortFile: null,
     pythonVenv: venv,
     cliScript: cli,
+    autoStartAvailable: aiConfigured,
     multipleInstances: false,
     instances: [],
-    error: instances.length > 0
-      ? '检测到历史浏览器调试文件，但端口未响应 (浏览器可能已退出或关闭)'
-      : '未偵測到開啟遠端偵錯的 Chromium 瀏覽器',
+    error: aiConfigured
+      ? '已配置独立 AI Chrome (~/.gemini-web-chrome)，触发通道 B 或 Wave 时将自动唤醒端口 9229'
+      : (instances.length > 0
+          ? '检测到历史浏览器调试文件，但端口未响应 (浏览器可能已退出或关闭)'
+          : '未偵測到開啟遠端偵錯的 Chromium 瀏覽器'),
   }
 }
 
@@ -430,48 +451,82 @@ export interface AgentLimbStatus {
   error?: string
 }
 
-export async function detectAgentLimb(ports: number[] = [8765, 8766, 8767, 8768], autoSpawn: boolean = true): Promise<AgentLimbStatus> {
-  const probe = async () => {
-    for (const port of ports) {
+export async function detectAgentLimb(
+  ports: number[] = [8765, 8766, 8767, 8768, 8769, 8770],
+  autoSpawn: boolean = true,
+  baseUrlOverride?: string,
+): Promise<AgentLimbStatus> {
+  const probe = async (): Promise<AgentLimbStatus | null> => {
+    let fallbackStatus: AgentLimbStatus | null = null
+    const targets = baseUrlOverride
+      ? [{ port: Number(new URL(baseUrlOverride).port || 8765), url: `${baseUrlOverride.replace(/\/+$/, '')}/health` }]
+      : ports.map((port) => ({ port, url: `http://127.0.0.1:${port}/health` }))
+
+    for (const target of targets) {
+      const port = target.port
       try {
-        const res = await fetch(`http://127.0.0.1:${port}/health`, {
+        const res = await fetch(target.url, {
           signal: AbortSignal.timeout(600),
         })
-        if (res.ok) {
-          const data = (await res.json()) as any
-          if (data.ok) {
-            const hasBrowser = Boolean(
-              data.activeBrowser ||
-              (typeof data.browsers === 'number' && data.browsers > 0) ||
-              (Array.isArray(data.browserList) && data.browserList.length > 0)
-            )
-            const profile = data.browserList?.[0]?.label || data.browserList?.[0]?.id || 'Profile'
-            if (!hasBrowser) {
-              return {
-                ready: false,
-                port,
-                version: data.version || '0.8.2',
-                browsers: 0,
-                activeProfile: profile,
-                paired: Boolean(data.paired),
-                stage: data.stage || 'waiting-browser',
-                error: 'AgentLimb 服务在线，但未检测到浏览器连接 (请打开 Chrome / Edge / Brave 浏览器并加载扩展)',
-              }
-            }
-            return {
-              ready: true,
+        if (!res.ok) continue
+        const data = (await res.json()) as any
+        if (!data.ok) continue
+
+        const browserList = Array.isArray(data.browserList) ? data.browserList : []
+        const hasBrowser = Boolean(
+          data.activeBrowser ||
+          (typeof data.browsers === 'number' && data.browsers > 0) ||
+          browserList.length > 0
+        )
+        const isDenied = Boolean(data.denied) || data.authorized === false
+        const hasAuthorizedBrowser = Boolean(
+          data.activeBrowser ||
+          browserList.some((b: any) => b && b.authorized !== false && b.active !== false)
+        )
+        const profile = browserList?.[0]?.label || browserList?.[0]?.id || 'Profile'
+
+        if (!hasBrowser) {
+          if (!fallbackStatus) {
+            fallbackStatus = {
+              ready: false,
               port,
               version: data.version || '0.8.2',
-              browsers: data.browsers || 1,
+              browsers: 0,
               activeProfile: profile,
               paired: Boolean(data.paired),
-              stage: data.stage || 'ready',
+              stage: data.stage || 'waiting-browser',
+              error: 'AgentLimb 服务在线，但未检测到浏览器连接 (请打开 Chrome / Edge / Brave 浏览器并加载扩展)',
             }
           }
+          continue
+        }
+
+        if (isDenied && !hasAuthorizedBrowser) {
+          fallbackStatus = {
+            ready: false,
+            port,
+            version: data.version || '0.8.2',
+            browsers: data.browsers || browserList.length || 1,
+            activeProfile: profile,
+            paired: Boolean(data.paired),
+            stage: data.stage || 'awaiting_authorization',
+            error: `AgentLimb 連線尚未授權或已被撤銷 (${String(data.denied || data.stage || 'unauthorized')})`,
+          }
+          continue
+        }
+
+        return {
+          ready: true,
+          port,
+          version: data.version || '0.8.2',
+          browsers: data.browsers || 1,
+          activeProfile: profile,
+          paired: Boolean(data.paired),
+          stage: data.stage || 'ready',
         }
       } catch {}
     }
-    return null
+    return fallbackStatus
   }
 
   let status = await probe()
@@ -500,6 +555,7 @@ export interface DualChannelReport {
   cdp: BrowserStatus
   pythonVenv: string | null
   cliScript: string | null
+  aiChromeConfigured?: boolean
 }
 
 /**
@@ -513,6 +569,7 @@ export async function detectDualChannel(cfgMode?: string, cfgPort?: number): Pro
   const mode = (cfgMode as any) || 'auto'
   const venv = findPythonVenv()
   const cli = findCliScript()
+  const aiChromeConfigured = isDedicatedAiChromeConfigured()
 
   // 1. 強制手動指定走 CDP 模式
   if (mode === 'cdp') {
@@ -524,6 +581,7 @@ export async function detectDualChannel(cfgMode?: string, cfgPort?: number): Pro
       cdp,
       pythonVenv: venv,
       cliScript: cli,
+      aiChromeConfigured,
     }
   }
 
@@ -543,10 +601,12 @@ export async function detectDualChannel(cfgMode?: string, cfgPort?: number): Pro
         activePortFile: null,
         pythonVenv: venv,
         cliScript: cli,
+        autoStartAvailable: aiChromeConfigured,
         error: 'AgentLimb 已連線，CDP 備用通道完全休眠 (零彈窗保護)',
       },
       pythonVenv: venv,
       cliScript: cli,
+      aiChromeConfigured,
     }
   }
 
@@ -560,6 +620,7 @@ export async function detectDualChannel(cfgMode?: string, cfgPort?: number): Pro
       cdp,
       pythonVenv: venv,
       cliScript: cli,
+      aiChromeConfigured,
     }
   }
 
@@ -576,9 +637,11 @@ export async function detectDualChannel(cfgMode?: string, cfgPort?: number): Pro
       activePortFile: null,
       pythonVenv: venv,
       cliScript: cli,
+      autoStartAvailable: aiChromeConfigured,
       error: '強制 AgentLimb 模式，不啟用 CDP 備用通道',
     },
     pythonVenv: venv,
     cliScript: cli,
+    aiChromeConfigured,
   }
 }

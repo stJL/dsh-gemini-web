@@ -59,15 +59,23 @@
 })("这里填提示词", "medium", "director")
 ```
 
-**提取与自动打包下载 `bundle-<role>.json` 宏（先 `tab_activate`，零万字回传，再 `harvest --unpack-json` 解包）：**
+**提取与自动打包下载 `bundle-<role>.json` 宏（先 `tab_activate` 唤醒虚拟滚动！零万字回传，带 `503/high demand` 快速纠错，再 `harvest --unpack-json` 解包）：**
 ```js
 ((ROLE = 'coder') => {
+  if (document.visibilityState === 'hidden') return { ready: false, warning: 'TAB_HIDDEN_FROZEN: 请先调用 tab_activate 再提取!' };
+  const errRe = /权限遭拒|permission denied|503|service is unavailable|high demand|error 14|quota|rate limit/i;
+  const snack = [...document.querySelectorAll('.mat-mdc-snack-bar-container, simple-snack-bar, [role="alert"]')].map(e => (e.textContent || '').trim()).find(t => errRe.test(t));
+  if (snack) return { ready: false, error: snack };
   const turns = [...document.querySelectorAll('[data-turn-role="Model"]')];
   const last = turns.at(-1); if (!last) return { ready: false };
   last.scrollIntoView();
   const tSet = new Set(last.querySelectorAll('ms-thought-chunk, mat-expansion-panel'));
   const text = [...last.querySelectorAll('ms-cmark-node')].filter(n => !tSet.has(n) && ![...tSet].some(t => t.contains(n)) && !n.parentElement?.closest('ms-cmark-node')).map(n => n.innerText.trim()).filter(Boolean).join('\n\n');
-  if (!text || text === '正在思考') return { ready: false };
+  if (!text || text === '正在思考') {
+    const raw = (last.innerText || last.textContent || '').trim();
+    if (errRe.test(raw)) return { ready: false, error: raw.slice(0, 300) };
+    return { ready: false };
+  }
   const s = text.indexOf('{'), e = text.lastIndexOf('}');
   if (s >= 0 && e > s) {
     try {
@@ -84,15 +92,16 @@
 
 ## 3. Gemini Web `任务 (Task)`：角色绑定发包 + Drive / Import Code 协作
 
-打开 `https://gemini.google.com/app` 后执行（`MODEL`: `'Neon'` 或 `'Hydrogen'`；`ROLE` 冲突自动拦截）：
+打开 `https://gemini.google.com/app` 后**务必先等 `wait(condition="visible", selector="gem-segmented-button button", timeout=15000)`**（该切换器异步延迟水合，抢在出现前点会误走普通对话导致无沙盒/无网！），确认出现后再执行（`MODEL`: `'Neon'` 或 `'Hydrogen'`；`ROLE` 冲突自动拦截）：
 ```js
 (async (PROMPT, MODEL = 'Hydrogen', ROLE = 'worker') => {
   if (window.__WEB_TEAM_ROLE && window.__WEB_TEAM_ROLE !== ROLE) return { error: `ROLE_CONFLICT: 当前Tab已绑定 ${window.__WEB_TEAM_ROLE}，严禁混入 ${ROLE}，请调用 tab_new！` };
   window.__WEB_TEAM_ROLE = ROLE;
   if (!document.title.startsWith(`[ROLE:${ROLE}]`)) document.title = `[ROLE:${ROLE}] ` + document.title;
   const wait = ms => new Promise(r => setTimeout(r, ms));
-  document.querySelectorAll('gem-segmented-button button, button').forEach(b => { if (/^\s*(任务|Task)\s*$/i.test(b.innerText || '')) b.click(); });
-  await wait(400);
+  const taskBtn = [...document.querySelectorAll('gem-segmented-button button, button')].find(b => /^\s*(任务|Task)\s*$/i.test((b.innerText || '').trim()));
+  if (taskBtn) { taskBtn.click(); await wait(700); }
+  const enteredTask = taskBtn?.getAttribute('aria-pressed') === 'true';
   const mb = document.querySelector('bard-mode-menu-button button, [data-test-id="bard-mode-menu-button"]');
   if (mb) {
     mb.click(); await wait(350);
@@ -103,14 +112,17 @@
   const box = document.querySelector('div[role="textbox"]');
   box.focus(); box.textContent = PROMPT;
   box.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: PROMPT }));
-  await wait(300);
+  await wait(450);
   const send = document.querySelector('button[aria-label="发送"], button[aria-label*="Send" i]');
   if (send && !send.disabled) send.click();
-  return { dispatched: !!send && !send.disabled, role: ROLE, model: MODEL };
-})("在 Debian 12 沙盒从 Google Drive 读取上游架构 JSON，完成验证并用 Python zipfile 打包输出", "Neon", "qa_tester")
+  await wait(800);
+  return { dispatched: !!send && !send.disabled, enteredTask, needsTrustedClick: (box.innerText || '').trim().length > 0, role: ROLE, model: MODEL };
+})("在云端 Linux 主机完成验证并用 Python zipfile 打包输出", "Neon", "qa_tester")
 ```
-- **Google Drive 零中转**：AI Studio 对话默认存入同账号 Google Drive（URL `/prompts/<id>`），直接在 Task Prompt 里告知标题或文件名，Task 员工即可自己从 Drive 读取！
-- **Import Code 入口**：Gemini Web 的 `Upload & tools` (`button[aria-label*="Upload & tools" i]`) → `More uploads` → `Import code` 支持输入 GitHub 仓库 URL 或点击 `Upload folder` 上传本地文件夹（本地无弹窗上传建议走通道 B `ask --folder` / `ask --github`）。
+- **若返回 `needsTrustedClick: true`**：先 `tab_activate` 再调用 `computer(action="click", selector='button[aria-label="发送"]')` 补发一次真实鼠标点击即可稳妥提交。
+- **Google Drive 零中转 & 云主机联网（`gemini-spark`）**：AI Studio 对话默认存入同账号 Google Drive（URL `/prompts/<id>`），直接在 Task Prompt 里告知标题或文件名，Task 员工即可自己从 Drive 读取；如已引导用户在 `https://gemini.google.com/gemini-spark` 开启“允许远程计算机访问网络”，可放心让 Task 自行 `pip/npm install` 或调外部 API（**严禁传 API Key/机密数据**）。
+- **Import Code 入口**：Gemini Web 的 `上传和工具` / `Upload & tools` (`button[aria-label="上传和工具"], button[aria-label*="Upload & tools" i]`) → `更多上传选项` / `More uploads` → `Import code` 支持输入 GitHub 仓库 URL 或点击 `Upload folder` 上传本地文件夹（本地无弹窗上传建议走通道 B `ask --folder` / `ask --github`）。
+- **注意新版选择器**：刚进入 `gemini.google.com/app` 时 `bard-mode-menu-button` 可能未首屏渲染（`if (mb)` 会安全跳过，首轮发包后即恢复显示）。
 - **提取产出**：先 `tab_activate`，查最后一条 `model-response` 内 `a[download], button[aria-label*="下载"], button[aria-label*="Download" i]` 触发下载，随后 `harvest --pattern "*.zip" --dest "<项目>"`。
 
 ## 4. Google Flow (`flow.google.com`)：一键 `x1` 生图（0 点数）+ 下载宏

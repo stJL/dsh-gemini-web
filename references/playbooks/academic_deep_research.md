@@ -6,10 +6,10 @@
 
 | role | 岗位名称 | 站点渠道 | 推荐模型 | 思考等级 | 核心职责与交付物 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `chief_researcher` | 深度检索与信息搜集员 | `aistudio` (Playground) | `deep-research-preview-04-2026` | — | 多轮联网检索一手资料、竞品规格、引用来源与事实核查 |
-| `architect_writer` | 主笔架构与逻辑撰稿人 | `aistudio` (Playground) | `gemini-4-neon` | `high` / `extra_high` | 搭建万字报告大纲、基于一手素材深度推演撰写（1M 长输出） |
-| `fact_reviewer` | 独立盲审与结构校对员 | `aistudio` (Playground) | `gemini-4-neon`（或 `argon`） | `medium` / `high` | 独立开启新 Tab 交叉核对数据口径、逻辑漏洞、事实幻觉与排版 |
-| `chart_formatter` | 论文图表与文档排版员 | `gemini_task` | `gemini-4-hydrogen` | — | 用沙盒 `matplotlib`/`PIL` 绘制数据图、用 `libreoffice` 转换 PDF/Word 并打包 |
+| `chief_researcher` | 深度检索与信息搜集员 | `aistudio` / `gemini_task` | `gemini-4-hydrogen` + Search（付费号可用 `deep-research`） | — | 多轮联网检索一手资料、竞品规格、引用来源与事实核查 |
+| `architect_writer` | 主笔架构与逻辑撰稿人 | `aistudio` (Playground) | `gemini-4-hydrogen`（付费号可选 `4 Neon`） | `high` | 搭建万字报告大纲、基于一手素材深度推演撰写（1M 长输出） |
+| `fact_reviewer` | 独立盲审与结构校对员 | `aistudio` (Playground) | `gemini-3.8-flash` / `gemini-4-hydrogen` | `medium` / `high` | 独立开启新 Tab 交叉核对数据口径、逻辑漏洞、事实幻觉与排版 |
+| `chart_formatter` | 论文图表与文档排版员 | `gemini_task` | `Auto` / `gemini-4-hydrogen` | — | 用沙盒 `matplotlib`/`PIL` 绘制数据图、用 `libreoffice` 转换 PDF/Word 并打包 |
 
 ## 标准并行波次与分工要点
 

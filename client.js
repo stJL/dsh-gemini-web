@@ -224,6 +224,90 @@ window.__ModuleLoader__.load({
       .gw-select:focus, .gw-input:focus {
         border-color: #6366f1;
       }
+      .gw-pb-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      .gw-pb-tab {
+        padding: 4px 10px;
+        border-radius: 9999px;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        border: 1px solid var(--dsw-alias-border-l1, rgba(255, 255, 255, 0.14));
+        background: var(--dsw-alias-bg-layer-3, rgba(255, 255, 255, 0.05));
+        color: inherit;
+        transition: all 0.15s ease;
+      }
+      .gw-pb-tab.active {
+        background: rgba(168, 85, 247, 0.22);
+        border-color: rgba(168, 85, 247, 0.65);
+        color: #d8b4fe;
+      }
+      .gw-slot-wrap {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+      }
+      .gw-slot-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 9px;
+        border-radius: 9999px;
+        border: 1px solid var(--dsw-alias-border-l1, rgba(255, 255, 255, 0.14));
+        background: transparent;
+        color: var(--dsw-alias-text-secondary, inherit);
+        font-size: 12px;
+        line-height: 1.2;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 0.15s ease, border-color 0.15s ease;
+      }
+      .gw-slot-btn:hover {
+        background: var(--dsw-alias-interactive-bg-hover, rgba(255, 255, 255, 0.08));
+        border-color: rgba(99, 102, 241, 0.5);
+      }
+      .gw-slot-popover {
+        position: absolute;
+        z-index: 80;
+        min-width: 265px;
+        max-width: 320px;
+        padding: 8px;
+        border-radius: 10px;
+        background: var(--dsw-alias-bg-layer-2, #181c24);
+        border: 1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.16));
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+        color: var(--dsw-alias-text-primary, #f1f5f9);
+        font-size: 12px;
+      }
+      .gw-slot-popover.up {
+        bottom: calc(100% + 8px);
+        right: 0;
+      }
+      .gw-slot-popover.down {
+        top: calc(100% + 8px);
+        right: 0;
+      }
+      .gw-slot-item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        width: 100%;
+        text-align: left;
+        padding: 7px 9px;
+        border: none;
+        border-radius: 7px;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        transition: background 0.12s ease;
+      }
+      .gw-slot-item:hover {
+        background: rgba(99, 102, 241, 0.16);
+      }
 
       /* 白天主題專用適配 (Light Mode) */
       @media (prefers-color-scheme: light) {
@@ -477,25 +561,88 @@ window.__ModuleLoader__.load({
         safety_item3: '• ⚡ 频率控制建议：日常自用建议保持合理调度频率，避免极高频并发刷网页端；遇到高峰排队塞车时，建议切换为 Flash Lite 备用。',
         safety_item4: '• 🔒 100% 回环安全：所有通信限制于本机 127.0.0.1 回环，零凭证外泄风险。',
         studio_title: '👥 虚拟软件工作室 (Web Studio & Wave 并发引擎)',
-        studio_desc: '基于原作者 95874ab Wave 架构，单命令将多角色任务并发派发至独立标签页，支持 1 Tab 1 员工绑定、Google Drive 云端总线与 5 大官方研发编队。',
-        roster_title: '📋 团队花名册状态 (.web-team.json)',
+        studio_desc: '🌟 一键唤醒多角色专家标签页，错峰并发完成全流程研发，成果自动解包落盘至当前会话专属目录。',
+        director_mode_title: '架构总监决策模式：',
+        director_mode_local_desc: '💡 建议：若当前本地对话使用的是强推理模型，建议【本地模型掌舵】，响应快且保持完整上下文；若本地是轻量模型或极度省流，可切为外包给外部 AI Studio。',
+        director_mode_ext_desc: '🌐 已切为外部总监模式：将由下方选定的外部免费大模型代为拆单规划（默认锁定 Hydrogen 防免费号踩 403）。',
+        director_mode_local: '🧠 本地模型掌舵 (推荐)',
+        director_mode_ext: '🌐 外包给外部 AI Studio 拆单',
+        director_model_title: '外部总监指定模型：',
+        director_model_desc: '免费账号强烈推荐保持默认的 Gemini 4 Hydrogen (1M 长文本・免费稳定)',
+        chat_slots_title: '聊天室快捷插槽 (Chat Slots)：',
+        chat_slots_desc: '在输入框旁显示「🌐 Gemini Web」快捷菜单，并在对话顶部显示当前会话外包小队徽标（关闭即回退纯原生界面）',
+        chat_slots_on: '🟢 已开启快捷入口与状态徽标',
+        chat_slots_off: '⚪ 已关闭（纯原生聊天界面）',
+        roster_title: '📋 团队花名册状态 (会话隔离)',
         roster_empty: '⚪ 暂无活动员工标签页（首次执行 Wave 时将自动按角色创建独立会话）',
         roster_count: '当前活跃员工：{count} 名',
         roster_clear_btn: '🧹 重置花名册',
-        roster_audit_btn: '🔍 真实性审计 (Audit)',
+        roster_audit_btn: '🔍 审计产物',
         roster_refresh_btn: '🔄 刷新状态',
-        playbooks_title: '📚 5 套官方主流研发编队卡 (Playbooks)',
-        pb_fullstack_title: '🌐 全栈 Web / SaaS 应用研发组',
-        pb_fullstack_desc: 'Director 架构定界 ➔ 前端整包生成 ➔ 后端 Debian 12 沙盒单测 ➔ Flow 图标生成 ➔ 无头 Chromium 冒烟自测',
-        pb_game_title: '🎮 互动游戏与创意原型工作室',
-        pb_game_desc: '游戏策划 ➔ 核心逻辑与美术并行 ➔ 沙盒 ffmpeg/PIL 音效切图 ➔ 试玩验收',
-        pb_data_title: '📊 数据工程、报表与办公自动化',
-        pb_data_desc: '数据契约 ➔ Debian 12 沙盒 Pandas/NumPy 清洗与 Matplotlib 作图 ➔ 最终报表汇总',
-        pb_video_title: '🎬 视觉创意、音视频与自媒体工坊',
-        pb_video_desc: '剧本策划 ➔ Nano Banana 生图与 TTS 配音 ➔ 沙盒 ffmpeg 自动化剪辑混音包装',
-        pb_research_title: '📑 学术研报、文献综述与深度调研',
-        pb_research_desc: '提纲界定 ➔ AI Studio 1M 长文本多源调研 ➔ 交叉核对 ➔ 综述成文',
-        wave_stagger_tip: '🛡️ 防风控保障：内置错峰 3.5s 派发 + 进程内后台静默轮询 + 自动解包写入本地项目目录。',
+        playbooks_title: '📚 研发编队卡 (官方 5 套 + 自定义)',
+        open_playbooks_btn: '📂 打开编队目录',
+        pb_refresh_btn: '🔄 刷新',
+        pb_builder_btn: '➕ 组装专属编队',
+        pb_builder_title: '🧩 新建专属编队 (Custom Squad Builder)',
+        pb_builder_name: '编队名称',
+        pb_builder_name_ph: '例如：跨境电商选品与素材工坊',
+        pb_builder_slug: '英文代号 (选填)',
+        pb_builder_slug_ph: '例如：crossborder_shop',
+        pb_builder_scenarios: '适用场景',
+        pb_builder_scenarios_ph: '例如：商品调研、多语言文案与宣传海报制作',
+        pb_builder_roles_hint: '勾选出动员工并选择右方「➔」目标站点/模型（默认已锁定免费稳定档）：',
+        pb_builder_save: '💾 保存为我的编队',
+        pb_builder_saving: '保存中...',
+        pb_builder_cancel: '取消',
+        pb_builder_saved: '✅ 已保存专属编队：{name}',
+        pb_custom_badge: '✨ 自定义编队',
+        open_dir_ok: '📂 已拉起文件管理器：{path}',
+        open_dir_err: '❌ 无法自动拉起文件管理器，请手动前往：{path}',
+        pb_roles_label: '👥 出动角色：',
+        pb_stages_label: '🌊 交付波次：',
+        pb_sample_label: '💡 试试这样说：',
+        pb_copy_btn: '📋 填入输入框',
+        pb_copied: '✅ 已填入聊天框！',
+        deliveries_title: '📦 会话专属交付物审查 (.gemini-teams/)',
+        deliveries_empty: '暂无待合并的 Wave 隔离交付文件',
+        deliveries_browse_btn: '📂 浏览文件',
+        deliveries_merge_btn: '🚀 合并至项目',
+        deliveries_merged_ok: '✅ 已安全合并 {count} 个文件到当前项目根目录',
+        pb_fullstack_tab: '🌐 全栈 Web',
+        pb_fullstack_roles: '架构总监 + 前端整包 + 后端沙盒 + 图标美工 + 自动化测试',
+        pb_fullstack_stages: '架构定界 ➔ 多 Tab 并发生产 ➔ 自动解包 ➔ 沙盒冒烟',
+        pb_fullstack_sample: '/gemini-web-agent 开发任务看板Web工具',
+        pb_game_tab: '🎮 游戏开发',
+        pb_game_roles: '游戏策划 + 核心逻辑 + 美术素材 + 音效切图 + 试玩验收',
+        pb_game_stages: '玩法原型 ➔ 逻辑与美术并行 ➔ 音效切图 ➔ 试玩验收',
+        pb_game_sample: '/gemini-web-agent 启动游戏编队制作一款像素风肉鸽小游戏',
+        pb_data_tab: '📊 数据报表',
+        pb_data_roles: '数据总监 + 数据清洗工程师 + 图表排版 + 报告审核',
+        pb_data_stages: '数据契约 ➔ 云端沙盒清洗作图 ➔ 文档汇总',
+        pb_data_sample: '/gemini-web-agent 启动数据编队清洗销售报表并生成可视化简报',
+        pb_video_tab: '🎬 自媒体',
+        pb_video_roles: '剧本策划 + 视觉画师 + 语音配音 + 视频后期剪辑',
+        pb_video_stages: '剧本策划 ➔ 生图与配音并行 ➔ 合成包装',
+        pb_video_sample: '/gemini-web-agent 启动视频编队制作一段产品宣传短视频脚本与素材',
+        pb_research_tab: '📑 学术调研',
+        pb_research_roles: '调研总监 + 1M长文本研究员 + 事实核查员 + 综述主笔',
+        pb_research_stages: '提纲界定 ➔ 多源调研 ➔ 交叉核对 ➔ 综述成文',
+        pb_research_sample: '/gemini-web-agent 启动调研编队撰写多模态大模型最新进展综述',
+        wave_stagger_tip: '🛡️ 安全隔离：错峰 3.5s 派发 + 独立会话沙盒落盘，经您确认后才合并入项目。',
+        slot_launcher_label: 'Gemini Web',
+        slot_launcher_title: 'Gemini 网页端快捷外包 (0.2.0 + Wave 0.3.0)',
+        slot_sec_daily: '日常快速外包 (0.2.0 经典能力)',
+        slot_act_aistudio: '⚡ 发送至 AI Studio',
+        slot_act_aistudio_sub: '免费 1M 长文本与深度推理',
+        slot_act_flow: '🎨 发送至 Google Flow',
+        slot_act_flow_sub: 'Nano Banana 2.1 生图 0 点数',
+        slot_act_task: '🛠️ 发送至 Gemini 沙盒 (Task)',
+        slot_act_task_sub: '云端容器跑代码与单测（勿传密钥）',
+        slot_sec_wave: '虚拟编队工作室 (0.3.0 进阶)',
+        slot_act_wave: '🌊 启动 Wave 多角色并发编队',
+        slot_act_wave_sub: '多 Tab 并行开发与自动解包',
+        slot_team_title: '当前会话外包小队',
+        slot_team_workers: '名员工',
         nav_label: '✨ Gemini 网页端 (Agent 调度中心)'
       },
       'en-US': {
@@ -653,25 +800,88 @@ window.__ModuleLoader__.load({
         safety_item3: '• ⚡ Rate limit recommendations: Keep a reasonable request frequency for daily personal use; switch to Flash Lite during peak congestion.',
         safety_item4: '• 🔒 100% Loopback Security: All communications are restricted to 127.0.0.1 loopback with zero credential exposure.',
         studio_title: '👥 Virtual Software Studio (Web Studio & Wave)',
-        studio_desc: 'Powered by upstream 95874ab Wave architecture. Dispatches multi-role tasks concurrently across independent browser tabs with persistent 1-Tab-1-Role binding and Drive bus.',
-        roster_title: '📋 Team Roster (.web-team.json)',
-        roster_empty: '⚪ No active worker tabs yet (Will automatically create dedicated tabs per role upon Wave execution)',
+        studio_desc: '🌟 Spin up multi-role specialist browser tabs concurrently and unpack verified deliverables into session-isolated folders.',
+        director_mode_title: 'Director Planning Mode:',
+        director_mode_local_desc: '💡 Tip: Use [Local Model Leads] for strong local models (Claude/DeepSeek/GPT) to preserve context; switch to [External AI Studio] for lightweight models or maximum savings.',
+        director_mode_ext_desc: '🌐 External Director Active: Architecture planning delegated to the selected free AI Studio model below (defaults to Hydrogen).',
+        director_mode_local: '🧠 Local Model Leads (Recommended)',
+        director_mode_ext: '🌐 Delegate to External AI Studio',
+        director_model_title: 'External Director Model:',
+        director_model_desc: 'Recommended default Gemini 4 Hydrogen (1M context · fast & free-tier safe)',
+        chat_slots_title: 'Chat-Room Quick Slots:',
+        chat_slots_desc: 'Show quick launcher beside chat input & active team badge in session header (disable to revert cleanly)',
+        chat_slots_on: '🟢 Enabled (Quick Launcher & Team Badge)',
+        chat_slots_off: '⚪ Disabled (Pure Native Chat UI)',
+        roster_title: '📋 Team Roster (Session-Scoped)',
+        roster_empty: '⚪ No active worker tabs yet (Dedicated session tabs are created automatically on Wave launch)',
         roster_count: 'Active workers: {count}',
         roster_clear_btn: '🧹 Reset Roster',
         roster_audit_btn: '🔍 Audit Artifacts',
-        roster_refresh_btn: '🔄 Refresh Status',
-        playbooks_title: '📚 5 Official Playbooks',
-        pb_fullstack_title: '🌐 Fullstack Web / SaaS Dev Team',
-        pb_fullstack_desc: 'Director Architecture ➔ Frontend Bundle ➔ Backend Sandbox Tests ➔ Flow UI Assets ➔ Headless Chromium E2E',
-        pb_game_title: '🎮 Interactive Game & Prototype Studio',
-        pb_game_desc: 'Game Design ➔ Logic & Assets in Parallel ➔ Sandbox Audio/Sprite Slicing ➔ Smoke Playtest',
-        pb_data_title: '📊 Data Engineering & Office Automation',
-        pb_data_desc: 'Data Contract ➔ Debian 12 Sandbox Cleaning & Matplotlib Plots ➔ Summary Reports',
-        pb_video_title: '🎬 Visual Media & Video Production Studio',
-        pb_video_desc: 'Scriptwriting ➔ Nano Banana Art & TTS Voiceover ➔ Sandbox FFmpeg Auto-Editing',
-        pb_research_title: '📑 Academic Deep Research & Survey',
-        pb_research_desc: 'Outline Definition ➔ 1M Context Multi-Source Research ➔ Cross-Verification ➔ Survey Paper',
-        wave_stagger_tip: '🛡️ Anti-ban Guardrails: Built-in 3.5s staggered dispatch + background silent polling + auto-unpacking to local project.',
+        roster_refresh_btn: '🔄 Refresh',
+        playbooks_title: '📚 Playbooks (5 Official + Custom)',
+        open_playbooks_btn: '📂 Open Folder',
+        pb_refresh_btn: '🔄 Refresh',
+        pb_builder_btn: '➕ Build Custom Squad',
+        pb_builder_title: '🧩 Custom Squad Builder',
+        pb_builder_name: 'Squad Name',
+        pb_builder_name_ph: 'e.g., Cross-Border E-Commerce Studio',
+        pb_builder_slug: 'Slug ID (Optional)',
+        pb_builder_slug_ph: 'e.g., crossborder_shop',
+        pb_builder_scenarios: 'Use Cases / Scenarios',
+        pb_builder_scenarios_ph: 'e.g., Product research, copywriting and promo posters',
+        pb_builder_roles_hint: 'Select roles and pick target site/model via the "➔" dropdown (defaults to free-safe models):',
+        pb_builder_save: '💾 Save Custom Squad',
+        pb_builder_saving: 'Saving...',
+        pb_builder_cancel: 'Cancel',
+        pb_builder_saved: '✅ Saved custom playbook: {name}',
+        pb_custom_badge: '✨ Custom',
+        open_dir_ok: '📂 Opened folder: {path}',
+        open_dir_err: '❌ Could not launch file manager. Path: {path}',
+        pb_roles_label: '👥 Roles: ',
+        pb_stages_label: '🌊 Waves: ',
+        pb_sample_label: '💡 Try Prompt: ',
+        pb_copy_btn: '📋 Insert Prompt',
+        pb_copied: '✅ Inserted into composer!',
+        deliveries_title: '📦 Session Deliverable Review (.gemini-teams/)',
+        deliveries_empty: 'No isolated Wave deliverables pending merge yet',
+        deliveries_browse_btn: '📂 Browse Files',
+        deliveries_merge_btn: '🚀 Merge to Project',
+        deliveries_merged_ok: '✅ Safely merged {count} file(s) into workspace root',
+        pb_fullstack_tab: '🌐 Fullstack Web',
+        pb_fullstack_roles: 'Director + Frontend Builder + Backend Sandbox + Flow Artist + QA',
+        pb_fullstack_stages: 'Architecture ➔ Parallel Build ➔ Unpack ➔ Smoke Test',
+        pb_fullstack_sample: '/gemini-web-agent Build a task kanban web tool',
+        pb_game_tab: '🎮 Game Studio',
+        pb_game_roles: 'Designer + Core Coder + UI Artist + Audio Engineer + QA',
+        pb_game_stages: 'Prototype ➔ Logic & Art Parallel ➔ Audio/Slicing ➔ Playtest',
+        pb_game_sample: '/gemini-web-agent Launch game playbook to build a pixel roguelike mini-game',
+        pb_data_tab: '📊 Data & Office',
+        pb_data_roles: 'Director + Data Engineer + Chart Formatter + Doc Auditor',
+        pb_data_stages: 'Contract ➔ Cloud Sandbox Cleaning & Charts ➔ Summary Report',
+        pb_data_sample: '/gemini-web-agent Launch data playbook to clean sales CSV and build summary charts',
+        pb_video_tab: '🎬 Video & Media',
+        pb_video_roles: 'Scriptwriter + Visual Artist + Voice Actor + Post Editor',
+        pb_video_stages: 'Script ➔ Image & TTS Parallel ➔ Video Composition',
+        pb_video_sample: '/gemini-web-agent Launch video playbook to produce a short promo video script and assets',
+        pb_research_tab: '📑 Deep Research',
+        pb_research_roles: 'Director + 1M Researcher + Fact Checker + Paper Writer',
+        pb_research_stages: 'Outline ➔ Multi-Source Research ➔ Fact-Check ➔ Synthesis',
+        pb_research_sample: '/gemini-web-agent Launch research playbook for a survey on multimodal LLMs',
+        wave_stagger_tip: '🛡️ Safety Rails: 3.5s staggered dispatch + isolated session output, merged only on your approval.',
+        slot_launcher_label: 'Gemini Web',
+        slot_launcher_title: 'Gemini Web Quick Launcher (0.2.0 + Wave 0.3.0)',
+        slot_sec_daily: 'Daily Quick Dispatch (0.2.0 Classic)',
+        slot_act_aistudio: '⚡ Send to AI Studio',
+        slot_act_aistudio_sub: 'Free 1M context & deep reasoning',
+        slot_act_flow: '🎨 Send to Google Flow',
+        slot_act_flow_sub: 'Nano Banana 2.1 (0 credits)',
+        slot_act_task: '🛠️ Send to Gemini Sandbox (Task)',
+        slot_act_task_sub: 'Cloud Linux sandbox (no secrets)',
+        slot_sec_wave: 'Virtual Studio (0.3.0 Wave)',
+        slot_act_wave: '🌊 Launch Wave Multi-Role Team',
+        slot_act_wave_sub: 'Concurrent multi-tab dev & unpack',
+        slot_team_title: 'Session Outsourced Team',
+        slot_team_workers: 'worker(s)',
         nav_label: '✨ Gemini Web (Agent Orchestration Center)'
       }
     }
@@ -684,6 +894,42 @@ window.__ModuleLoader__.load({
       return 'zh-CN'
     }
 
+    function insertTextIntoChatComposer(text) {
+      if (typeof document === 'undefined' || !text) return false
+      const inputEl =
+        document.querySelector('[data-composer-input]') ||
+        document.querySelector('[role="textbox"][contenteditable="true"]') ||
+        document.querySelector('textarea')
+      if (!inputEl) return false
+      inputEl.focus()
+      if (inputEl instanceof HTMLTextAreaElement || inputEl instanceof HTMLInputElement) {
+        const start = inputEl.selectionStart ?? inputEl.value.length
+        const end = inputEl.selectionEnd ?? inputEl.value.length
+        inputEl.setRangeText(text, start, end, 'end')
+        inputEl.dispatchEvent(new Event('input', { bubbles: true }))
+        inputEl.dispatchEvent(new Event('change', { bubbles: true }))
+        return true
+      }
+      try {
+        if (document.execCommand('insertText', false, text)) return true
+      } catch {}
+      const existing = (inputEl.textContent || '').trim()
+      inputEl.textContent = existing ? `${existing} ${text}` : text
+      inputEl.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }))
+      return true
+    }
+
+    function readSlotsEnabled() {
+      try {
+        const cached = localStorage.getItem('dsh_gemini_web_config')
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          if (parsed.enableChatSlots === false) return false
+        }
+      } catch {}
+      return true
+    }
+
     // 3. 視覺化設定與控制主面板 (嵌入 DSH Settings)
     function SettingsPanel({ isModal, onClose }) {
       const [status, setStatus] = useState(null)
@@ -691,7 +937,7 @@ window.__ModuleLoader__.load({
 
       const DEFAULT_LOCAL_CONFIG = {
         connectionMode: 'auto',
-        defaultModel: 'gemini-3.5-flash-lite',
+        defaultModel: 'gemini-4-hydrogen',
         autoFallback: true,
         fallbackMode: 'ladder',
         fallbackLadder: [
@@ -706,6 +952,9 @@ window.__ModuleLoader__.load({
         port: 9222,
         preferredBrowser: 'auto',
         flowCount: 1,
+        directorMode: 'local',
+        directorModel: 'gemini-4-hydrogen',
+        enableChatSlots: true,
       }
 
       // 优先从 localStorage 读取已保存设定，首帧即载入用户选择，杜绝刷新倒退回 flash lite
@@ -737,12 +986,110 @@ window.__ModuleLoader__.load({
       const [rosterData, setRosterData] = useState(null)
       const [rosterLoading, setRosterLoading] = useState(false)
       const [rosterNotice, setRosterNotice] = useState('')
+      const [activePlaybook, setActivePlaybook] = useState('fullstack')
+      const [copiedPb, setCopiedPb] = useState(false)
+      const [customPlaybooks, setCustomPlaybooks] = useState([])
+      const [showPbBuilder, setShowPbBuilder] = useState(false)
+      const [pbSaving, setPbSaving] = useState(false)
+      const [pbNotice, setPbNotice] = useState('')
+      const [pbDraft, setPbDraft] = useState({
+        title: '',
+        name: '',
+        scenarios: '',
+        roles: [
+          { enabled: true, role: 'director', label: '🧠 策划与架构总监', siteModel: 'aistudio:gemini-4-hydrogen', duty: '需求拆解、锁定文件与接口契约' },
+          { enabled: true, role: 'coder', label: '💻 代码与沙盒执行员', siteModel: 'gemini_task:gemini-4-hydrogen', duty: '编写代码并在云端沙盒自测打包' },
+          { enabled: true, role: 'ui_artist', label: '🎨 视觉与海报画师', siteModel: 'flow:nano2.1', duty: '生成项目所需图标与配图 (0点数)' },
+          { enabled: false, role: 'writer', label: '✍️ 文案与综述主笔', siteModel: 'aistudio:gemini-3.8-flash', duty: '撰写说明文档、调研报告或营销文案' },
+          { enabled: false, role: 'qa_tester', label: '🧪 自动化验收 QA', siteModel: 'gemini_task:gemini-4-hydrogen', duty: '用无头浏览器跑冒烟校验与回归测试' },
+        ],
+      })
+      const [deliveries, setDeliveries] = useState(null)
+      const [mergeNotice, setMergeNotice] = useState('')
+
+      const fetchPlaybooksList = async () => {
+        try {
+          const res = await api('/playbooks', { timeout: 8000 })
+          if (res?.ok && Array.isArray(res.customPlaybooks)) {
+            setCustomPlaybooks(res.customPlaybooks)
+          }
+        } catch {}
+      }
+
+      const saveCustomPlaybook = async () => {
+        const selectedRoles = (pbDraft.roles || []).filter((r) => r.enabled).map(({ role, label, siteModel, duty }) => ({ role, label, siteModel, duty }))
+        setPbSaving(true)
+        setPbNotice('')
+        try {
+          const res = await api('/playbooks', {
+            method: 'POST',
+            body: {
+              name: pbDraft.name,
+              title: pbDraft.title,
+              scenarios: pbDraft.scenarios,
+              roles: selectedRoles,
+            },
+          })
+          if (res?.ok && res.data?.name) {
+            await fetchPlaybooksList()
+            setActivePlaybook(`custom:${res.data.name}`)
+            setShowPbBuilder(false)
+            setPbNotice(t('pb_builder_saved', { name: res.data.title || res.data.name }))
+            setPbDraft((prev) => ({ ...prev, title: '', name: '', scenarios: '' }))
+            setTimeout(() => setPbNotice(''), 4000)
+          } else {
+            setPbNotice(`❌ ${res?.error || 'Save failed'}`)
+          }
+        } catch (e) {
+          setPbNotice(`❌ ${e.message}`)
+        } finally {
+          setPbSaving(false)
+        }
+      }
+
+      const fetchDeliveries = async () => {
+        try {
+          const res = await api('/deliveries')
+          if (res?.ok) setDeliveries(res)
+        } catch {}
+      }
+
+      const mergeLatestWave = async (waveName) => {
+        try {
+          const res = await api('/deliveries/merge', { method: 'POST', body: { waveName } })
+          if (res?.ok) {
+            setMergeNotice(t('deliveries_merged_ok', { count: res.mergedFiles?.length || 0 }))
+            setTimeout(() => setMergeNotice(''), 4000)
+          } else if (res?.error) {
+            setMergeNotice(`❌ ${res.error}`)
+          }
+        } catch (e) {
+          setMergeNotice(`❌ ${e.message}`)
+        }
+      }
+
+      const openLocalDir = async (target, waveName) => {
+        const setNotice = target === 'playbooks' ? setPbNotice : setMergeNotice
+        try {
+          const res = await api('/open-dir', { method: 'POST', body: { target, waveName } })
+          if (res?.ok && res?.path) {
+            setNotice(t('open_dir_ok', { path: res.path }))
+            setTimeout(() => setNotice(''), 6000)
+          } else {
+            setNotice(t('open_dir_err', { path: res?.path || res?.error || target }))
+          }
+        } catch (e) {
+          setNotice(`❌ ${e.message}`)
+        }
+      }
 
       const fetchRoster = async () => {
         setRosterLoading(true)
         try {
           const res = await api('/roster')
           if (res?.ok) setRosterData(res.roster || res)
+          fetchDeliveries()
+          fetchPlaybooksList()
         } catch (e) {
           console.error(e)
         } finally {
@@ -848,6 +1195,7 @@ window.__ModuleLoader__.load({
         try {
           const s = await api('/status', { timeout: 8000 })
           setStatus(s)
+          fetchPlaybooksList().catch(() => {})
           let localCfg = {}
           try {
             const cached = localStorage.getItem('dsh_gemini_web_config')
@@ -1062,7 +1410,7 @@ window.__ModuleLoader__.load({
                 border: '1px solid rgba(99, 102, 241, 0.3)',
                 fontWeight: 500,
               }
-            }, 'v0.3.0-beta.0'),
+            }, 'v0.3.0-beta.1'),
           ]),
           isModal && h('button', {
             onClick: onClose,
@@ -1477,7 +1825,7 @@ window.__ModuleLoader__.load({
                 h('select', {
                   className: 'gw-select',
                   style: { width: '100%', minWidth: 170, maxWidth: 220 },
-                  value: config.defaultModel || 'gemini-3.5-flash-lite',
+                  value: config.defaultModel || 'gemini-4-hydrogen',
                   onChange: (e) => updateConfig({ defaultModel: e.target.value })
                 }, availableModels.length > 0 ? [
                   h('optgroup', { label: t('group_text') },
@@ -1774,6 +2122,80 @@ window.__ModuleLoader__.load({
               ])
             ]),
 
+            // 設定 6: 架構總監模式 (Director Mode) 與聯動模型選單
+            h('div', { className: 'gw-setting-row' }, [
+              h('div', { className: 'gw-setting-info' }, [
+                h('div', { style: { fontWeight: 500 } }, t('director_mode_title')),
+                h('div', { style: { fontSize: 11, opacity: 0.65, lineHeight: 1.5 } },
+                  config.directorMode === 'external' ? t('director_mode_ext_desc') : t('director_mode_local_desc'))
+              ]),
+              h('div', { className: 'gw-setting-ctrl' }, [
+                h('select', {
+                  className: 'gw-select',
+                  style: { minWidth: 175 },
+                  value: config.directorMode || 'local',
+                  onChange: (e) => updateConfig({ directorMode: e.target.value })
+                }, [
+                  h('option', { value: 'local' }, t('director_mode_local')),
+                  h('option', { value: 'external' }, t('director_mode_ext')),
+                ])
+              ])
+            ]),
+
+            config.directorMode === 'external' ? h('div', {
+              className: 'gw-setting-row',
+              style: {
+                background: 'rgba(99, 102, 241, 0.08)',
+                borderLeft: '3px solid #6366f1',
+                paddingLeft: '12px',
+                borderRadius: '4px',
+                marginTop: '-4px',
+                marginBottom: '4px'
+              }
+            }, [
+              h('div', { className: 'gw-setting-info' }, [
+                h('div', { style: { fontWeight: 500 } }, t('director_model_title')),
+                h('div', { style: { fontSize: 11, opacity: 0.65 } }, t('director_model_desc'))
+              ]),
+              h('div', { className: 'gw-setting-ctrl' }, [
+                h('select', {
+                  className: 'gw-select',
+                  style: { minWidth: 175 },
+                  value: config.directorModel || 'gemini-4-hydrogen',
+                  onChange: (e) => updateConfig({ directorModel: e.target.value })
+                }, [
+                  h('option', { value: 'gemini-4-hydrogen' }, '🧠 Gemini 4 Hydrogen (1M · 免费稳定)'),
+                  h('option', { value: 'gemini-3.8-flash' }, '🚀 Gemini 3.8 Flash (日常极速)'),
+                  h('option', { value: 'gemini-4-neon' }, '⚡ Gemini 4 Neon (仅限高级/付费号)'),
+                ])
+              ])
+            ]) : null,
+
+            // 設定 7: 聊天室快捷插槽開關 (Feature Flag 兜底)
+            h('div', { className: 'gw-setting-row' }, [
+              h('div', { className: 'gw-setting-info' }, [
+                h('div', { style: { fontWeight: 500 } }, t('chat_slots_title')),
+                h('div', { style: { fontSize: 11, opacity: 0.65 } }, t('chat_slots_desc'))
+              ]),
+              h('div', { className: 'gw-setting-ctrl' }, [
+                h('select', {
+                  className: 'gw-select',
+                  style: { minWidth: 175 },
+                  value: config.enableChatSlots === false ? 'off' : 'on',
+                  onChange: (e) => {
+                    const enabled = e.target.value !== 'off'
+                    updateConfig({ enableChatSlots: enabled })
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('gw-config-changed', { detail: { enableChatSlots: enabled } }))
+                    }
+                  }
+                }, [
+                  h('option', { value: 'on' }, t('chat_slots_on')),
+                  h('option', { value: 'off' }, t('chat_slots_off')),
+                ])
+              ])
+            ]),
+
             // 儲存按鈕
             h('div', { className: 'gw-btn-row', style: { marginTop: 14 } }, [
               h('button', {
@@ -1791,15 +2213,15 @@ window.__ModuleLoader__.load({
         h('div', { className: 'gw-card', style: { borderColor: 'rgba(168, 85, 247, 0.4)' } }, [
           h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
             h('div', { className: 'gw-title', style: { color: '#c084fc' } }, t('studio_title')),
-            h('span', { className: 'gw-badge', style: { background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' } }, 'Wave 0.3.0 Engine')
+            h('span', { className: 'gw-badge', style: { background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' } }, 'Wave 0.3.0-beta.1')
           ]),
-          h('div', { className: 'gw-desc', style: { fontSize: 11, opacity: 0.8, marginBottom: 12 } }, t('studio_desc')),
+          h('div', { className: 'gw-desc', style: { fontSize: 11, opacity: 0.85, marginBottom: 12 } }, t('studio_desc')),
 
-          // 子卡片 A: 团队花名册 (.web-team.json)
+          // 子卡片 A: 团队花名册 (会话隔离)
           h('div', { style: { background: 'rgba(255, 255, 255, 0.03)', borderRadius: 6, padding: '10px 12px', marginBottom: 12, border: '1px solid rgba(255, 255, 255, 0.06)' } }, [
-            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 } }, [
+            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 } }, [
               h('div', { style: { fontWeight: 600, fontSize: 12, color: '#e2e8f0' } }, t('roster_title')),
-              h('div', { style: { display: 'flex', gap: 6 } }, [
+              h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } }, [
                 h('button', { className: 'gw-btn gw-btn-secondary', style: { padding: '2px 8px', fontSize: 11 }, onClick: fetchRoster, disabled: rosterLoading }, t('roster_refresh_btn')),
                 h('button', { className: 'gw-btn gw-btn-secondary', style: { padding: '2px 8px', fontSize: 11 }, onClick: auditRosterHandler }, t('roster_audit_btn')),
                 h('button', { className: 'gw-btn gw-btn-secondary', style: { padding: '2px 8px', fontSize: 11, color: '#ef4444' }, onClick: clearRosterHandler }, t('roster_clear_btn')),
@@ -1809,10 +2231,10 @@ window.__ModuleLoader__.load({
             (() => {
               const workers = rosterData?.workers || (rosterData && typeof rosterData === 'object' && !Array.isArray(rosterData) ? Object.entries(rosterData) : [])
               if (!workers || workers.length === 0) {
-                return h('div', { style: { fontSize: 11, opacity: 0.5, fontStyle: 'italic' } }, t('roster_empty'))
+                return h('div', { style: { fontSize: 11, opacity: 0.55, fontStyle: 'italic' } }, t('roster_empty'))
               }
               return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
-                workers.map(([role, info]) => h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 11, background: 'rgba(0,0,0,0.2)', padding: '4px 8px', borderRadius: 4 } }, [
+                workers.map(([role, info]) => h('div', { key: role, style: { display: 'flex', justifyContent: 'space-between', fontSize: 11, background: 'rgba(0,0,0,0.2)', padding: '4px 8px', borderRadius: 4 } }, [
                   h('span', { style: { fontWeight: 500, color: '#a855f7' } }, `• ${role}`),
                   h('span', { style: { opacity: 0.7 } }, info?.model || info?.site || 'active')
                 ]))
@@ -1820,32 +2242,224 @@ window.__ModuleLoader__.load({
             })()
           ]),
 
-          // 子卡片 B: 5 大官方研发编队
-          h('div', { style: { background: 'rgba(255, 255, 255, 0.03)', borderRadius: 6, padding: '10px 12px', border: '1px solid rgba(255, 255, 255, 0.06)' } }, [
-            h('div', { style: { fontWeight: 600, fontSize: 12, color: '#e2e8f0', marginBottom: 8 } }, t('playbooks_title')),
-            h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } }, [
-              h('div', { style: { fontSize: 11 } }, [
-                h('span', { style: { fontWeight: 600, color: '#38bdf8' } }, t('pb_fullstack_title')),
-                h('span', { style: { opacity: 0.7, marginLeft: 6 } }, t('pb_fullstack_desc')),
-              ]),
-              h('div', { style: { fontSize: 11 } }, [
-                h('span', { style: { fontWeight: 600, color: '#ec4899' } }, t('pb_game_title')),
-                h('span', { style: { opacity: 0.7, marginLeft: 6 } }, t('pb_game_desc')),
-              ]),
-              h('div', { style: { fontSize: 11 } }, [
-                h('span', { style: { fontWeight: 600, color: '#f59e0b' } }, t('pb_data_title')),
-                h('span', { style: { opacity: 0.7, marginLeft: 6 } }, t('pb_data_desc')),
-              ]),
-              h('div', { style: { fontSize: 11 } }, [
-                h('span', { style: { fontWeight: 600, color: '#8b5cf6' } }, t('pb_video_title')),
-                h('span', { style: { opacity: 0.7, marginLeft: 6 } }, t('pb_video_desc')),
-              ]),
-              h('div', { style: { fontSize: 11 } }, [
-                h('span', { style: { fontWeight: 600, color: '#10b981' } }, t('pb_research_title')),
-                h('span', { style: { opacity: 0.7, marginLeft: 6 } }, t('pb_research_desc')),
-              ]),
+          // 子卡片 B: 5 大官方研发编队 + 自定义编队乐高拼装台
+          h('div', { style: { background: 'rgba(255, 255, 255, 0.03)', borderRadius: 6, padding: '10px 12px', marginBottom: 12, border: '1px solid rgba(255, 255, 255, 0.06)' } }, [
+            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 } }, [
+              h('div', { style: { fontWeight: 600, fontSize: 12, color: '#e2e8f0' } }, t('playbooks_title')),
+              h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } }, [
+                h('button', {
+                  className: 'gw-btn',
+                  style: { padding: '2px 8px', fontSize: 11, background: '#7c3aed' },
+                  onClick: () => { setShowPbBuilder((v) => !v); setPbNotice('') }
+                }, t('pb_builder_btn')),
+                h('button', {
+                  className: 'gw-btn gw-btn-secondary',
+                  style: { padding: '2px 8px', fontSize: 11 },
+                  onClick: fetchPlaybooksList
+                }, t('pb_refresh_btn')),
+                h('button', {
+                  className: 'gw-btn gw-btn-secondary',
+                  style: { padding: '2px 8px', fontSize: 11 },
+                  onClick: () => openLocalDir('playbooks')
+                }, t('open_playbooks_btn'))
+              ])
             ]),
+            pbNotice && h('div', { style: { fontSize: 11, color: pbNotice.startsWith('❌') ? '#f87171' : '#34d399', marginBottom: 8 } }, pbNotice),
+            showPbBuilder && h('div', {
+              style: {
+                background: 'rgba(124, 58, 237, 0.08)',
+                border: '1px solid rgba(168, 85, 247, 0.35)',
+                borderRadius: 6,
+                padding: '10px 12px',
+                marginBottom: 10,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }
+            }, [
+              h('div', { style: { fontWeight: 600, fontSize: 12, color: '#d8b4fe' } }, t('pb_builder_title')),
+              h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 } }, [
+                h('div', null, [
+                  h('div', { style: { fontSize: 11, opacity: 0.75, marginBottom: 3 } }, t('pb_builder_name')),
+                  h('input', {
+                    type: 'text',
+                    className: 'gw-input',
+                    style: { width: '100%' },
+                    placeholder: t('pb_builder_name_ph'),
+                    value: pbDraft.title,
+                    onChange: (e) => setPbDraft((p) => ({ ...p, title: e.target.value }))
+                  })
+                ]),
+                h('div', null, [
+                  h('div', { style: { fontSize: 11, opacity: 0.75, marginBottom: 3 } }, t('pb_builder_slug')),
+                  h('input', {
+                    type: 'text',
+                    className: 'gw-input',
+                    style: { width: '100%' },
+                    placeholder: t('pb_builder_slug_ph'),
+                    value: pbDraft.name,
+                    onChange: (e) => setPbDraft((p) => ({ ...p, name: e.target.value }))
+                  })
+                ])
+              ]),
+              h('div', null, [
+                h('div', { style: { fontSize: 11, opacity: 0.75, marginBottom: 3 } }, t('pb_builder_scenarios')),
+                h('input', {
+                  type: 'text',
+                  className: 'gw-input',
+                  style: { width: '100%' },
+                  placeholder: t('pb_builder_scenarios_ph'),
+                  value: pbDraft.scenarios,
+                  onChange: (e) => setPbDraft((p) => ({ ...p, scenarios: e.target.value }))
+                })
+              ]),
+              h('div', { style: { fontSize: 11, opacity: 0.75 } }, t('pb_builder_roles_hint')),
+              h('div', { style: { display: 'flex', flexDirection: 'column', gap: 5 } },
+                pbDraft.roles.map((r, idx) =>
+                  h('div', {
+                    key: r.role,
+                    style: {
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                      background: 'rgba(0, 0, 0, 0.18)',
+                      padding: '5px 8px',
+                      borderRadius: 5,
+                    }
+                  }, [
+                    h('label', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' } }, [
+                      h('input', {
+                        type: 'checkbox',
+                        checked: r.enabled,
+                        onChange: (e) => {
+                          const checked = e.target.checked
+                          setPbDraft((p) => ({
+                            ...p,
+                            roles: p.roles.map((item, i) => i === idx ? { ...item, enabled: checked } : item)
+                          }))
+                        }
+                      }),
+                      h('span', null, `${r.label} ➔`)
+                    ]),
+                    h('select', {
+                      className: 'gw-select',
+                      style: { minWidth: 195, fontSize: 11, padding: '3px 6px' },
+                      value: r.siteModel,
+                      disabled: !r.enabled,
+                      onChange: (e) => {
+                        const val = e.target.value
+                        setPbDraft((p) => ({
+                          ...p,
+                          roles: p.roles.map((item, i) => i === idx ? { ...item, siteModel: val } : item)
+                        }))
+                      }
+                    }, [
+                      h('option', { value: 'aistudio:gemini-4-hydrogen' }, 'AI Studio · 4 Hydrogen (1M·免费稳定)'),
+                      h('option', { value: 'aistudio:gemini-3.8-flash' }, 'AI Studio · 3.8 Flash (日常极速)'),
+                      h('option', { value: 'aistudio:gemini-4-neon' }, 'AI Studio · 4 Neon (仅限高级/付费号)'),
+                      h('option', { value: 'gemini_task:gemini-4-hydrogen' }, 'Gemini 官网 · Task 沙盒 (Hydrogen)'),
+                      h('option', { value: 'gemini_task:gemini-4-neon' }, 'Gemini 官网 · Task 沙盒 (Neon)'),
+                      h('option', { value: 'flow:nano2.1' }, 'Google Flow · Nano Banana 2.1 (0点数)'),
+                      h('option', { value: 'flow:omni1.2' }, 'Google Flow · Omni 1.2 (视频点数)'),
+                    ])
+                  ])
+                )
+              ),
+              h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 4 } }, [
+                h('button', {
+                  className: 'gw-btn gw-btn-secondary',
+                  style: { padding: '3px 10px', fontSize: 11 },
+                  onClick: () => setShowPbBuilder(false)
+                }, t('pb_builder_cancel')),
+                h('button', {
+                  className: 'gw-btn',
+                  style: { padding: '3px 10px', fontSize: 11, background: '#7c3aed' },
+                  disabled: pbSaving,
+                  onClick: saveCustomPlaybook
+                }, pbSaving ? t('pb_builder_saving') : t('pb_builder_save'))
+              ])
+            ]),
+            (() => {
+              const officialItems = [
+                { key: 'fullstack', tab: t('pb_fullstack_tab'), roles: t('pb_fullstack_roles'), stages: t('pb_fullstack_stages'), sample: t('pb_fullstack_sample'), isCustom: false },
+                { key: 'game', tab: t('pb_game_tab'), roles: t('pb_game_roles'), stages: t('pb_game_stages'), sample: t('pb_game_sample'), isCustom: false },
+                { key: 'data', tab: t('pb_data_tab'), roles: t('pb_data_roles'), stages: t('pb_data_stages'), sample: t('pb_data_sample'), isCustom: false },
+                { key: 'video', tab: t('pb_video_tab'), roles: t('pb_video_roles'), stages: t('pb_video_stages'), sample: t('pb_video_sample'), isCustom: false },
+                { key: 'research', tab: t('pb_research_tab'), roles: t('pb_research_roles'), stages: t('pb_research_stages'), sample: t('pb_research_sample'), isCustom: false },
+              ]
+              const customItems = (customPlaybooks || []).map((cp) => ({
+                key: `custom:${cp.name}`,
+                tab: `✨ ${cp.title?.replace(/\s*\(`[^`]+`\)\s*$/, '') || cp.name}`,
+                roles: cp.scenarios || cp.name,
+                stages: `references/playbooks/${cp.name}.md`,
+                sample: `/gemini-web-agent 启动 ${cp.name} 编队：`,
+                isCustom: true,
+              }))
+              const pbItems = [...officialItems, ...customItems]
+              const cur = pbItems.find((p) => p.key === activePlaybook) || pbItems[0]
+              return h('div', null, [
+                h('div', { className: 'gw-pb-tabs' }, pbItems.map((item) =>
+                  h('button', {
+                    key: item.key,
+                    className: `gw-pb-tab${cur.key === item.key ? ' active' : ''}`,
+                    onClick: () => { setActivePlaybook(item.key); setCopiedPb(false) }
+                  }, item.tab)
+                )),
+                h('div', { style: { background: 'rgba(0, 0, 0, 0.16)', borderRadius: 6, padding: '8px 10px', fontSize: 11, lineHeight: 1.6 } }, [
+                  cur.isCustom && h('div', { style: { fontSize: 10, color: '#d8b4fe', marginBottom: 3 } }, t('pb_custom_badge')),
+                  h('div', null, [h('strong', null, cur.isCustom ? '🎯 ' : t('pb_roles_label')), h('span', { style: { opacity: 0.85 } }, cur.roles)]),
+                  h('div', null, [h('strong', null, cur.isCustom ? '📄 ' : t('pb_stages_label')), h('span', { style: { opacity: 0.85 } }, cur.stages)]),
+                  h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 4, flexWrap: 'wrap' } }, [
+                    h('span', { style: { opacity: 0.9 } }, [h('strong', null, t('pb_sample_label')), h('code', { className: 'gw-code' }, cur.sample)]),
+                    h('button', {
+                      className: 'gw-btn gw-btn-secondary',
+                      style: { padding: '2px 8px', fontSize: 11 },
+                      onClick: () => {
+                        const ok = insertTextIntoChatComposer(cur.sample)
+                        if (!ok && typeof navigator !== 'undefined' && navigator.clipboard) {
+                          navigator.clipboard.writeText(cur.sample).catch(() => {})
+                        }
+                        setCopiedPb(true)
+                        setTimeout(() => setCopiedPb(false), 2000)
+                      }
+                    }, copiedPb ? t('pb_copied') : t('pb_copy_btn'))
+                  ])
+                ])
+              ])
+            })(),
             h('div', { style: { fontSize: 11, color: '#a855f7', marginTop: 8, opacity: 0.85 } }, t('wave_stagger_tip'))
+          ]),
+
+          // 子卡片 C: 会话专属交付物审查与一键合并
+          h('div', { style: { background: 'rgba(255, 255, 255, 0.03)', borderRadius: 6, padding: '10px 12px', border: '1px solid rgba(255, 255, 255, 0.06)' } }, [
+            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 } }, [
+              h('div', { style: { fontWeight: 600, fontSize: 12, color: '#e2e8f0' } }, t('deliveries_title')),
+              h('div', { style: { display: 'flex', gap: 6 } }, [
+                h('button', {
+                  className: 'gw-btn gw-btn-secondary',
+                  style: { padding: '2px 8px', fontSize: 11 },
+                  onClick: () => openLocalDir('deliveries', deliveries?.waves?.[0]?.name)
+                }, t('deliveries_browse_btn')),
+                deliveries?.waves?.length > 0 && h('button', {
+                  className: 'gw-btn',
+                  style: { padding: '2px 8px', fontSize: 11, background: '#059669' },
+                  onClick: () => mergeLatestWave(deliveries.waves[0].name)
+                }, t('deliveries_merge_btn'))
+              ])
+            ]),
+            mergeNotice && h('div', { style: { fontSize: 11, color: mergeNotice.startsWith('❌') ? '#f87171' : '#34d399', marginBottom: 6 } }, mergeNotice),
+            (!deliveries?.waves || deliveries.waves.length === 0 || (deliveries.waves[0].files || []).length === 0)
+              ? h('div', { style: { fontSize: 11, opacity: 0.55, fontStyle: 'italic' } }, t('deliveries_empty'))
+              : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11 } },
+                  deliveries.waves[0].files.slice(0, 8).map((f) =>
+                    h('div', { key: f.relPath, style: { display: 'flex', justifyContent: 'space-between', background: 'rgba(0,0,0,0.18)', padding: '3px 8px', borderRadius: 4 } }, [
+                      h('span', null, `📄 ${f.relPath}`),
+                      h('span', { style: { opacity: 0.65 } }, `${Math.max(1, Math.round(f.size / 1024))} KB`)
+                    ])
+                  )
+                )
           ])
         ]),
 
@@ -1873,12 +2487,214 @@ window.__ModuleLoader__.load({
       ])
     }
 
+    // 3.5 聊天室快捷插槽組件 (conversation.input.right & conversation.session.header.actions)
+    function ComposerSlotLauncher() {
+      const [enabled, setEnabled] = useState(readSlotsEnabled)
+      const [open, setOpen] = useState(false)
+      const [lang, setLang] = useState(resolveDshLanguage)
+      const wrapRef = useRef(null)
+
+      useEffect(() => {
+        const onCfg = (ev) => {
+          if (ev?.detail && typeof ev.detail.enableChatSlots === 'boolean') {
+            setEnabled(ev.detail.enableChatSlots)
+          } else {
+            setEnabled(readSlotsEnabled())
+          }
+        }
+        const onDocClick = (ev) => {
+          if (wrapRef.current && !wrapRef.current.contains(ev.target)) {
+            setOpen(false)
+          }
+        }
+        if (typeof window !== 'undefined') window.addEventListener('gw-config-changed', onCfg)
+        if (typeof document !== 'undefined') document.addEventListener('mousedown', onDocClick)
+        return () => {
+          if (typeof window !== 'undefined') window.removeEventListener('gw-config-changed', onCfg)
+          if (typeof document !== 'undefined') document.removeEventListener('mousedown', onDocClick)
+        }
+      }, [])
+
+      useEffect(() => {
+        setLang(resolveDshLanguage())
+      }, [open])
+
+      if (!enabled) return null
+      const dict = I18N[lang] || I18N['zh-CN']
+      const tt = (k) => dict[k] ?? I18N['zh-CN'][k] ?? k
+
+      const triggerPrompt = (prefix) => {
+        insertTextIntoChatComposer(prefix)
+        setOpen(false)
+      }
+
+      return h('div', { ref: wrapRef, className: 'gw-slot-wrap' }, [
+        h('button', {
+          type: 'button',
+          className: 'gw-slot-btn',
+          title: tt('slot_launcher_title'),
+          onClick: () => setOpen((v) => !v)
+        }, [
+          h('span', null, '🌐'),
+          h('span', null, tt('slot_launcher_label'))
+        ]),
+        open && h('div', { className: 'gw-slot-popover up' }, [
+          h('div', { style: { fontSize: 10, opacity: 0.6, padding: '2px 8px 4px', fontWeight: 600 } }, tt('slot_sec_daily')),
+          h('button', { type: 'button', className: 'gw-slot-item', onClick: () => triggerPrompt('/gemini-web-agent 在 Google AI Studio，') }, [
+            h('span', { style: { fontWeight: 600 } }, tt('slot_act_aistudio')),
+            h('span', { style: { fontSize: 11, opacity: 0.65 } }, tt('slot_act_aistudio_sub'))
+          ]),
+          h('button', { type: 'button', className: 'gw-slot-item', onClick: () => triggerPrompt('/gemini-web-agent 用 Nano Banana 在 Google Flow 生图：') }, [
+            h('span', { style: { fontWeight: 600 } }, tt('slot_act_flow')),
+            h('span', { style: { fontSize: 11, opacity: 0.65 } }, tt('slot_act_flow_sub'))
+          ]),
+          h('button', { type: 'button', className: 'gw-slot-item', onClick: () => triggerPrompt('/gemini-web-agent 在 Gemini 官网切换至 task 模式：') }, [
+            h('span', { style: { fontWeight: 600 } }, tt('slot_act_task')),
+            h('span', { style: { fontSize: 11, opacity: 0.65 } }, tt('slot_act_task_sub'))
+          ]),
+          h('div', { style: { borderTop: '1px solid rgba(255,255,255,0.08)', margin: '4px 0' } }),
+          h('div', { style: { fontSize: 10, opacity: 0.6, padding: '2px 8px 4px', fontWeight: 600 } }, tt('slot_sec_wave')),
+          h('button', { type: 'button', className: 'gw-slot-item', onClick: () => triggerPrompt('/gemini-web-agent 启动 Wave 并发编队：') }, [
+            h('span', { style: { fontWeight: 600, color: '#c084fc' } }, tt('slot_act_wave')),
+            h('span', { style: { fontSize: 11, opacity: 0.65 } }, tt('slot_act_wave_sub'))
+          ])
+        ])
+      ])
+    }
+
+    function SessionHeaderTeamBadge(props) {
+      const sessionId = props?.sessionId || 'default'
+      const [enabled, setEnabled] = useState(readSlotsEnabled)
+      const [open, setOpen] = useState(false)
+      const [roster, setRoster] = useState(null)
+      const [deliveries, setDeliveries] = useState(null)
+      const [notice, setNotice] = useState('')
+      const wrapRef = useRef(null)
+
+      const loadSessionTeam = async () => {
+        try {
+          const [r, d] = await Promise.all([
+            api(`/roster?sessionId=${encodeURIComponent(sessionId)}`, { timeout: 6000 }),
+            api(`/deliveries?sessionId=${encodeURIComponent(sessionId)}`, { timeout: 6000 }),
+          ])
+          if (r?.ok) setRoster(r)
+          if (d?.ok) setDeliveries(d)
+        } catch {}
+      }
+
+      useEffect(() => {
+        loadSessionTeam()
+      }, [sessionId])
+
+      useEffect(() => {
+        const onCfg = (ev) => {
+          if (ev?.detail && typeof ev.detail.enableChatSlots === 'boolean') {
+            setEnabled(ev.detail.enableChatSlots)
+          } else {
+            setEnabled(readSlotsEnabled())
+          }
+        }
+        const onDocClick = (ev) => {
+          if (wrapRef.current && !wrapRef.current.contains(ev.target)) setOpen(false)
+        }
+        if (typeof window !== 'undefined') window.addEventListener('gw-config-changed', onCfg)
+        if (typeof document !== 'undefined') document.addEventListener('mousedown', onDocClick)
+        return () => {
+          if (typeof window !== 'undefined') window.removeEventListener('gw-config-changed', onCfg)
+          if (typeof document !== 'undefined') document.removeEventListener('mousedown', onDocClick)
+        }
+      }, [])
+
+      if (!enabled) return null
+      const lang = resolveDshLanguage()
+      const dict = I18N[lang] || I18N['zh-CN']
+      const tt = (k, params) => {
+        let s = dict[k] ?? I18N['zh-CN'][k] ?? k
+        if (params) {
+          for (const [pk, pv] of Object.entries(params)) s = s.replaceAll(`{${pk}}`, String(pv))
+        }
+        return s
+      }
+
+      const workers = roster?.roster ? Object.entries(roster.roster) : []
+      const hasWaveFiles = Boolean(deliveries?.waves?.[0]?.files?.length)
+
+      return h('div', { ref: wrapRef, className: 'gw-slot-wrap' }, [
+        h('button', {
+          type: 'button',
+          className: 'gw-slot-btn',
+          title: tt('slot_team_title'),
+          onClick: () => {
+            const next = !open
+            setOpen(next)
+            if (next) loadSessionTeam()
+          }
+        }, [
+          h('span', null, '👥'),
+          h('span', null, `${workers.length}`),
+          hasWaveFiles && h('span', { className: 'gw-dot gw-dot-ok' })
+        ]),
+        open && h('div', { className: 'gw-slot-popover down' }, [
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px 6px', borderBottom: '1px solid rgba(255,255,255,0.08)' } }, [
+            h('span', { style: { fontWeight: 600 } }, `${tt('slot_team_title')} (${workers.length} ${tt('slot_team_workers')})`),
+            h('button', {
+              type: 'button',
+              className: 'gw-btn gw-btn-secondary',
+              style: { padding: '2px 6px', fontSize: 10 },
+              onClick: loadSessionTeam
+            }, '🔄')
+          ]),
+          workers.length === 0
+            ? h('div', { style: { fontSize: 11, opacity: 0.6, padding: '8px 4px' } }, tt('roster_empty'))
+            : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 0' } },
+                workers.map(([role, info]) =>
+                  h('div', { key: role, style: { display: 'flex', justifyContent: 'space-between', fontSize: 11, background: 'rgba(0,0,0,0.2)', padding: '4px 6px', borderRadius: 4 } }, [
+                    h('span', { style: { color: '#c084fc', fontWeight: 500 } }, `• ${role}`),
+                    h('span', { style: { opacity: 0.7 } }, info?.status || info?.site || 'active')
+                  ])
+                )
+              ),
+          hasWaveFiles && h('div', { style: { display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' } }, [
+            h('button', {
+              type: 'button',
+              className: 'gw-btn gw-btn-secondary',
+              style: { padding: '3px 8px', fontSize: 11 },
+              onClick: () => api('/open-dir', { method: 'POST', body: { target: 'deliveries', sessionId, waveName: deliveries.waves[0].name } }).catch(() => {})
+            }, tt('deliveries_browse_btn')),
+            h('button', {
+              type: 'button',
+              className: 'gw-btn',
+              style: { padding: '3px 8px', fontSize: 11, background: '#059669' },
+              onClick: async () => {
+                const res = await api('/deliveries/merge', { method: 'POST', body: { sessionId, waveName: deliveries.waves[0].name } }).catch(() => null)
+                if (res?.ok) setNotice(tt('deliveries_merged_ok', { count: res.mergedFiles?.length || 0 }))
+              }
+            }, tt('deliveries_merge_btn'))
+          ]),
+          workers.length > 0 && h('div', { style: { marginTop: 6 } }, [
+            h('button', {
+              type: 'button',
+              className: 'gw-btn gw-btn-secondary',
+              style: { padding: '3px 8px', fontSize: 11, color: '#ef4444', width: '100%' },
+              onClick: async () => {
+                await api('/roster/clear', { method: 'POST', body: { sessionId } }).catch(() => {})
+                loadSessionTeam()
+              }
+            }, tt('roster_clear_btn'))
+          ]),
+          notice && h('div', { style: { fontSize: 11, color: '#34d399', marginTop: 6 } }, notice)
+        ])
+      ])
+    }
+
     const inject = ['slots', 'locale']
 
     // 4. 插件注入點應用 (DSH Apply)
     function apply(ctx) {
       // 注入自定義樣式
       if (typeof document !== 'undefined') {
+        const oldStyle = document.getElementById('dsh-gemini-web-styles')
+        if (oldStyle) oldStyle.remove()
         const styleEl = document.createElement('style')
         styleEl.id = 'dsh-gemini-web-styles'
         styleEl.textContent = STYLES
@@ -1941,6 +2757,37 @@ window.__ModuleLoader__.load({
           return () => {}
         }
       }, 'gemini-web: plugins config')
+
+      // 註冊聊天室輸入框右側快捷啟動器 (conversation.input.right)
+      ctx.effect(() => {
+        try {
+          return ctx.slots.inject('conversation.input.right', () => {
+            return ctx.slots.register({
+              name: 'conversation.input.right',
+              id: 'gemini-web-composer-launcher',
+              order: 25,
+            }, () => h(ComposerSlotLauncher))
+          })
+        } catch (e) {
+          return () => {}
+        }
+      }, 'gemini-web: composer launcher slot')
+
+      // 註冊會話頂部外包小隊狀態徽標 (conversation.session.header.actions)
+      ctx.effect(() => {
+        try {
+          return ctx.slots.inject('conversation.session.header.actions', () => {
+            return ctx.slots.register({
+              name: 'conversation.session.header.actions',
+              id: 'gemini-web-session-team',
+              order: 20,
+              inject: (sessionId) => ({ sessionId }),
+            }, SessionHeaderTeamBadge)
+          })
+        } catch (e) {
+          return () => {}
+        }
+      }, 'gemini-web: session team slot')
     }
 
     exports.apply = apply

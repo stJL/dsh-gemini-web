@@ -1,19 +1,20 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { detectDualChannel, findAgentLimbScript, findCliScript, findPythonVenv } from './detector.js'
+import { detectDualChannel, findAgentLimbScript, findCliScript, findPythonVenv, getPluginDir } from './detector.js'
 import { loadConfig } from '../config.js'
+import { parseTaskToProposal } from '../proposal.js'
 
 const execFileAsync = promisify(execFile)
 
 export interface AgentTaskOptions {
   task: string
   model?: string
-  site?: 'aistudio' | 'flow' | 'gemini'
-  entry?: 'chat' | 'task'
+  site?: 'aistudio' | 'flow' | 'gemini' | 'wave'
+  entry?: 'chat' | 'task' | 'wave' | 'canvas'
   thinkingLevel?: string
   thinkingPolicy?: 'adaptive' | 'custom' | 'strict'
   thinkingTimeout?: number
@@ -24,6 +25,7 @@ export interface AgentTaskOptions {
   newChat?: boolean
   downloadDir?: string
   files?: string[]
+  resume?: boolean
 }
 
 export interface AgentTaskResult {
@@ -39,6 +41,8 @@ export interface AgentTaskResult {
   fallbackHistory?: string
   error?: string
   elapsedSec?: number
+  waveDir?: string
+  rosterFile?: string
 }
 
 export function getWorkspaceDownloadDir(): string {
@@ -56,17 +60,174 @@ export function getWorkspaceDownloadDir(): string {
   return path.join(process.cwd(), 'downloads')
 }
 
+export function getWorkspaceRoot(): string {
+  return path.dirname(getWorkspaceDownloadDir())
+}
+
+export function sanitizeSessionId(sessionId?: string): string {
+  const cleaned = (sessionId || 'default').trim().replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64)
+  return cleaned || 'default'
+}
+
+export function getSessionTeamDir(sessionId?: string): string {
+  return path.join(getWorkspaceRoot(), '.gemini-teams', sanitizeSessionId(sessionId))
+}
+
+export function getSessionRosterFile(sessionId?: string): string {
+  return path.join(getSessionTeamDir(sessionId), 'roster.json')
+}
+
+export function getOrCreateSessionWaveDir(sessionId?: string, resume = false): string {
+  const teamDir = getSessionTeamDir(sessionId)
+  fs.mkdirSync(teamDir, { recursive: true })
+  if (resume) {
+    try {
+      const existing = fs.readdirSync(teamDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && d.name.startsWith('wave_'))
+        .map((d) => d.name)
+        .sort()
+        .reverse()
+      if (existing.length > 0) {
+        return path.join(teamDir, existing[0])
+      }
+    } catch {}
+  }
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const waveDir = path.join(teamDir, `wave_${stamp}`)
+  fs.mkdirSync(waveDir, { recursive: true })
+  return waveDir
+}
+
+export function isSensitiveSecretFile(filePath: string): boolean {
+  const base = path.basename(filePath).toLowerCase()
+  if (base === '.env' || base.startsWith('.env.')) return true
+  if (/\.(pem|key|p12|pfx|jks|keystore)$/i.test(base)) return true
+  if (/^(id_rsa|id_ed25519|id_ecdsa|\.netrc|\.npmrc|\.pypirc)/.test(base)) return true
+  if (/(credential|secret|private[_-]?key|service[_-]?account).*\.json$/i.test(base)) return true
+  return false
+}
+
+export function openLocalDirectory(dirPath: string): { ok: boolean; path: string; error?: string } {
+  const resolved = path.resolve(dirPath)
+  try {
+    fs.mkdirSync(resolved, { recursive: true })
+    const cleanEnv: NodeJS.ProcessEnv = { ...process.env }
+    delete cleanEnv.ELECTRON_RUN_AS_NODE
+    if (process.platform === 'linux') {
+      // Strip Electron/AppImage library overrides so xdg-open / dolphin / nautilus launch cleanly
+      delete cleanEnv.LD_LIBRARY_PATH
+      delete cleanEnv.LD_PRELOAD
+      delete cleanEnv.QT_PLUGIN_PATH
+      delete cleanEnv.QML2_IMPORT_PATH
+      delete cleanEnv.GIO_LAUNCHED_DESKTOP_FILE
+      const child = spawn('xdg-open', [resolved], { detached: true, stdio: 'ignore', env: cleanEnv })
+      child.on('error', () => {})
+      child.unref()
+    } else if (process.platform === 'darwin') {
+      const child = spawn('open', [resolved], { detached: true, stdio: 'ignore', env: cleanEnv })
+      child.on('error', () => {})
+      child.unref()
+    } else {
+      const child = spawn('explorer.exe', [resolved], { detached: true, stdio: 'ignore', env: cleanEnv })
+      child.on('error', () => {})
+      child.unref()
+    }
+    return { ok: true, path: resolved }
+  } catch (err: any) {
+    return { ok: false, path: resolved, error: err?.message || String(err) }
+  }
+}
+
+export function listSessionDeliveries(sessionId?: string): {
+  ok: boolean
+  sessionId: string
+  teamDir: string
+  rosterFile: string
+  waves: Array<{ name: string; path: string; files: Array<{ relPath: string; absPath: string; size: number }> }>
+} {
+  const sid = sanitizeSessionId(sessionId)
+  const teamDir = getSessionTeamDir(sid)
+  const rosterFile = getSessionRosterFile(sid)
+  const waves: Array<{ name: string; path: string; files: Array<{ relPath: string; absPath: string; size: number }> }> = []
+
+  if (!fs.existsSync(teamDir)) {
+    return { ok: true, sessionId: sid, teamDir, rosterFile, waves }
+  }
+
+  const walkFiles = (root: string, dir: string, acc: Array<{ relPath: string; absPath: string; size: number }>) => {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, ent.name)
+      if (ent.isDirectory()) {
+        walkFiles(root, full, acc)
+      } else if (ent.isFile() && ent.name !== 'roster.json' && ent.name !== '.web-team.json') {
+        try {
+          const st = fs.statSync(full)
+          acc.push({ relPath: path.relative(root, full), absPath: full, size: st.size })
+        } catch {}
+      }
+    }
+  }
+
+  try {
+    const waveDirs = fs.readdirSync(teamDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name.startsWith('wave_'))
+      .map((d) => d.name)
+      .sort()
+      .reverse()
+    for (const w of waveDirs) {
+      const wPath = path.join(teamDir, w)
+      const files: Array<{ relPath: string; absPath: string; size: number }> = []
+      walkFiles(wPath, wPath, files)
+      waves.push({ name: w, path: wPath, files })
+    }
+  } catch {}
+
+  return { ok: true, sessionId: sid, teamDir, rosterFile, waves }
+}
+
+export function mergeSessionDeliveries(sessionId?: string, waveName?: string): {
+  ok: boolean
+  mergedFiles: string[]
+  targetRoot: string
+  sourceDir?: string
+  error?: string
+} {
+  const list = listSessionDeliveries(sessionId)
+  const targetRoot = getWorkspaceRoot()
+  const wave = waveName
+    ? list.waves.find((w) => w.name === waveName && !waveName.includes('..') && !waveName.includes('/') && !waveName.includes('\\'))
+    : list.waves[0]
+
+  if (!wave) {
+    return { ok: false, mergedFiles: [], targetRoot, error: '未找到可合并的 Wave 交付目录' }
+  }
+
+  const mergedFiles: string[] = []
+  for (const f of wave.files) {
+    const dest = path.resolve(targetRoot, f.relPath)
+    if (!dest.startsWith(path.resolve(targetRoot) + path.sep)) {
+      continue
+    }
+    fs.mkdirSync(path.dirname(dest), { recursive: true })
+    fs.copyFileSync(f.absPath, dest)
+    mergedFiles.push(dest)
+  }
+
+  return { ok: true, mergedFiles, targetRoot, sourceDir: wave.path }
+}
+
 let lastSessionId: string | null = null
 
 export async function executeAgentTask(options: AgentTaskOptions): Promise<AgentTaskResult> {
   const cfg = loadConfig()
-  const status = await detectDualChannel(cfg.connectionMode, cfg.port, cfg.preferredBrowser)
+  const status = await detectDualChannel(cfg.connectionMode, cfg.port)
+  const canAutoStartB = Boolean(status.aiChromeConfigured && cfg.connectionMode !== 'agentlimb')
 
-  if (status.activeChannel === 'none') {
+  if (status.activeChannel === 'none' && !canAutoStartB) {
     return {
       ok: false,
       channel: 'none',
-      error: '雙通道皆未连接：请确认 Brave 已打開並啟用 AgentLimb 扩展功能，或已開啟 CDP 偵錯模式。',
+      error: '雙通道皆未连接：请确认浏览器已打開並啟用 AgentLimb 扩展功能，或已開啟 CDP 偵錯模式。',
     }
   }
 
@@ -85,13 +246,13 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
   const thinkingPolicy = options.thinkingPolicy || cfg.thinkingPolicy || (cfg.fallbackMode === 'strict' ? 'strict' : 'adaptive')
   const isStrict = thinkingPolicy === 'strict' || cfg.fallbackMode === 'strict' || cfg.autoFallback === false || options.noFallback
 
-  const targetModel = options.model || cfg.defaultModel || 'gemini-3.5-flash-lite'
+  const targetModel = options.model || cfg.defaultModel || 'gemini-4-hydrogen'
   let targetSite = options.site || 'aistudio'
   if (targetModel === 'gemini.google.com' || targetModel === 'gemini') {
     targetSite = 'gemini'
   }
 
-  // Wave 虚拟工作室直通分支
+  // Wave 虚拟工作室直通分支（强制会话级隔离：.gemini-teams/[sessionId]/）
   if (targetSite === 'wave' || options.entry === 'wave') {
     let waveSpec: any = null
     try {
@@ -101,16 +262,79 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
       }
     } catch {}
 
+    if (!waveSpec) {
+      const proposal = parseTaskToProposal(options.task, cfg)
+      const pbSlug = proposal.playbook?.slug || 'web_fullstack_app'
+      const roles = proposal.playbook?.roles || ['director', 'coder']
+      const leadRole = roles[0] || 'director'
+      const workerRole = roles[1] || 'coder'
+      const isMedia = pbSlug === 'content_video_media'
+      const tasks: any[] = [
+        {
+          role: leadRole,
+          site: 'aistudio',
+          model: 'gemini-4-hydrogen',
+          thinking_level: 'high',
+          out_file: 'plan.md',
+          prompt: `你是「${proposal.playbook?.title || pbSlug}」的架构总监 (${leadRole})。请针对以下需求输出简洁明确的模块设计与文件清单（Markdown）：\n\n${options.task}`,
+        },
+        {
+          role: workerRole,
+          site: isMedia ? 'flow' : 'aistudio',
+          model: isMedia ? 'Nano Banana 2.1' : 'gemini-3.8-flash',
+          ...(isMedia
+            ? { prompt: options.task }
+            : {
+                unpack_json_dir: '.',
+                out_file: 'deliverable_raw.txt',
+                prompt: `你是「${proposal.playbook?.title || pbSlug}」的核心执行员 (${workerRole})。请直接针对以下需求产出可运行的交付物，并严格只输出一个 JSON 对象，键为相对文件名（如 "README.md", "app.py" 或 "index.html"），值为完整文件内容字符串：\n\n${options.task}`,
+              }),
+        },
+      ]
+      waveSpec = { project: pbSlug, tasks }
+    }
+
     if (waveSpec) {
-      const res = await executeWave(waveSpec, { projectDir: process.cwd(), timeoutSec: options.timeoutSec || 360 })
+      const waveDir = getOrCreateSessionWaveDir(options.sessionId, Boolean(options.resume))
+      const rosterFile = getSessionRosterFile(options.sessionId)
+      const res = await executeWave(waveSpec, {
+        projectDir: waveDir,
+        rosterFile,
+        timeoutSec: options.timeoutSec || 360,
+        port: status.cdp.connected ? (status.cdp.port || undefined) : undefined,
+        resume: Boolean(options.resume),
+      })
       if (!res.ok) {
-        return { ok: false, channel: 'cdp', site: 'wave', error: res.error }
+        return { ok: false, channel: res.channel || 'none', site: 'wave', error: res.error, waveDir, rosterFile }
+      }
+      const deliveredFiles: string[] = []
+      const resultsArr = Array.isArray(res.data?.results) ? res.data.results : []
+      for (const r of resultsArr) {
+        if (r?.saved_text_file && fs.existsSync(r.saved_text_file)) deliveredFiles.push(r.saved_text_file)
+        if (Array.isArray(r?.unpacked_files)) {
+          for (const uf of r.unpacked_files) {
+            if (typeof uf === 'string' && fs.existsSync(uf)) deliveredFiles.push(uf)
+          }
+        }
+        if (Array.isArray(r?.saved_files)) {
+          for (const sf of r.saved_files) {
+            if (typeof sf === 'string' && fs.existsSync(sf)) deliveredFiles.push(sf)
+          }
+        }
+        if (Array.isArray(r?.downloaded_files)) {
+          for (const df of r.downloaded_files) {
+            if (typeof df === 'string' && fs.existsSync(df)) deliveredFiles.push(df)
+          }
+        }
       }
       return {
         ok: true,
-        channel: 'cdp',
+        channel: res.channel || (res.data?.channel === 'agentlimb' ? 'agentlimb' : 'cdp'),
         site: 'wave',
         model: 'wave-engine',
+        files: Array.from(new Set(deliveredFiles)),
+        waveDir,
+        rosterFile,
         output: typeof res.data === 'string' ? res.data : JSON.stringify(res.data, null, 2),
       }
     }
@@ -201,6 +425,23 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
     }
   }
 
+  // 安全护栏：发往 Gemini Task 或 Wave 远端主机时自动过滤疑似密钥/凭证文件，严防共用主机泄露
+  const skippedSecrets: string[] = []
+  const isRemoteSharedHost = (targetSite === 'gemini' && options.entry === 'task') || targetSite === 'wave'
+  const safeFiles = isRemoteSharedHost
+    ? resolvedFiles.filter((f) => {
+        if (isSensitiveSecretFile(f)) {
+          skippedSecrets.push(path.basename(f))
+          return false
+        }
+        return true
+      })
+    : resolvedFiles
+
+  if (skippedSecrets.length > 0) {
+    console.warn(`[dsh-gemini-web] Security guardrail skipped sensitive file(s) for remote Task: ${skippedSecrets.join(', ')}`)
+  }
+
   // 3. 通道 A: AgentLimb (零弹窗 / 免 Allow)
   if (status.activeChannel === 'agentlimb' && agentlimbScript && fs.existsSync(agentlimbScript)) {
     try {
@@ -217,24 +458,25 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
       if (options.thinkingTimeout) {
         args.push('--thinking-timeout', String(options.thinkingTimeout))
       }
-      // 封印 Extra High：免費池強制安全降级至 high，避免 Permission Denied 與死迴圈
+      // 保留顯式 Extra High（由底層依帳號是否解鎖動態決定：PRO 可用，免費池自動安全退回 High）
       let safeThinking = options.thinkingLevel || cfg.thinkingLevel || 'high'
-      if (safeThinking.includes('extra') || safeThinking === 'xhigh' || safeThinking === 'max') {
-        safeThinking = 'high'
+      if (safeThinking === 'xhigh' || safeThinking === 'max') {
+        safeThinking = 'extra_high'
       }
       args.push('--thinking-level', safeThinking)
 
       if (isNewChat) args.push('--new-chat')
       if (options.entry) args.push('--entry', options.entry)
-      if (resolvedFiles.length > 0) {
-        for (const f of resolvedFiles) {
+      if (safeFiles.length > 0) {
+        for (const f of safeFiles) {
           args.push('--file', f)
         }
       }
       if (isStrict) {
         args.push('--no-fallback')
       } else {
-        const ladder = options.fallbackLadder || cfg.fallbackLadder
+        const isMediaModel = /(?:image|nano|tts|lyria|omni|veo)/i.test(targetModel)
+        const ladder = options.fallbackLadder || (isMediaModel ? undefined : cfg.fallbackLadder)
         if (Array.isArray(ladder) && ladder.length > 0) {
           args.push('--fallback-ladder', ladder.join(','))
         }
@@ -267,36 +509,68 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
       }
       return { ok: true, channel: 'agentlimb', model: targetModel, output: stdout.trim() }
     } catch (err: any) {
-      // 若 AgentLimb 偶發報錯且為 auto 模式，向下尝试 CDP 備用通道
-      if (cfg.connectionMode !== 'auto') {
-        return { ok: false, channel: 'agentlimb', error: err.message || String(err) }
+      // 仅在 CDP 已就绪或已配置独立 AI Chrome 时才降级到通道 B，避免用无 CDP 错误掩盖真实通道 A 超时/错误
+      const canUseCdp = Boolean(status.cdp.connected || status.aiChromeConfigured)
+      if (cfg.connectionMode !== 'auto' || !canUseCdp) {
+        const detail = err?.stderr ? String(err.stderr).trim().split('\n').slice(-3).join(' | ') : ''
+        return {
+          ok: false,
+          channel: 'agentlimb',
+          error: detail ? `${err.message || String(err)} (${detail})` : (err.message || String(err)),
+        }
       }
     }
   }
 
-  // 4. 通道 B: Playwright CDP 備用
+  // 4. 通道 B: Playwright CDP 備用（含 B_autostart；顯式 --fallback-model none 防止越權切去 4 Neon）
   if (cdpScript && fs.existsSync(cdpScript)) {
     try {
-      let modelArg = 'flash-lite'
-      if (targetModel.includes('hydrogen')) modelArg = 'hydrogen'
-      else if (targetModel.includes('argon')) modelArg = 'argon'
-      else if (targetModel.includes('3.8') || targetModel.includes('flash')) modelArg = 'flash'
-      else if (targetModel.includes('lite')) modelArg = 'flash-lite'
-      else if (targetModel.includes('nano')) modelArg = 'nano2.1'
-      else if (targetModel.includes('omni')) modelArg = 'omni1.2'
+      let args: string[] = []
+      if (targetSite === 'gemini') {
+        args = [
+          cdpScript,
+          'ask',
+          '--entry', options.entry === 'task' ? 'task' : 'chat',
+          '--prompt', options.task,
+          '--raw',
+        ]
+        if (isNewChat) args.push('--new-tab')
+      } else if (targetSite === 'flow') {
+        const flowMedia = targetModel.includes('omni') || targetModel.includes('veo') ? 'video' : 'image'
+        args = [
+          cdpScript,
+          'flow',
+          '--media', flowMedia,
+          '--prompt', options.task,
+          '--download-dir', downloadDir,
+        ]
+      } else {
+        let modelArg = 'flash-lite'
+        if (targetModel.includes('hydrogen')) modelArg = 'hydrogen'
+        else if (targetModel.includes('argon')) modelArg = 'argon'
+        else if (targetModel.includes('neon')) modelArg = 'neon'
+        else if (targetModel.includes('3.8') || targetModel.includes('flash')) modelArg = 'flash'
+        else if (targetModel.includes('lite')) modelArg = 'flash-lite'
+        else if (targetModel.includes('nano')) modelArg = 'nano2.1'
+        else if (targetModel.includes('omni')) modelArg = 'omni1.2'
 
-      const args = [
-        cdpScript,
-        'playground',
-        '--model', modelArg,
-        '--prompt', options.task,
-        '--raw',
-        '--download-dir', downloadDir,
-      ]
-      if (isNewChat) args.push('--new-chat')
-      if (status.cdp.port) args.push('--port', String(status.cdp.port))
-      if (resolvedFiles.length > 0) {
-        for (const f of resolvedFiles) {
+        args = [
+          cdpScript,
+          'playground',
+          '--model', modelArg,
+          '--fallback-model', 'none',
+          '--prompt', options.task,
+          '--raw',
+          '--download-dir', downloadDir,
+        ]
+        if (isNewChat) args.push('--new-chat')
+      }
+
+      if (status.cdp.connected && status.cdp.port) {
+        args.push('--port', String(status.cdp.port))
+      }
+      if (safeFiles.length > 0 && targetSite !== 'flow') {
+        for (const f of safeFiles) {
           args.push('--file', f)
         }
       }
@@ -308,6 +582,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
       return {
         ok: true,
         channel: 'cdp',
+        site: targetSite,
         model: targetModel,
         output: stdout.trim(),
       }
@@ -328,12 +603,13 @@ export interface RosterResult {
   error?: string
 }
 
-export async function getRoster(rosterFile = '.web-team.json'): Promise<RosterResult> {
+export async function getRoster(rosterFile?: string, sessionId?: string): Promise<RosterResult> {
+  const targetRoster = rosterFile || (sessionId ? getSessionRosterFile(sessionId) : getSessionRosterFile('default'))
   const venv = findPythonVenv()
   const cdpScript = findCliScript()
   if (!venv || !cdpScript || !fs.existsSync(venv) || !fs.existsSync(cdpScript)) {
     try {
-      const p = path.resolve(rosterFile)
+      const p = path.resolve(targetRoster)
       if (fs.existsSync(p)) {
         const data = JSON.parse(fs.readFileSync(p, 'utf-8'))
         return { ok: true, file: p, project: data.project || '', count: Object.keys(data.roster || {}).length, roster: data.roster || {} }
@@ -345,7 +621,7 @@ export async function getRoster(rosterFile = '.web-team.json'): Promise<RosterRe
   }
 
   try {
-    const { stdout } = await execFileAsync(venv, [cdpScript, 'roster', 'list', '--roster-file', rosterFile], {
+    const { stdout } = await execFileAsync(venv, [cdpScript, 'roster', 'list', '--file', targetRoster, '--json'], {
       timeout: 10000,
       env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
     })
@@ -362,12 +638,13 @@ export async function getRoster(rosterFile = '.web-team.json'): Promise<RosterRe
   }
 }
 
-export async function clearRoster(rosterFile = '.web-team.json'): Promise<{ ok: boolean; error?: string }> {
+export async function clearRoster(rosterFile?: string, sessionId?: string): Promise<{ ok: boolean; error?: string }> {
+  const targetRoster = rosterFile || (sessionId ? getSessionRosterFile(sessionId) : getSessionRosterFile('default'))
   const venv = findPythonVenv()
   const cdpScript = findCliScript()
   if (!venv || !cdpScript || !fs.existsSync(venv) || !fs.existsSync(cdpScript)) {
     try {
-      const p = path.resolve(rosterFile)
+      const p = path.resolve(targetRoster)
       if (fs.existsSync(p)) {
         fs.writeFileSync(p, JSON.stringify({ project: '', updated_at: new Date().toISOString(), roster: {} }, null, 2), 'utf-8')
       }
@@ -378,7 +655,7 @@ export async function clearRoster(rosterFile = '.web-team.json'): Promise<{ ok: 
   }
 
   try {
-    await execFileAsync(venv, [cdpScript, 'roster', 'clear', '--roster-file', rosterFile], {
+    await execFileAsync(venv, [cdpScript, 'roster', 'clear', '--file', targetRoster, '--json'], {
       timeout: 10000,
       env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
     })
@@ -388,14 +665,17 @@ export async function clearRoster(rosterFile = '.web-team.json'): Promise<{ ok: 
   }
 }
 
-export async function auditRoster(projectDir = '.', rosterFile = '.web-team.json'): Promise<any> {
+export async function auditRoster(projectDir?: string, rosterFile?: string, sessionId?: string): Promise<any> {
+  const targetRoster = rosterFile || (sessionId ? getSessionRosterFile(sessionId) : getSessionRosterFile('default'))
+  const deliveries = listSessionDeliveries(sessionId)
+  const targetProjectDir = projectDir || deliveries.waves[0]?.path || getWorkspaceRoot()
   const venv = findPythonVenv()
   const cdpScript = findCliScript()
   if (!venv || !cdpScript) {
     return { ok: false, error: '未找到 Python 执行环境' }
   }
   try {
-    const { stdout } = await execFileAsync(venv, [cdpScript, 'roster', 'audit', '--project-dir', projectDir, '--roster-file', rosterFile], {
+    const { stdout } = await execFileAsync(venv, [cdpScript, 'roster', 'audit', '--project-dir', targetProjectDir, '--file', targetRoster, '--json'], {
       timeout: 20000,
       env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
     })
@@ -416,7 +696,7 @@ export async function getPlaybooks(): Promise<any> {
     return { ok: false, error: '未找到 Python 执行环境' }
   }
   try {
-    const { stdout } = await execFileAsync(venv, [cdpScript, 'playbook', 'list'], {
+    const { stdout } = await execFileAsync(venv, [cdpScript, 'playbook', 'list', '--json'], {
       timeout: 10000,
       env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
     })
@@ -433,7 +713,7 @@ export async function getPlaybookDetail(name: string): Promise<any> {
     return { ok: false, error: '未找到 Python 执行环境' }
   }
   try {
-    const { stdout } = await execFileAsync(venv, [cdpScript, 'playbook', 'show', '--name', name], {
+    const { stdout } = await execFileAsync(venv, [cdpScript, 'playbook', 'show', '--name', name, '--json'], {
       timeout: 10000,
       env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
     })
@@ -443,12 +723,141 @@ export async function getPlaybookDetail(name: string): Promise<any> {
   }
 }
 
-export async function executeWave(specPathOrObj: string | any, options: { projectDir?: string; timeoutSec?: number; port?: number } = {}): Promise<any> {
+export async function runDoctor(): Promise<any> {
   const venv = findPythonVenv()
   const cdpScript = findCliScript()
   if (!venv || !cdpScript) {
     return { ok: false, error: '未找到 Python 执行环境' }
   }
+  try {
+    const { stdout } = await execFileAsync(venv, [cdpScript, 'doctor', '--skip-flow', '--json'], {
+      timeout: 25000,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    })
+    return { ok: true, data: JSON.parse(stdout.trim()) }
+  } catch (err: any) {
+    return { ok: false, error: err.message || String(err) }
+  }
+}
+
+export function getPlaybooksDirectory(): string {
+  return path.join(getPluginDir(), 'references', 'playbooks')
+}
+
+export interface CustomPlaybookRoleInput {
+  role: string
+  label: string
+  siteModel: string
+  duty: string
+}
+
+export function sanitizePlaybookSlug(rawName?: string): string {
+  const cleaned = (rawName || '').trim().replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '')
+  if (cleaned && /^[a-zA-Z0-9_-]+$/.test(cleaned)) {
+    return cleaned.slice(0, 48)
+  }
+  return `custom_squad_${Date.now().toString(36)}`
+}
+
+export function buildPlaybookMarkdown(input: {
+  slug: string
+  title: string
+  scenarios: string
+  roles: CustomPlaybookRoleInput[]
+}): string {
+  const modelDisplayMap: Record<string, { site: string; model: string; thinking: string }> = {
+    'aistudio:gemini-4-hydrogen': { site: '`aistudio` (Playground)', model: '`gemini-4-hydrogen`', thinking: '`high`' },
+    'aistudio:gemini-3.8-flash': { site: '`aistudio` (Playground)', model: '`gemini-3.8-flash`', thinking: '`high`' },
+    'aistudio:gemini-4-neon': { site: '`aistudio` (Playground)', model: '`gemini-4-neon`', thinking: '`high`' },
+    'gemini_task:gemini-4-hydrogen': { site: '`gemini_task`', model: '`gemini-4-hydrogen`', thinking: '—' },
+    'gemini_task:gemini-4-neon': { site: '`gemini_task`', model: '`gemini-4-neon`', thinking: '—' },
+    'flow:nano2.1': { site: '`flow`', model: '`Nano Banana 2.1`', thinking: '—' },
+    'flow:omni1.2': { site: '`flow`', model: '`Omni 1.2 Flash`', thinking: '—' },
+  }
+
+  const rows = input.roles.map((r) => {
+    const spec = modelDisplayMap[r.siteModel] || modelDisplayMap['aistudio:gemini-4-hydrogen']
+    return `| \`${r.role}\` | ${r.label} | ${spec.site} | ${spec.model} | ${spec.thinking} | ${r.duty} |`
+  })
+
+  return [
+    `# ${input.title} (\`${input.slug}\`)`,
+    '',
+    `> **适用场景**：${input.scenarios || '自定义多角色协同工作流'}`,
+    '',
+    '## 团队花名册（1 Tab = 1 员工）',
+    '',
+    '| role | 岗位名称 | 站点渠道 | 推荐模型 | 思考等级 | 核心职责与交付物 |',
+    '| :--- | :--- | :--- | :--- | :--- | :--- |',
+    ...rows,
+    '',
+    '## 标准并行波次（Wave Execution）',
+    '',
+    '- **Wave 0（架构定界）**：梳理目标边界、输出文件清单与接口契约。',
+    '- **Wave 1（多 Tab 并行生产）**：各选定角色在独立标签页同步执行并解包至会话隔离区。',
+    '- **Wave 2（本地审查合并）**：确认产物完整性后一键合并至当前工程目录。',
+    '',
+  ].join('\n')
+}
+
+export async function addPlaybook(input: {
+  name?: string
+  title: string
+  scenarios?: string
+  roles: CustomPlaybookRoleInput[]
+}): Promise<any> {
+  const title = (input.title || '').trim()
+  if (!title) {
+    return { ok: false, error: '请填写编队名称' }
+  }
+  if (!Array.isArray(input.roles) || input.roles.length === 0) {
+    return { ok: false, error: '请至少勾选 1 名协同员工角色' }
+  }
+  const slug = sanitizePlaybookSlug(input.name || title)
+  const scenarios = (input.scenarios || '自定义多角色协同编队').trim()
+  const md = buildPlaybookMarkdown({ slug, title, scenarios, roles: input.roles })
+
+  const venv = findPythonVenv()
+  const cdpScript = findCliScript()
+  if (!venv || !cdpScript) {
+    const pbDir = getPlaybooksDirectory()
+    fs.mkdirSync(pbDir, { recursive: true })
+    const dest = path.join(pbDir, `${slug}.md`)
+    fs.writeFileSync(dest, md, 'utf-8')
+    return { ok: true, data: { name: slug, title, scenarios, path: dest } }
+  }
+
+  const tmpFile = path.join(os.tmpdir(), `dsh_pb_${slug}_${Date.now()}.md`)
+  fs.writeFileSync(tmpFile, md, 'utf-8')
+  try {
+    const { stdout } = await execFileAsync(
+      venv,
+      [cdpScript, 'playbook', 'add', '--name', slug, '--title', title, '--scenarios', scenarios, '--from-file', tmpFile, '--json'],
+      {
+        timeout: 15000,
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+      }
+    )
+    return { ok: true, data: JSON.parse(stdout.trim()) }
+  } catch (err: any) {
+    return { ok: false, error: err.message || String(err) }
+  } finally {
+    try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile) } catch {}
+  }
+}
+
+export async function executeWave(
+  specPathOrObj: string | any,
+  options: { projectDir?: string; rosterFile?: string; timeoutSec?: number; port?: number; resume?: boolean } = {}
+): Promise<any> {
+  const venv = findPythonVenv()
+  const cdpScript = findCliScript()
+  const alScript = findAgentLimbScript()
+  if (!venv || (!cdpScript && !alScript)) {
+    return { ok: false, error: '未找到 Python 执行环境' }
+  }
+  const cfg = loadConfig()
+  const status = await detectDualChannel(cfg.connectionMode, cfg.port)
   let specPath = ''
   let tmpSpec = false
   if (typeof specPathOrObj === 'string' && specPathOrObj.endsWith('.json')) {
@@ -460,21 +869,58 @@ export async function executeWave(specPathOrObj: string | any, options: { projec
     specPath = tmpFile
   }
 
-  try {
-    const args = [cdpScript, 'wave', '--spec', specPath]
+  const runWaveScript = async (scriptPath: string, withPort: boolean) => {
+    const args = [scriptPath, 'wave', '--spec', specPath, '--json']
     if (options.projectDir) args.push('--project-dir', options.projectDir)
+    if (options.rosterFile) args.push('--roster-file', options.rosterFile)
     if (options.timeoutSec) args.push('--timeout', String(options.timeoutSec))
-    if (options.port) args.push('--port', String(options.port))
+    if (withPort && options.port) args.push('--port', String(options.port))
+    if (options.resume) args.push('--resume')
 
     const { stdout } = await execFileAsync(venv, args, {
       timeout: ((options.timeoutSec || 360) + 30) * 1000,
       env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
     })
+    const lines = stdout.trim().split('\n')
+    const jsonStart = lines.findIndex((l) => l.trim().startsWith('{'))
+    const jsonText = jsonStart >= 0 ? lines.slice(jsonStart).join('\n') : stdout.trim()
     try {
-      return { ok: true, data: JSON.parse(stdout.trim()) }
+      return JSON.parse(jsonText)
     } catch {
-      return { ok: true, data: stdout.trim() }
+      return stdout.trim()
     }
+  }
+
+  try {
+    const preferAgentLimb =
+      Boolean(alScript && fs.existsSync(alScript) && status.agentlimb.ready) &&
+      (cfg.connectionMode === 'agentlimb' || (!status.cdp.connected && !status.aiChromeConfigured))
+
+    if (preferAgentLimb && alScript) {
+      const data = await runWaveScript(alScript, false)
+      return { ok: true, channel: 'agentlimb', data }
+    }
+
+      const canUseCdp = Boolean(status.cdp.connected || status.aiChromeConfigured)
+      if (cdpScript && fs.existsSync(cdpScript) && (cfg.connectionMode === 'cdp' || canUseCdp)) {
+        try {
+          const data = await runWaveScript(cdpScript, true)
+          return { ok: true, channel: 'cdp', data }
+        } catch (cdpErr: any) {
+          if (cfg.connectionMode === 'auto' && alScript && fs.existsSync(alScript) && status.agentlimb.ready) {
+            const data = await runWaveScript(alScript, false)
+            return { ok: true, channel: 'agentlimb', data }
+          }
+          throw cdpErr
+        }
+      }
+
+    if (alScript && fs.existsSync(alScript)) {
+      const data = await runWaveScript(alScript, false)
+      return { ok: true, channel: 'agentlimb', data }
+    }
+
+    return { ok: false, error: '未找到 Wave 执行脚本' }
   } catch (err: any) {
     return { ok: false, error: err.message || String(err) }
   } finally {

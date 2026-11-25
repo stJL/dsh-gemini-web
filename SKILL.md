@@ -109,3 +109,15 @@ When confirmed (interactive button clicked, or `1` / `confirm` sent), invoke `ge
 | `new_chat` | `true` (default: isolated new session) |
 
 **Deliverable Requirements**: Upon completion, present the fallback status notice, clickable `file://` hyperlinks to saved files, and key architectural highlights. Never reprint full long code.
+
+---
+
+## 3. Reference Manuals & Sandbox Constraints (For AI Planning)
+
+Before dispatching complex tasks, Wave specs, or Gemini Task sandbox jobs, consult the machine-readable manuals in `references/`:
+- **`references/director_prompt.md`**:
+  - Gemini Web `Task` runs on **Debian 12** (`2C / 7.8G / 19G`, user `spark`, preinstalled `python3 3.11`, `node 18`, `gcc 12`, `ffmpeg 5.1`, `libreoffice 7.4`, headless `chromium 156`, `PIL`, `cv2`, `pydub`, `pandas`, `matplotlib`). Always package multi-file outputs using Python **`zipfile`** (no `zip` CLI).
+  - **Network & Secret Rule (`gemini-spark`)**: When `gemini.google.com/gemini-spark` remote network access is OFF, `pip/npm install` is disabled. When ON, all tasks share the same remote host—**NEVER send API keys, private credentials, `.env` files, or sensitive secrets to Gemini Task**.
+- **`references/models.md`**: Full model-id mapping and `Paid` markers (never dispatch `Paid` models or `4 Neon` to free-tier accounts unless requested).
+- **`references/agentlimb.md`**: Browser DOM macros and `gem-segmented-button` Task switcher timing.
+- **`references/playbooks/*.md`**: 5 standard team templates. When a user asks for a custom team, **draft the Playbook proposal via confirmation card first**—never run `playbook add` silently without explicit user approval.

@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-[![Version](https://img.shields.io/badge/version-v0.2.1-blue.svg?style=flat-square)](package.json)
+[![Version](https://img.shields.io/badge/version-v0.3.0--beta.1-blue.svg?style=flat-square)](package.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
 [![Upstream Sync](https://github.com/stJL/dsh-gemini-web/actions/workflows/sync-upstream.yml/badge.svg)](https://github.com/stJL/dsh-gemini-web/actions/workflows/sync-upstream.yml)
 [![DSH](https://img.shields.io/badge/DeepSeek--Harness-Plugin-6366f1.svg?style=flat-square)](https://github.com/stJL/dsh-gemini-web)
@@ -34,16 +34,17 @@
 
 本项目基于原作者 [@582835293/gemini-web-agent](https://github.com/582835293/gemini-web-agent) 的底层浏览器自动化能力，为 DeepSeek Harness (DSH) 桌面端进行适配与功能扩展：
 
-| 功能模块 | 原作者基础 (`gemini-web-agent`) | 本插件扩展 (`dsh-gemini-web`) |
+| 功能模块 | 原作者基础 (`gemini-web-agent`) | 本插件扩展 (`dsh-gemini-web` v0.3.0-beta.1) |
 | :--- | :--- | :--- |
-| **操作界面** | Python 命令行（CLI）执行 | DSH 桌面端可视化设置面板、状态指示灯与实时额度显示 |
-| **通信通道** | CDP（9222 端口）连接 | 整合 AgentLimb 零弹窗通道，支持 Chrome/Edge/Brave 等多浏览器探测 |
-| **模型阶梯** | 固定的模型降级链 | GUI 自定义 1~5 阶模型排序（`↑`/`↓`）、切换智能阶梯或严格模式 |
-| **AI Studio** | 网页对话与代码生成调度 | 停用 Extra High 防 403 假死、过滤 Paid 付费标签模型 |
-| **Google Flow** | 网页自动化生图 | 默认底栏画布生图（0 点数消耗）、适配每日点数重置检测 |
-| **本地文件分析** | 基础文本输入 | 支持本地代码/日志/PDF 直接挂载至网页端 1M 窗口分析 |
-| **文件保存与交付**| 文本输出于终端 | 代码与媒体文件自动存档至 `downloads/`，生成本地超链接 |
-| **调度流程** | 脚本直接发包 | 「先问后用」确认卡机制，并在提示词中加入抗历史惯性约束 |
+| **操作界面** | Python 命令行（CLI）执行 | DSH 桌面端设置面板、聊天室快捷插槽（Slots）、状态指示灯与实时额度大盘 |
+| **通信通道** | CDP（9222 端口）连接 | 整合 AgentLimb 免弹窗通道（多端口智能避让 `revoked`）+ CDP 多浏览器备用探测 |
+| **多角色编队** | 單一任務 / 手动拼接 Wave | **虚拟工作室（Wave）**：5 套官方编队卡 + 双轨自定义编队（GUI 拼装 / 本地 `.md`） |
+| **会话隔离交付**| 直接写入目标项目目录 | `.gemini-teams/<sessionId>/` 沙盒隔离落盘、审查抽屉与一键安全合并 |
+| **模型阶梯** | 固定的模型降级链 | GUI 自定义 1~5 阶模型排序（`↑`/`↓`）、智能阶梯 / 严格模式、1–5 级思考策略 |
+| **AI Studio** | 网页对话与代码生成调度 | 免费号保护（过滤 `Paid`、`Extra High` 防卡死）；PRO 号自动解锁 `Neon` 与 `Lyria` 音乐台 |
+| **Google Flow** | 网页自动化生图 | 默认底栏画布生图（`Nano Banana 2.1` 0 点数消耗）、适配每日/每月重置检测 |
+| **本地文件分析** | 基础文本输入 | 支持本地代码/日志/PDF 免弹窗挂载至 1M 窗口；`gemini-spark` 联网任务自动过滤敏感密钥 |
+| **调度流程** | 脚本直接发包 | 强制「先问后用」确认卡 + `ask_question` 交互按钮、抗历史惯性约束 |
 
 ---
 
@@ -92,15 +93,15 @@ flowchart TD
     Core -. 备援 .-> CDP
     
     subgraph GoogleSites ["三大 Google 外部算力站点"]
-        AIS["Google AI Studio\n• key_off 免费层级\n• 1M Token 超长上下文\n• Hydrogen / Argon / Flash\n• 思考等级 (封印 Extra High)"]
-        Flow["Google Flow\n• 独立点数池 (50点/日)\n• 底部画布生图 0 点数特权\n• Nano Banana 2.1 2K 生图"]
-        Web["Gemini 官网\n• 5 小时滚动免费对话池\n• Chat 对话 & Task 联网模式"]
+        AIS["Google AI Studio\n• key_off 免费层级 / PRO 解锁 Neon & Lyria\n• 1M Token 超长上下文\n• Hydrogen / Flash / Image / Music"]
+        Flow["Google Flow\n• 免费 50 点/日 · PRO 独立月池\n• 底部画布生图 0 点数特权\n• Nano Banana 2.1 生图"]
+        Web["Gemini 官网\n• 5 小时滚动对话池\n• Chat 对话 & Task 沙盒 (Debian 12)"]
     end
     
     AL --> GoogleSites
     CDP -.-> GoogleSites
     
-    GoogleSites --> Delivery["成果自动落地交付\n• 代码自动提取保存至 downloads/\n• 可点击 file:/// 超链接回传"]
+    GoogleSites --> Delivery["成果自动落地与隔离审查\n• 单任务保存至 downloads/ 并回传 file:/// 超链接\n• Wave 编队落盘至 .gemini-teams/<sessionId>/ 审查后合并"]
     Delivery --> DSH
 ```
 
@@ -117,17 +118,23 @@ flowchart TD
 
 ### 3. 三大站点深度支持与免扣费安全锁
 * **Google AI Studio (`aistudio.google.com`)**：
-  - 默认工作于 **`key_off` 免费无限轮询层级**（左上角未绑定付费 API Key），享受 1M Token 超长上下文输出。
-  - **防 Paid 扣费铁律**：插件强制过滤并锁定所有标记为 `Paid` 的付费模型（如 `gemini-4-carbon`），非用户显式指定绝不调用。
-  - **Extra High 安全锁**：免费层级若开启 `Extra High` 思考会引发 Google 403 错误与排队假死。本插件在前端 GUI 与底层调度中将 `Extra High` 上锁。
+  - 默认工作于 **`key_off` 免费无限轮询层级**（左上角未绑定付费 API Key），享受 1M Token 超长上下文输出；主力编码模型为 **`gemini-4-hydrogen`**（原 `Argon` 别名已兼容自动映射至 `Hydrogen`）。
+  - **防 Paid 扣费铁律**：自动识别账号实际已解锁权限，过滤仍标记为 `Paid` 的付费模型（如 `gemini-4-carbon`、`genie-4`），非用户显式指定绝不误触发扣费路径；且禁用上游静默跳级，避免免费号误切付费模型。
+  - **免费 vs PRO 自动适配**：免费号锁定 `Extra High` 思考等级以防 403 / 假死；若浏览器登录 **PRO 账号**，自动识别并解锁 `gemini-4-neon`（含 `Extra High` 思考）以及 **Lyria 音乐台（`lyria-3.5` / `lyria-3-pro-preview`）** 音频生成并保存本机 `.mp3`。
 * **Google Flow (`flow.google.com`)**：
-  - **点数重置机制**：免费账号每日定期自动补满 50 点，进阶账号每月享有专属点数池。
+  - **点数重置机制**：免费账号每日定期自动补满 50 点，PRO 账号每月享有专属点数池（如 1,000+ 点）。
   - **🎨 画布 0 点数生图特权（重要！）**：在底部标准画布（Canvas）提示词框使用 Nano Banana 2.1 / Pro 生成 2K 高清图片时，**完全不扣除点数（Generating will use 0 credits）**，等同无限免费生图！
   - **⚠️ 扣点避坑提醒**：点开右侧 Conversational Agent 对话面板（Agent 模式）或点击生成视频（Omni / Veo）时会扣除点数，日常纯生图请认准底栏画布生成。
 * **Gemini 官网 (`gemini.google.com`)**：
-  - 独立 5 小时滚动免费对话池，支持日常对话与 Task 联网任务，任务完成自动关闭标签页。
+  - 独立 5 小时滚动对话池，支持日常 `Chat` 与 `Task`（Debian 12 云端沙盒）模式；免费号若无 `Task` 按钮会自动 3 秒快速识别并安全放行，不阻塞任务与 Wave。
+  - 联网开启時自动过滤本地 `.env`、`*.pem`、`*.key`、`id_rsa*` 等敏感凭证文件；若触发 `google.com/sorry` 人机验证会立即熔断提示，绝不强行绕过。
 
-### 4. 严格「先问后用」工作流 (Ask-Before-Dispatch)
+### 4. Wave 虚拟工作室、自定义编队与会话隔离 (v0.3.0-beta.1 新增)
+* **🌊 多角色错峰并发与断点续传**：支持同时编排 AI Studio（架构/编码）、Gemini 官网（联网调研）与 Google Flow / Lyria（视觉/音频），默认错峰 `3.5s` 派发并维持 `1-Tab-1-Role` 持久化绑定，支持 `--resume` 断点续跑与 JSON 自动解包写档。
+* **📚 双轨编队体系**：内置 5 套官方编队卡（Web 全栈、学术深研、影音内容、数据办公、互动游戏），同时支持在 GUI 使用 **「➕ 组装专属编队」** 可视化拼装，或点击 **「📂 打开编队目录」** 直接编辑 Markdown 编队文件（参考 `custom_squad.md.example`）。
+* **📦 会话隔离交付与聊天室插槽**：Wave 产出优先写入当前会话专属目录 `.gemini-teams/<sessionId>/wave_<timestamp>/`，可在设置面板审查或浏览文件后点击 **「🚀 合并至项目」** 落盘；聊天室右下角与顶部亦可启用快捷插槽（`enableChatSlots`）一键唤起编队或查看团队状态。
+
+### 5. 严格「先问后用」工作流 (Ask-Before-Dispatch)
 为确保透明、可控与零意外花费，插件严格遵循规范的「先问后用」交互流程：
 1. **第 1 步：呈现调度提案卡**  
    AI 接收到任务后，严禁直接发包或偷开本地 subagent，必须先输出结构化确认卡，并立即结束当次回显等待用户指令：
@@ -152,13 +159,13 @@ flowchart TD
    - 回复 调整参数：AI 立即按最新参数直接发包。
    - 回复 `取消`：中止外部调度，改由本地直接回答。
 
-### 5. 阶梯备援降级机制 (Sequential Fallback Ladder)
+### 6. 阶梯备援降级机制 (Sequential Fallback Ladder)
 * **智能模式**：在 AI Studio 遭遇尖峰拥堵、限流或超时时，自动沿着梯队平滑降级：
   $$\text{Tier 1 (Hydrogen)} \longrightarrow \text{Tier 2 (Flash)} \longrightarrow \text{Tier 3 (Flash Lite)} \longrightarrow \text{Gemini 官网}$$
 * **严格模式**：若用户在设置中切换为「🛑 严格模式」，则锁定单一模型，不进行任何降级。
 * **GUI 自由调整**：在设置面板中可自由增删 1~5 阶模型，并通过 `↑` / `↓` 按钮直观调整模型优先级顺序。
 
-### 6. 代码自动落地与点击式超链接交付
+### 7. 代码自动落地与点击式超链接交付
 * 网页端生成的代码块与生成的媒体文件（PNG 图片、MP4 视频、MP3 音乐、项目 ZIP 包）由后台程序自动提取并落地保存至 DSH 工作区的 `downloads/` 目录。
 * 输出标准可点击的本地绝对路径 Markdown 超链接：
   ```markdown
@@ -167,7 +174,7 @@ flowchart TD
   ```
 * 避免全量长代码在聊天窗口大量重抄导致小模型 SSE 流截断（Incomplete JSON segment）。
 
-### 7. 本机文件、日志与论文 PDF 免弹窗挂载分析 (Multi-modal File Attachment)
+### 8. 本机文件、日志与论文 PDF 免弹窗挂载分析 (Multi-modal File Attachment)
 * **1M Token 零开销吞吐**：通过底层 `DataTransfer`（通道 A）与 Chromium 原生 `DOM.setFileInputFiles`（通道 B），直接将本机的 `.txt`、`.log`、`.pdf`、`.py`、`.cpp` 或图片免弹窗上传至 Google AI Studio 进行端到端多模态解析。
 * **彻底规避本机 Context 溢出**：本机宿主模型无需在聊天对话框中重抄或吞吐十万行日志文本，只需传入文件路径，由 Google AI Studio 免费层级（100 万 Token 窗口）全权推演分析并回传结论！
 * **多文件并行挂载**：支持一次性挂载多份参考文档或对比文件。
@@ -281,8 +288,8 @@ python scripts/sync_upstream.py
 ## 🤝 欢迎参与测试、反馈与贡献 (Feedback & Contribution)
 
 > [!NOTE]
-> 💡 **项目状态与测试声明**：  
-> 本插件目前处于**公开测试阶段（Public Beta）**。由于 Google 各大网页端（AI Studio、Gemini 官网、Google Flow）的前端界面与 DOM 结构会不定期进行 A/B 测试或静默更新，加上不同操作系统的使用者（Linux / macOS / Windows）、浏览器版本、网络环境及代理策略各不相同，**目前仅由维护者在有限的本地环境进行实测，代码中难免存在尚未被发现的边界情况（Edge Cases）或潜在问题**。
+> 💡 **项目状态与版本说明 (`v0.3.0-beta.1`)**：  
+> 本插件长期以 **Public Beta** 形态持续迭代演进——**`v0.3.0-beta.1` 即为 0.3.0 系列的正式发布版本**。由于 Google 各大网页端（AI Studio、Gemini 官网、Google Flow / Lyria）的前端界面与 DOM 结构会不定期进行 A/B 测试或静默更新，加上不同操作系统的使用者（Linux / macOS / Windows）、浏览器版本、账号等级（免费 / PRO）及网络环境各不相同，**核心流程虽已完成免费与 PRO 双账号全线实测，但仍可能存在尚未覆盖到的边界情况（Edge Cases）或未知问题**，诚邀社区一同实测与反馈！
 
 > [!TIP]
 > 🌱 **写给开源社区的一封信（关于 Vibe Coding）**：  

@@ -16,11 +16,14 @@ export interface PluginConfig {
   preferredBrowser: string
   flowCount: number
   dispatchMode: 'ask_first' | 'fast_track'
+  directorMode: 'local' | 'external'
+  directorModel: string
+  enableChatSlots: boolean
 }
 
 export const DEFAULT_CONFIG: PluginConfig = {
   connectionMode: 'auto',
-  defaultModel: 'gemini-3.5-flash-lite',
+  defaultModel: 'gemini-4-hydrogen',
   autoFallback: true,
   fallbackMode: 'ladder',
   fallbackLadder: [
@@ -36,6 +39,9 @@ export const DEFAULT_CONFIG: PluginConfig = {
   preferredBrowser: 'auto',
   flowCount: 1,
   dispatchMode: 'ask_first',
+  directorMode: 'local',
+  directorModel: 'gemini-4-hydrogen',
+  enableChatSlots: true,
 }
 
 export function getConfigPath(): string {

@@ -232,6 +232,20 @@ def get_cdp_ws_url(port_override: int | None = None) -> str:
     if dedicated_ver and dedicated_ver.get("webSocketDebuggerUrl"):
         return str(dedicated_ver["webSocketDebuggerUrl"])
 
+    # 1.5 若用户此前已初始化过独立 AI Chrome (~/.gemini-web-chrome/Default)，发现离线时自动拉起，不再反复打扰询问
+    if hasattr(pu, "is_ai_chrome_configured") and pu.is_ai_chrome_configured():
+        bins = pu.detect_chromium_executables()
+        if bins:
+            launched = pu.launch_ai_chrome(
+                chrome_exe=bins[0],
+                profile_dir=pu.get_ai_chrome_profile_dir(),
+                port=pu.AI_CHROME_DEFAULT_PORT,
+                wait_ready_sec=10.0,
+            )
+            ws = str(launched.get("ws_url") or "")
+            if launched.get("cdp_http_ready") and ws.startswith("ws"):
+                return ws
+
     # 2. 扫描各 Chromium 家族 DevToolsActivePort（优先挑选 HTTP /json/version 存活者，避免陈旧端口文件）
     fallback_ws = ""
     for active_port_file in _iter_devtools_active_port_files():
@@ -259,11 +273,15 @@ def get_cdp_ws_url(port_override: int | None = None) -> str:
 
 
 def wait_gemini_ready(page, timeout_ms: int = 45000) -> None:
-    """等待输入框与可见模型切换按钮渲染完成（兼容慢网冷启动及隐藏响应式副本）。"""
+    """等待输入框渲染完成（兼容新版首页未首屏渲染 bard-mode-menu-button 的场景）。"""
     page.locator('div[role="textbox"]:visible').first.wait_for(state="visible", timeout=timeout_ms)
-    page.locator('button[data-test-id="bard-mode-menu-button"]:visible').first.wait_for(
-        state="visible", timeout=timeout_ms
-    )
+    try:
+        page.locator('button[data-test-id="bard-mode-menu-button"]:visible').first.wait_for(
+            state="visible", timeout=1500
+        )
+    except Exception:
+        # 新版 Gemini Web 首页/任务模式首轮前可能不渲染模式选择器，安全放行
+        pass
 
 
 def get_gemini_page(browser, new_tab: bool = True, tab_url_hint: str = "", bring_to_front: bool = True):
@@ -455,21 +473,40 @@ def _gemini_import_code(page, code_folder: str = "", github_repo: str = "") -> d
 
 
 def select_entry_mode(page, entry: str) -> None:
-    """在新对话页切换「对话/Chat」或「任务/Task」模式。"""
+    """在新对话页切换「对话/Chat」或「任务/Task」模式（兼容最高 15s 异步延迟渲染的分段切换器）。"""
+    seg_or_btn = (
+        'gem-segmented-button button:visible, '
+        'button:text-is("任务"):visible, '
+        'button:text-is("Task"):visible'
+    )
+    try:
+        page.locator(seg_or_btn).first.wait_for(state="visible", timeout=15000)
+    except Exception:
+        pass
     labels = ("任务", "Task") if entry.strip().lower() == "task" else ("对话", "Chat")
     for label in labels:
-        btn = page.locator(f'gem-segmented-button button:has-text("{label}")').first
+        btn = page.locator(f'gem-segmented-button button:has-text("{label}"), button:text-is("{label}")').first
         if btn.count() > 0 and btn.is_visible():
-            btn.click()
-            page.wait_for_timeout(400)
+            if (btn.get_attribute("aria-pressed") or "").lower() != "true":
+                btn.click()
+                for _ in range(10):
+                    page.wait_for_timeout(200)
+                    if (btn.get_attribute("aria-pressed") or "").lower() == "true":
+                        break
+            page.wait_for_timeout(450)
             return
 
 
 def select_model(page, model_key: str) -> str:
-    """打开模型选择器并切换目标模型。"""
+    """打开模型选择器并切换目标模型；若当前页面未渲染选择器则安全降级跳过。"""
     key = model_key.strip().lower()
-    mode_btn = page.locator('button[data-test-id="bard-mode-menu-button"]').first
-    current_label = (mode_btn.inner_text() or "").strip()
+    mode_btn = page.locator('button[data-test-id="bard-mode-menu-button"]:visible').first
+    if mode_btn.count() == 0:
+        return "default (not shown)"
+    try:
+        current_label = (mode_btn.inner_text() or "").strip()
+    except Exception:
+        return "default (not shown)"
 
     target = MODEL_OPTIONS.get(key)
     if target and target[1].lower() in current_label.lower():
@@ -499,8 +536,10 @@ def select_model(page, model_key: str) -> str:
 
 
 def select_thinking_level(page, level: str) -> None:
-    """选择思考等级（低/中/高）。"""
-    mode_btn = page.locator('button[data-test-id="bard-mode-menu-button"]').first
+    """选择思考等级（低/中/高）；若页面未渲染模式按钮则安全跳过。"""
+    mode_btn = page.locator('button[data-test-id="bard-mode-menu-button"]:visible').first
+    if mode_btn.count() == 0:
+        return
     mode_btn.click()
     page.wait_for_timeout(400)
     sub_items = page.locator('.cdk-overlay-pane gem-menu-item[role="menuitemradio"]')
@@ -745,6 +784,17 @@ def execute_ask(
     else:
         textbox.press("Enter")
 
+    # 防止后台/新建页面首点击未触发提交：短暂确认输入是否清空或已生成新响应，必要时补按 Enter
+    page.wait_for_timeout(800)
+    if page.locator("model-response").count() == before_count:
+        try:
+            still_text = (textbox.inner_text() or "").strip()
+            if still_text:
+                textbox.focus()
+                textbox.press("Enter")
+        except Exception:
+            pass
+
     if async_send:
         # 异步任务发射模式：等 URL 分配会话 ID 或出现响应节点后即刻返回
         deadline = time.time() + 15
@@ -845,6 +895,101 @@ def execute_usage(browser) -> dict:
             "updated": raw.get("updated"),
             "current_usage": _parse_usage_block(raw.get("current_text", "")) if raw.get("current_text") else None,
             "weekly_usage": _parse_usage_block(raw.get("weekly_text", "")) if raw.get("weekly_text") else None,
+        }
+    finally:
+        try:
+            page.close()
+        except Exception:
+            pass
+
+
+_SPARK_NETWORK_SWITCH_SEL = (
+    'button[role="switch"][aria-label*="远程计算机"], '
+    'button[role="switch"][aria-label*="network" i], '
+    'button[role="switch"][aria-label*="remote" i]'
+)
+
+
+def _read_spark_network_switch(page) -> dict:
+    """在 gemini.google.com/gemini-spark 读取“允许远程计算机访问网络”开关 DOM 状态。"""
+    return page.evaluate(
+        """(sel) => {
+            let sw = document.querySelector(sel);
+            if (!sw) {
+                const switches = Array.from(document.querySelectorAll('button[role="switch"], [role="switch"]'));
+                sw = switches.find(el => {
+                    const ctx = (el.closest('section, div, mat-card')?.innerText || '').toLowerCase();
+                    return ctx.includes('远程计算机') || ctx.includes('访问网络') || ctx.includes('network access') || ctx.includes('remote computer');
+                }) || switches[switches.length - 1] || null;
+            }
+            if (!sw) return { found: false, enabled: null, ariaLabel: null };
+            const checked = sw.getAttribute('aria-checked');
+            return {
+                found: true,
+                enabled: checked === 'true' ? true : (checked === 'false' ? false : null),
+                ariaLabel: sw.getAttribute('aria-label') || null,
+                id: sw.id || null,
+            };
+        }""",
+        _SPARK_NETWORK_SWITCH_SEL,
+    )
+
+
+def execute_task_network(browser, action: str = "status") -> dict:
+    """检查或设置 https://gemini.google.com/gemini-spark 远程计算机网络访问开关（云端 Linux 主机权限）。"""
+    act = (action or "status").strip().lower()
+    if act not in ("status", "enable", "disable"):
+        raise ValueError(f"不支持的 task-net action: {action}（仅支持 status | enable | disable）")
+
+    ctx = browser.contexts[0] if browser.contexts else browser.new_context()
+    page = ctx.new_page()
+    try:
+        page.goto("https://gemini.google.com/gemini-spark", wait_until="domcontentloaded", timeout=30000)
+        page.locator(_SPARK_NETWORK_SWITCH_SEL + ', button[role="switch"]').first.wait_for(
+            state="visible", timeout=15000
+        )
+        _human_pause(page, 600, 1000)
+        state = _read_spark_network_switch(page)
+        if not state.get("found"):
+            raise RuntimeError("未在 gemini-spark 页面找到远程计算机网络访问开关，请确认已登录且所在账号支持任务设置。")
+
+        cur_enabled = state.get("enabled")
+        changed = False
+        want_enabled = True if act == "enable" else (False if act == "disable" else None)
+        if want_enabled is not None and cur_enabled is not want_enabled:
+            sw = page.locator(f'#{state["id"]}' if state.get("id") else _SPARK_NETWORK_SWITCH_SEL).first
+            sw.scroll_into_view_if_needed()
+            _human_pause(page, 250, 450)
+            sw.click()
+            _human_pause(page, 500, 900)
+            confirm_btn = page.locator(
+                '.cdk-overlay-pane button:has-text("允许"), '
+                '.cdk-overlay-pane button:has-text("开启"), '
+                '.cdk-overlay-pane button:has-text("确认"), '
+                '.cdk-overlay-pane button:has-text("Allow"), '
+                '.cdk-overlay-pane button:has-text("Enable")'
+            ).first
+            if confirm_btn.count() > 0 and confirm_btn.is_visible():
+                confirm_btn.click()
+                _human_pause(page, 500, 900)
+            after_state = _read_spark_network_switch(page)
+            cur_enabled = after_state.get("enabled")
+            changed = True
+
+        security_note = (
+            "已开启云端 Linux 联网（跨任务持久化，可 pip/npm install 与调外部 API）；注意所有任务共享该远程机，严禁向 Task 发送 API Key、私密凭证或敏感数据。"
+            if cur_enabled
+            else "当前远程计算机处于离线模式；如需让 Gemini Task 联网装包/独立跑复杂工程，可在 https://gemini.google.com/gemini-spark 开启（或运行 task-net enable）。"
+        )
+        return {
+            "status": "ok",
+            "entry": "task-net",
+            "action": act,
+            "url": page.url,
+            "network_enabled": bool(cur_enabled),
+            "changed": changed,
+            "aria_label": state.get("ariaLabel"),
+            "security_note": security_note,
         }
     finally:
         try:
@@ -1294,9 +1439,15 @@ def _aistudio_has_final_output(page, min_turns: int = 0) -> bool:
 
 
 def _aistudio_extract_turn_error(page, min_turns: int = 0) -> str:
-    """检测 AI Studio 最后一轮 Model Turn 是否输出了错误卡片（便于立即 Fast-Fail，避免空等 180s）。"""
+    """检测 AI Studio 最后一轮 Model Turn 或页面 Toast 错误（含 503/high demand/model isn't available/权限遭拒），便于立即 Fast-Fail。"""
     raw = page.evaluate(
         """(minTurns) => {
+            const errRe = /权限遭拒|permission denied|503|service is unavailable|isn't available right now|please wait a minute and try again|high demand|spikes in demand|error 14|resource exhausted|quota|internal error|something went wrong|rate limit/i;
+            const toastEls = Array.from(document.querySelectorAll('.mat-mdc-snack-bar-container, simple-snack-bar, [role="alert"]'));
+            for (const t of toastEls) {
+                const tt = (t.innerText || t.textContent || '').trim();
+                if (tt && errRe.test(tt)) return tt;
+            }
             const allTurns = Array.from(document.querySelectorAll('ms-chat-turn'));
             if (minTurns > 0 && allTurns.length <= minTurns) return '';
             const modelTurns = Array.from(document.querySelectorAll('[data-turn-role="Model"]'));
@@ -1307,9 +1458,9 @@ def _aistudio_extract_turn_error(page, min_turns: int = 0) -> str:
             if (hasCmark || hasMedia) return '';
             const errNode = last.querySelector('.model-error, .error-message, [class*="error" i]');
             const icons = Array.from(last.querySelectorAll('mat-icon, .material-symbols-outlined, .material-icons'));
-            const hasErrIcon = icons.some(ic => (ic.innerText || '').trim().toLowerCase() === 'error');
-            const txt = (errNode?.innerText || last.innerText || '').trim();
-            if (hasErrIcon || errNode || /权限遭拒|permission denied|quota|internal error|something went wrong|rate limit/i.test(txt)) {
+            const hasErrIcon = icons.some(ic => (ic.innerText || ic.textContent || '').trim().toLowerCase() === 'error');
+            const txt = (errNode?.innerText || errNode?.textContent || last.innerText || last.textContent || '').trim();
+            if (hasErrIcon || errNode || errRe.test(txt)) {
                 return txt.replace(/^(?:edit|more_vert|Model\\s*\\d{1,2}:\\d{2}|error)\\s*/gim, '').trim() || txt;
             }
             return '';
@@ -1573,6 +1724,57 @@ def _aistudio_run_tts(
     }
 
 
+_AISTUDIO_FALLBACK_ORDER = {
+    "gemini-4-neon": "gemini-4-hydrogen",
+    "gemini-4-argon": "gemini-4-hydrogen",
+    "gemini-4-carbon": "gemini-4-hydrogen",
+    "gemini-4-hydrogen": "gemini-3.8-flash",
+    "gemini-3.8-flash": "gemini-3.5-flash-lite",
+}
+
+
+_CROSS_CHANNEL_FALLBACK_HINTS = {
+    "aistudio": "建议切换备用额度：当前 AI Studio 暂不可用/高负载限流，建议改派 Gemini Web（gemini.google.com/app 的 `ask --entry task / chat` 使用独立 Pro 额度池与云端 Linux 主机），或查看本地 Antigravity / 其他客户端可用额度。",
+    "gemini": "建议切换备用额度：当前 Gemini Web 额度已近见底或暂不可用，建议改用 AI Studio Playground（aistudio.google.com `key_off` 独立免费额度池）或本地模型额度。",
+    "flow": "建议切换备用额度：当前 Google Flow 点数不足或暂不可用，生图可改走 AI Studio Playground（`--model nano2.1`），生视频可改用 AI Studio `omni1.2`（走 key_off 独立额度不扣 Flow 点数）。",
+}
+
+
+def _cross_channel_fallback_hint(site: str, err: str = "") -> str:
+    """根据受阻渠道返回清晰的跨站点/跨额度池切换建议。"""
+    s = (site or "").strip().lower()
+    if s in ("aistudio", "playground", "build", "lyria", "tts", "aistudio-playground", "aistudio-music", "aistudio-tts"):
+        return _CROSS_CHANNEL_FALLBACK_HINTS["aistudio"]
+    if s in ("flow",):
+        return _CROSS_CHANNEL_FALLBACK_HINTS["flow"]
+    if s in ("gemini", "gemini_task", "gemini_chat", "task", "chat"):
+        return _CROSS_CHANNEL_FALLBACK_HINTS["gemini"]
+    return "建议切换备用额度：当前渠道受阻，可优先检查 `gemini_web.py doctor` 在 AI Studio / Gemini Web / Flow / 本地客户端间切换健康额度池。"
+
+
+def _is_high_demand_error(err_text: str) -> bool:
+    """判断错误文本是否为 AI Studio / Gemini 临时高需求 503 限流拥堵或付费墙权限错误（可自动降级至免费主力模型）。"""
+    return bool(
+        re.search(
+            r"503|service is unavailable|isn't available right now|please wait a minute and try again|high demand|spikes in demand|error\s*14|resource exhausted|temporarily unavailable|permission denied|权限遭拒|check your account permissions",
+            err_text or "",
+            re.IGNORECASE,
+        )
+    )
+
+
+def _resolve_fallback_model_id(cur_model: str, fallback_model: str) -> str:
+    """解析高负载 503 时的单个备选模型 ID（返回空字符串表示不降级）。"""
+    fb = (fallback_model or "").strip().lower()
+    if fb in ("", "none", "off", "false", "0"):
+        return ""
+    cur_id = _resolve_aistudio_model_id(cur_model) or (cur_model or "").strip().lower()
+    if fb == "auto":
+        return _AISTUDIO_FALLBACK_ORDER.get(cur_id, "")
+    target_id = _resolve_aistudio_model_id(fb) or fb
+    return "" if target_id == cur_id else target_id
+
+
 def execute_playground(
     browser,
     prompt: str,
@@ -1589,8 +1791,10 @@ def execute_playground(
     max_output: bool = True,
     include_thoughts: bool = False,
     title: str = "",
+    fallback_model: str = "auto",
     bring_to_front: bool = True,
     _return_handle: bool = False,
+    _tried_fallback: bool = False,
 ) -> dict:
     """在 AI Studio Playground 全工作台执行对话/生图/生视频/Lyria音乐/TTS配音/Deep Research。"""
     t0 = time.time()
@@ -1699,7 +1903,34 @@ def execute_playground(
         if started and not running:
             turn_err = _aistudio_extract_turn_error(page, min_turns=before_turns)
             if turn_err:
-                raise RuntimeError(f"AI Studio 返回错误: {turn_err}")
+                if not _tried_fallback and _is_high_demand_error(turn_err):
+                    alt_id = _resolve_fallback_model_id(active_model or model_id or nav_model, fallback_model)
+                    if alt_id:
+                        _human_pause(page, 6000, 9000)
+                        retried = execute_playground(
+                            browser,
+                            prompt=prompt,
+                            model=alt_id,
+                            system_instruction=system_instruction,
+                            system_file=system_file,
+                            files=files,
+                            new_tab=True,
+                            tab_url_hint="",
+                            async_send=False,
+                            timeout_sec=timeout_sec,
+                            download_dir=download_dir,
+                            thinking_level=thinking_level,
+                            max_output=max_output,
+                            include_thoughts=include_thoughts,
+                            title=title,
+                            fallback_model="none",
+                            bring_to_front=bring_to_front,
+                            _tried_fallback=True,
+                        )
+                        retried["fallback_from"] = active_model or model_id or nav_model
+                        retried["fallback_reason"] = turn_err[:160]
+                        return retried
+                raise RuntimeError(f"AI Studio 返回错误: {turn_err} | {_cross_channel_fallback_hint('aistudio', turn_err)}")
         has_output = _aistudio_has_final_output(page, min_turns=before_turns)
         cur_sig = _aistudio_output_signature(page)
         if started and not running and has_output and cur_sig == last_sig:
@@ -1712,7 +1943,7 @@ def execute_playground(
         last_sig = cur_sig
         page.wait_for_timeout(500)
     else:
-        raise TimeoutError("等待 AI Studio Playground 输出超时。")
+        raise TimeoutError(f"等待 AI Studio Playground 输出超时。{_cross_channel_fallback_hint('aistudio')}")
 
     extracted = _aistudio_extract_playground_result(page, download_dir=download_dir)
     _aistudio_wait_saved_url(page, timeout_sec=5.0)
@@ -1867,9 +2098,7 @@ def _aistudio_build_configure(page, model: str = "", framework: str = "") -> Non
         allow_paid = "paid" in model.lower()
         fallback = ""
         if not allow_paid:
-            if "neon" in resolved.lower():
-                fallback = "Gemini 4 Argon"
-            elif "argon" in resolved.lower():
+            if "neon" in resolved.lower() or "argon" in resolved.lower() or "carbon" in resolved.lower():
                 fallback = "Gemini 4 Hydrogen"
         _pick_mat_select(
             page.locator('mat-select[aria-label="Select the model for chat"]').first,
@@ -2140,9 +2369,14 @@ def _flow_ensure_direct_mode(page) -> None:
                 return
             break
 
-    # 若仍处在「智能体」开关开启状态，点击切换开关回到直出模式
+    # 若仍处在「智能体 / Flow Agent」开关开启状态，点击切换开关回到直出模式
     switched = page.evaluate(
         """() => {
+            const fa = document.querySelector('button[aria-label="Flow Agent"][aria-pressed="true"], button[aria-label*="智能体"][aria-pressed="true"]');
+            if (fa) {
+                fa.click();
+                return true;
+            }
             for (const b of document.querySelectorAll('button')) {
                 const r = b.getBoundingClientRect();
                 if (r.width <= 0 || r.height <= 0) continue;
@@ -2516,6 +2750,17 @@ def _resolve_task_path(raw: str, base_dir: Path) -> str:
     return str(p.resolve() if p.is_absolute() else (base_dir / p).resolve())
 
 
+def _is_wave_task_resumable_done(existing_role: dict, out_file: str, unpack_dir: str) -> bool:
+    """判断 wave --resume 时花名册里已完成角色是否已有落盘产物可安全跳过。"""
+    if (existing_role.get("status") or "").strip().lower() != "done":
+        return False
+    if out_file:
+        p = Path(out_file)
+        if not p.is_file() or p.stat().st_size == 0:
+            return False
+    return True
+
+
 def execute_wave(
     browser,
     tasks: list[dict],
@@ -2525,10 +2770,11 @@ def execute_wave(
     timeout_sec: int = 360,
     poll_interval_sec: float = 1.5,
     stagger_sec: float = 3.5,
+    resume: bool = False,
 ) -> dict:
     """
     高速并发波次引擎：单次调用内将多个员工任务并发发射至独立标签页，
-    然后在 Python 进程内后台静默轮询全部完成、自动落盘/解包 JSON 并回写 .web-team.json。
+    然后在 Python 进程内后台静默轮询全部完成、自动落盘/解包 JSON 并回写 .web-team.json（支持 --resume 断点续传）。
     """
     t0 = time.time()
     if not isinstance(tasks, list) or not tasks:
@@ -2565,14 +2811,26 @@ def execute_wave(
             continue
 
         existing_role = _roster_lookup_role(roster_path, role)
+        out_file_resolved = _resolve_task_path(str(task.get("out_file") or ""), base_dir)
+        unpack_dir_resolved = _resolve_task_path(str(task.get("unpack_json_dir") or ""), base_dir)
+        if resume and _is_wave_task_resumable_done(existing_role, out_file_resolved, unpack_dir_resolved):
+            results.append({
+                "role": role,
+                "site": existing_role.get("site") or site,
+                "status": "ok",
+                "resumed_skipped": True,
+                "url": existing_role.get("url") or "",
+                "drive_file_id": existing_role.get("drive_file_id") or None,
+                "saved_text_file": out_file_resolved or None,
+                "elapsed_sec": 0.0,
+            })
+            continue
         role_url = str(task.get("tab_url_hint") or task.get("project_url") or existing_role.get("url") or "").strip()
         # 角色尚无专属会话 URL 时强制开独立新标签页，杜绝串页污染
         force_new_tab = not bool(role_url) or bool(task.get("new_tab"))
         files_resolved = [_resolve_task_path(f, base_dir) for f in (task.get("files") or []) if str(f).strip()]
         sys_file_resolved = _resolve_task_path(str(task.get("system_file") or ""), base_dir)
-        out_file_resolved = _resolve_task_path(str(task.get("out_file") or ""), base_dir)
         download_dir_resolved = _resolve_task_path(str(task.get("download_dir") or ""), base_dir)
-        unpack_dir_resolved = _resolve_task_path(str(task.get("unpack_json_dir") or ""), base_dir)
         folder_resolved = _resolve_task_path(str(task.get("folder") or task.get("code_folder") or ""), base_dir)
         github_repo = str(task.get("github") or task.get("github_repo") or "").strip()
         title_str = str(task.get("title") or "").strip()
@@ -2580,7 +2838,7 @@ def execute_wave(
 
         try:
             if site in ("aistudio", "playground", "lyria", "tts"):
-                eff_model = model or ("lyria" if site == "lyria" else ("tts" if site == "tts" else "neon"))
+                eff_model = model or ("lyria" if site == "lyria" else ("tts" if site == "tts" else "hydrogen"))
                 dispatched = execute_playground(
                     browser,
                     prompt=prompt,
@@ -2643,7 +2901,7 @@ def execute_wave(
                     prompt=prompt,
                     app_url=str(task.get("app_url") or role_url),
                     mode=str(task.get("mode") or "max"),
-                    model=model or "neon",
+                    model=model or "hydrogen",
                     framework=str(task.get("framework") or ""),
                     download_dir=download_dir_resolved,
                     extract=bool(task.get("extract", True)),
@@ -2656,7 +2914,7 @@ def execute_wave(
                     role=role,
                     title=title_str or str(task.get("role_title") or ""),
                     site="build",
-                    model=model or "neon",
+                    model=model or "hydrogen",
                     url=str(res_b.get("app_url") or ""),
                     duty=str(task.get("duty") or ""),
                     status="done" if res_b.get("status") == "ok" else "running",
@@ -2929,7 +3187,13 @@ def execute_wave(
                     results.append(rec)
             except Exception as exc:
                 execute_roster(action="set", roster_file=roster_path, role=role, status="failed", project=project)
-                results.append({"role": role, "site": item["site"], "status": "error", "error": str(exc)})
+                results.append({
+                    "role": role,
+                    "site": item["site"],
+                    "status": "error",
+                    "error": str(exc),
+                    "fallback_suggestion": _cross_channel_fallback_hint(item["site"], str(exc)),
+                })
 
         pending = still_pending
         if pending:
@@ -2943,9 +3207,11 @@ def execute_wave(
             "status": "timeout",
             "url": item["url"],
             "error": f"等待超过 {timeout_sec}s 未完成（标签页仍在后台运行，可稍后用 fetch 或同 role 续查）",
+            "fallback_suggestion": _cross_channel_fallback_hint(item["site"], "timeout"),
         })
 
     ok_count = sum(1 for r in results if r.get("status") == "ok")
+    suggestions = list(dict.fromkeys(str(r["fallback_suggestion"]) for r in results if r.get("fallback_suggestion")))
     return {
         "status": "ok" if ok_count == len(results) else ("partial" if ok_count > 0 else "failed"),
         "entry": "wave",
@@ -2954,6 +3220,7 @@ def execute_wave(
         "total": len(results),
         "succeeded": ok_count,
         "failed": len(results) - ok_count,
+        "suggestions": suggestions,
         "results": results,
         "elapsed_sec": round(time.time() - t0, 2),
     }
@@ -3056,6 +3323,7 @@ def run_daemon(port_override: int | None = None, bind_port: int = DAEMON_PORT) -
                         max_output=body.get("max_output", True),
                         include_thoughts=body.get("include_thoughts", False),
                         title=body.get("title", ""),
+                        fallback_model=body.get("fallback_model", "auto"),
                     )
                 elif path == "/wave":
                     box["result"] = execute_wave(
@@ -3067,7 +3335,12 @@ def run_daemon(port_override: int | None = None, bind_port: int = DAEMON_PORT) -
                         timeout_sec=body.get("timeout_sec", 360),
                         poll_interval_sec=body.get("poll_interval_sec", 1.5),
                         stagger_sec=body.get("stagger_sec", 3.5),
+                        resume=bool(body.get("resume", False)),
                     )
+                elif path == "/task-net":
+                    box["result"] = execute_task_network(browser, action=body.get("action", "status"))
+                elif path == "/doctor":
+                    box["result"] = _doctor_probe_browser(browser, skip_flow=bool(body.get("skip_flow", False)))
                 elif path == "/attach":
                     box["result"] = execute_attach(
                         browser,
@@ -3673,6 +3946,33 @@ def _print_result(
             if item.get("error"):
                 parts.append(f"err={item['error']}")
             print(" | ".join(parts))
+        for sg in res.get("suggestions") or []:
+            print(f"- HINT: {sg}")
+        return
+    if res.get("entry") == "task-net":
+        state_str = "enabled(云Linux联网已开)" if res.get("network_enabled") else "disabled(仅离线沙盒)"
+        print(f"{res.get('status', 'ok')} | task-net({res.get('action')}) | {state_str} | changed={res.get('changed')} | {res.get('security_note', '')}")
+        return
+    if res.get("entry") == "doctor":
+        cdp = res.get("cdp") or {}
+        tn = res.get("task_network") or {}
+        tn_str = "on" if tn.get("network_enabled") else ("off" if tn.get("status") == "ok" else tn.get("status", "unknown"))
+        us = res.get("usage") or {}
+        fl = res.get("flow_usage") or {}
+        cur_pct = (us.get("current_usage") or {}).get("used_pct")
+        parts = [
+            f"ok | doctor | prefer={cdp.get('recommended_channel', '?')}",
+            f"cdp={cdp.get('cdp_mode', '?')}:{cdp.get('cdp_port') or '-'}",
+            f"task_net={tn_str}",
+        ]
+        if cur_pct is not None:
+            parts.append(f"gemini_used={cur_pct}%")
+        if fl.get("credits") is not None:
+            parts.append(f"flow_credits={fl.get('credits')}")
+        parts.append(f"{res.get('elapsed_sec', 0)}s")
+        print(" | ".join(parts))
+        for h in res.get("hints") or []:
+            print(f"- HINT: {h}")
         return
     if res.get("entry") == "playbook":
         act = res.get("action")
@@ -3740,6 +4040,379 @@ def _add_json_flag(p) -> None:
     p.add_argument("--json", dest="as_json", action="store_true", help="输出完整 JSON（默认直接输出极简行协议以省 Token）")
 
 
+def _doctor_probe_browser(browser, skip_flow: bool = False) -> dict:
+    """在已连接的 CDP browser 实例上只读巡检 Gemini 用量、Flow 点数与 gemini-spark 云主机联网状态。"""
+    report: dict = {}
+    for key, fn in (
+        ("usage", lambda: execute_usage(browser)),
+        ("task_network", lambda: execute_task_network(browser, action="status")),
+        ("flow_usage", (lambda: {"status": "skipped"}) if skip_flow else (lambda: execute_flow_usage(browser))),
+    ):
+        try:
+            report[key] = fn()
+        except Exception as exc:
+            report[key] = {"status": "error", "error": str(exc)}
+    return report
+
+
+def execute_doctor(port_override: int | None = None, skip_flow: bool = False) -> dict:
+    """轻量环境体检：检测 CDP 与 AgentLimb 通道状态；若通道 B 就绪，一并巡检额度与 gemini-spark 联网开关。"""
+    t0 = time.time()
+    cdp_info: dict = {}
+    agentlimb_info: dict = {}
+    try:
+        import setup_skill
+        cdp_info = setup_skill.detect_chrome_cdp()
+        if hasattr(setup_skill, "detect_agentlimb_mcp"):
+            agentlimb_info = setup_skill.detect_agentlimb_mcp()
+    except Exception as exc:
+        cdp_info = {"error": str(exc)}
+
+    cdp_ready = bool(cdp_info.get("cdp_http_ready"))
+    al_ready = bool(agentlimb_info.get("configured"))
+    ai_cfg = bool(cdp_info.get("ai_chrome_configured"))
+    recommended_channel = "B" if cdp_ready else ("B_autostart" if ai_cfg else ("A" if al_ready else "setup"))
+
+    browser_report: dict = {}
+    try:
+        res = call_daemon("/doctor", {"skip_flow": skip_flow})
+        if res is not None:
+            browser_report = res
+        elif cdp_ready:
+            ws_url = get_cdp_ws_url(port_override)
+            with _get_sync_playwright()() as p:
+                browser = p.chromium.connect_over_cdp(ws_url, timeout=5000)
+                browser_report = _doctor_probe_browser(browser, skip_flow=skip_flow)
+        else:
+            browser_report = {"status": "cdp_unavailable", "note": "当前无就绪 HTTP CDP 端口"}
+    except Exception as exc:
+        browser_report = {"status": "cdp_unavailable", "note": str(exc)}
+
+    hints: list[str] = []
+    if browser_report.get("status") == "cdp_unavailable" and "playwright" in str(browser_report.get("note") or "").lower():
+        hints.append("当前 Python 环境缺少 playwright，请改用 .venv Python（参见 setup_skill.py --auto 输出的 py= 路径）执行通道 B 命令。")
+    if recommended_channel == "A":
+        hints.append("当前走免重登通道 A (AgentLimb MCP)；如需单命令 wave 并发提速，可经同意运行 setup_skill.py --setup-ai-chrome --launch-ai-chrome 开启通道 B。")
+    elif recommended_channel == "setup":
+        hints.append("未检测到可用通道 A/B，建议配置 AgentLimb MCP 或启用独立 AI Chrome。")
+    tn = browser_report.get("task_network") or {}
+    if tn.get("status") == "ok" and not tn.get("network_enabled"):
+        hints.append("gemini-spark 远程计算机网络访问当前关闭；如需 Task 联网装包作云 Linux 主机，可到 https://gemini.google.com/gemini-spark 开启（注意禁传密钥/隐私）。")
+    elif not tn:
+        hints.append("提示: 可在日常 Chrome 打开 https://gemini.google.com/gemini-spark 开启“允许远程计算机访问网络”，让 Task 拥有联网云 Linux 能力（注意禁传密钥/隐私）。")
+
+    us = browser_report.get("usage") or {}
+    cur_pct = (us.get("current_usage") or {}).get("used_pct")
+    wk_pct = (us.get("weekly_usage") or {}).get("used_pct")
+    if us.get("status") == "error":
+        hints.append("提示: 检测到网页额度页未成功加载（若刚新建隔离 Profile，请先在该浏览器窗口登录一次 Google 账号）；也可改用其他已登录通道或本地额度。")
+    elif (cur_pct is not None and float(cur_pct) >= 90) or (wk_pct is not None and float(wk_pct) >= 95):
+        hints.append(_cross_channel_fallback_hint("gemini"))
+    fl = browser_report.get("flow_usage") or {}
+    if fl.get("status") == "error" or (fl.get("credits") is not None and int(fl["credits"]) <= 0):
+        hints.append(_cross_channel_fallback_hint("flow"))
+
+    return {
+        "status": "ok",
+        "entry": "doctor",
+        "cdp": {
+            "cdp_mode": cdp_info.get("cdp_mode"),
+            "cdp_port": cdp_info.get("cdp_port"),
+            "recommended_channel": recommended_channel,
+        },
+        **browser_report,
+        "hints": hints,
+        "elapsed_sec": round(time.time() - t0, 2),
+    }
+
+
+def _mcp_tools_manifest() -> list[dict]:
+    """定义原生 stdio MCP Server 暴露的标准化工具列表。"""
+    return [
+        {
+            "name": "web_doctor",
+            "description": "巡检 Chrome CDP / AgentLimb 通道状态、Gemini 用量、Flow 点数与 gemini-spark 云主机联网开关。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"skip_flow": {"type": "boolean", "default": False}},
+            },
+        },
+        {
+            "name": "task_network",
+            "description": "检查或开关 https://gemini.google.com/gemini-spark 远程计算机网络访问权限（开启后 Task 可联网装包，注意禁传敏感密钥）。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"action": {"type": "string", "enum": ["status", "enable", "disable"], "default": "status"}},
+            },
+        },
+        {
+            "name": "gemini_ask",
+            "description": "在 gemini.google.com 执行任务(task)或对话(chat)，支持上传文件夹/GitHub仓库与角色Tab隔离。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string"},
+                    "entry": {"type": "string", "enum": ["", "task", "chat"], "default": "task"},
+                    "model": {"type": "string", "default": ""},
+                    "folder": {"type": "string", "default": ""},
+                    "github": {"type": "string", "default": ""},
+                    "role": {"type": "string", "default": ""},
+                    "timeout": {"type": "integer", "default": 180},
+                },
+                "required": ["prompt"],
+            },
+        },
+        {
+            "name": "aistudio_playground",
+            "description": "在 AI Studio Playground (key_off) 执行长文本/代码/Music/TTS 任务，支持 thinking_level、Drive 标题命名与 503 自动降级。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string"},
+                    "model": {"type": "string", "default": "hydrogen"},
+                    "thinking_level": {"type": "string", "default": "high"},
+                    "title": {"type": "string", "default": ""},
+                    "fallback_model": {"type": "string", "default": "auto"},
+                    "timeout": {"type": "integer", "default": 180},
+                },
+                "required": ["prompt"],
+            },
+        },
+        {
+            "name": "flow_generate",
+            "description": "在 flow.google.com 生成图片或视频（默认 x1 省点数，Nano Banana 2.1 生图 0 点数）。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string"},
+                    "media": {"type": "string", "enum": ["image", "video"], "default": "image"},
+                    "aspect": {"type": "string", "default": "16:9"},
+                    "download_dir": {"type": "string", "default": ""},
+                },
+                "required": ["prompt"],
+            },
+        },
+        {
+            "name": "web_wave",
+            "description": "按 wave JSON 规格并发调度多 Tab 员工并自动落盘/解包，支持 resume 断点续传。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "spec": {"type": "string"},
+                    "project_dir": {"type": "string", "default": "."},
+                    "roster_file": {"type": "string", "default": ".web-team.json"},
+                    "resume": {"type": "boolean", "default": False},
+                    "stagger": {"type": "number", "default": 3.5},
+                },
+                "required": ["spec"],
+            },
+        },
+        {
+            "name": "roster_manage",
+            "description": "管理 .web-team.json 一页一员工花名册及交付物防伪造审计 (list|audit)。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["list", "audit"], "default": "list"},
+                    "file": {"type": "string", "default": ".web-team.json"},
+                    "project_dir": {"type": "string", "default": "."},
+                    "min_roles": {"type": "integer", "default": 2},
+                },
+                "required": ["action"],
+            },
+        },
+    ]
+
+
+def _handle_mcp_tool_call(name: str, args: dict, port_override: int | None = None) -> dict:
+    """执行单个 MCP 工具调用并返回结果字典。"""
+    a = args or {}
+    if name == "web_doctor":
+        return execute_doctor(port_override=port_override, skip_flow=bool(a.get("skip_flow", False)))
+    if name == "task_network":
+        act = str(a.get("action") or "status")
+        return _exec_cdp(port_override, "/task-net", {"action": act}, lambda b: execute_task_network(b, action=act))
+    if name == "roster_manage":
+        return execute_roster(
+            action=str(a.get("action") or "list"),
+            roster_file=str(a.get("file") or ".web-team.json"),
+            project_dir=str(a.get("project_dir") or "."),
+            min_roles=int(a.get("min_roles") or 2),
+        )
+    if name == "gemini_ask":
+        return _exec_cdp(
+            port_override,
+            "/ask",
+            {
+                "prompt": a["prompt"],
+                "entry": a.get("entry", "task"),
+                "model": a.get("model", ""),
+                "new_tab": True,
+                "timeout_sec": int(a.get("timeout") or 180),
+                "code_folder": a.get("folder", ""),
+                "github_repo": a.get("github", ""),
+            },
+            lambda b: execute_ask(
+                b,
+                prompt=a["prompt"],
+                entry=str(a.get("entry") or "task"),
+                model=str(a.get("model") or ""),
+                new_tab=True,
+                timeout_sec=int(a.get("timeout") or 180),
+                code_folder=str(a.get("folder") or ""),
+                github_repo=str(a.get("github") or ""),
+            ),
+        )
+    if name == "aistudio_playground":
+        return _exec_cdp(
+            port_override,
+            "/playground",
+            {
+                "prompt": a["prompt"],
+                "model": a.get("model", "hydrogen"),
+                "new_tab": True,
+                "thinking_level": a.get("thinking_level", "high"),
+                "title": a.get("title", ""),
+                "fallback_model": a.get("fallback_model", "auto"),
+                "timeout_sec": int(a.get("timeout") or 180),
+            },
+            lambda b: execute_playground(
+                b,
+                prompt=a["prompt"],
+                model=str(a.get("model") or "hydrogen"),
+                new_tab=True,
+                thinking_level=str(a.get("thinking_level") or "high"),
+                title=str(a.get("title") or ""),
+                fallback_model=str(a.get("fallback_model") or "auto"),
+                timeout_sec=int(a.get("timeout") or 180),
+            ),
+        )
+    if name == "flow_generate":
+        return _exec_cdp(
+            port_override,
+            "/flow",
+            {
+                "prompt": a["prompt"],
+                "media": a.get("media", "image"),
+                "aspect": a.get("aspect", "16:9"),
+                "download_dir": a.get("download_dir", ""),
+            },
+            lambda b: execute_flow(
+                b,
+                prompt=a["prompt"],
+                media=str(a.get("media") or "image"),
+                aspect=str(a.get("aspect") or "16:9"),
+                download_dir=str(a.get("download_dir") or ""),
+            ),
+        )
+    if name == "web_wave":
+        spec_path = Path(str(a["spec"])).expanduser().resolve()
+        raw_spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        tasks = raw_spec["tasks"] if isinstance(raw_spec, dict) and isinstance(raw_spec.get("tasks"), list) else raw_spec
+        proj = str(raw_spec.get("project") or "") if isinstance(raw_spec, dict) else ""
+        pdir = str(Path(str(a.get("project_dir") or ".")).expanduser().resolve())
+        rfile = str(Path(str(a.get("roster_file") or ".web-team.json")).expanduser().resolve())
+        return _exec_cdp(
+            port_override,
+            "/wave",
+            {
+                "tasks": tasks,
+                "roster_file": rfile,
+                "project": proj,
+                "project_dir": pdir,
+                "resume": bool(a.get("resume", False)),
+                "stagger_sec": float(a.get("stagger") or 3.5),
+            },
+            lambda b: execute_wave(
+                b,
+                tasks=tasks,
+                roster_file=rfile,
+                project=proj,
+                project_dir=pdir,
+                resume=bool(a.get("resume", False)),
+                stagger_sec=float(a.get("stagger") or 3.5),
+            ),
+        )
+    raise ValueError(f"未知 MCP 工具: {name}")
+
+
+def _read_mcp_message(stdin_buf) -> tuple[dict | None, str]:
+    """同时支持 Content-Length LSP framing 与行分隔 JSON-RPC 的轻量读取器。"""
+    while True:
+        line = stdin_buf.readline()
+        if not line:
+            return None, "ndjson"
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(b"{"):
+            return json.loads(stripped.decode("utf-8")), "ndjson"
+        headers: dict[str, str] = {}
+        cur = line
+        while cur and cur.strip():
+            dec = cur.decode("ascii", errors="ignore")
+            if ":" in dec:
+                k, v = dec.split(":", 1)
+                headers[k.strip().lower()] = v.strip()
+            cur = stdin_buf.readline()
+        length = int(headers.get("content-length", "0"))
+        if length <= 0:
+            return None, "lsp"
+        body = stdin_buf.read(length)
+        return json.loads(body.decode("utf-8")), "lsp"
+
+
+def _write_mcp_message(stdout_buf, payload: dict, framing: str) -> None:
+    raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    if framing == "lsp":
+        header = f"Content-Length: {len(raw)}\r\n\r\n".encode("ascii")
+        stdout_buf.write(header + raw)
+    else:
+        stdout_buf.write(raw + b"\n")
+    stdout_buf.flush()
+
+
+def run_mcp_server(port_override: int | None = None) -> None:
+    """零第三方依赖的轻量原生 stdio MCP Server（兼容 Antigravity / Claude / Cursor）。"""
+    stdin_buf = sys.stdin.buffer
+    stdout_buf = sys.stdout.buffer
+    while True:
+        try:
+            msg, framing = _read_mcp_message(stdin_buf)
+        except Exception:
+            break
+        if msg is None:
+            break
+        req_id = msg.get("id")
+        method = msg.get("method", "")
+        params = msg.get("params") or {}
+        if req_id is None:
+            continue
+        if method == "initialize":
+            result = {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {"tools": {"listChanged": False}},
+                "serverInfo": {"name": "gemini-web-agent", "version": "1.2.0"},
+            }
+            _write_mcp_message(stdout_buf, {"jsonrpc": "2.0", "id": req_id, "result": result}, framing)
+        elif method == "ping":
+            _write_mcp_message(stdout_buf, {"jsonrpc": "2.0", "id": req_id, "result": {}}, framing)
+        elif method == "tools/list":
+            _write_mcp_message(stdout_buf, {"jsonrpc": "2.0", "id": req_id, "result": {"tools": _mcp_tools_manifest()}}, framing)
+        elif method == "tools/call":
+            t_name = str(params.get("name") or "")
+            t_args = params.get("arguments") or {}
+            try:
+                res = _handle_mcp_tool_call(t_name, t_args, port_override=port_override)
+                out = {"content": [{"type": "text", "text": json.dumps(res, ensure_ascii=False, indent=2)}], "isError": False}
+            except Exception as exc:
+                out = {"content": [{"type": "text", "text": f"ERROR: {exc}"}], "isError": True}
+            _write_mcp_message(stdout_buf, {"jsonrpc": "2.0", "id": req_id, "result": out}, framing)
+        else:
+            err = {"code": -32601, "message": f"Method not found: {method}"}
+            _write_mcp_message(stdout_buf, {"jsonrpc": "2.0", "id": req_id, "error": err}, framing)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="外部 Chrome Gemini / AI Studio / Google Flow 高速调度工具（CDP 优先引擎）")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -3755,6 +4428,7 @@ def main() -> None:
     p_wave.add_argument("--timeout", type=int, default=360, help="整波次最大等待超时秒数（默认 360）")
     p_wave.add_argument("--poll-interval", type=float, default=1.5, help="后台状态轮询间隔秒数（默认 1.5）")
     p_wave.add_argument("--stagger", type=float, default=3.5, help="各 Tab 错峰派单间隔秒数（默认 3.5，防过快点击触发风控）")
+    p_wave.add_argument("--resume", action="store_true", help="断点续传：跳过 .web-team.json 中已完成且产物非空的角色，只重试未完成项")
     _add_json_flag(p_wave)
     p_wave.add_argument("--port", type=int, default=None)
 
@@ -3803,6 +4477,7 @@ def main() -> None:
         help="模型别名或ID: hydrogen(新会话默认) | neon | argon | nano2.1 | omni1.2 | lyria | tts | research 等（复用不传则保持原模型）",
     )
     p_pg.add_argument("--title", default="", help="设置 AI Studio 会话标题（同步至 Google Drive 便于下游 Gemini Task 直接拉取）")
+    p_pg.add_argument("--fallback-model", default="auto", help="遇 503 高负载拥堵时的备选模型退避降级（auto | none | 模型别名）")
     p_pg.add_argument("--role", default="", help="绑定 .web-team.json 员工角色名（自动隔离独立标签页并回写 URL 与 Drive ID）")
     p_pg.add_argument("--roster-file", default=".web-team.json", help="配合 --role 使用的花名册路径")
     p_pg.add_argument("--system", default="", help="系统指令 (System Instructions)")
@@ -3905,7 +4580,39 @@ def main() -> None:
     p_pb.add_argument("--raw", action="store_true", help="show 时仅输出原始 Markdown 正文")
     _add_json_flag(p_pb)
 
+    p_tnet = sub.add_parser("task-net", help="检查或开关 gemini.google.com/gemini-spark 远程计算机网络访问权限（云 Linux 主机）")
+    p_tnet.add_argument("action", nargs="?", choices=["status", "enable", "disable"], default="status", help="操作: status(默认) | enable | disable")
+    _add_json_flag(p_tnet)
+    p_tnet.add_argument("--port", type=int, default=None)
+
+    p_doc = sub.add_parser("doctor", help="轻量全局体检：巡检通道状态、Gemini/Flow 额度与 gemini-spark 联网开关")
+    p_doc.add_argument("--skip-flow", action="store_true", help="跳过 Flow 点数页面探测以加快速度")
+    _add_json_flag(p_doc)
+    p_doc.add_argument("--port", type=int, default=None)
+
+    p_mcp = sub.add_parser("mcp", help="启动零外部依赖原生 stdio MCP Server（兼容 Antigravity/Claude/Cursor）")
+    p_mcp.add_argument("--port", type=int, default=None)
+
     args = parser.parse_args()
+
+    if args.cmd == "mcp":
+        run_mcp_server(port_override=args.port)
+        return
+
+    if args.cmd == "doctor":
+        res = execute_doctor(port_override=args.port, skip_flow=args.skip_flow)
+        _print_result(res, False, as_json=args.as_json)
+        return
+
+    if args.cmd == "task-net":
+        res = _exec_cdp(
+            args.port,
+            "/task-net",
+            {"action": args.action},
+            lambda b: execute_task_network(b, action=args.action),
+        )
+        _print_result(res, False, as_json=args.as_json)
+        return
 
     if args.cmd == "daemon":
         run_daemon(port_override=args.port)
@@ -3933,6 +4640,7 @@ def main() -> None:
             "timeout_sec": args.timeout,
             "poll_interval_sec": args.poll_interval,
             "stagger_sec": args.stagger,
+            "resume": args.resume,
         }
         res = _exec_cdp(
             args.port,
@@ -3947,6 +4655,7 @@ def main() -> None:
                 timeout_sec=args.timeout,
                 poll_interval_sec=args.poll_interval,
                 stagger_sec=args.stagger,
+                resume=args.resume,
             ),
         )
         _print_result(res, False, as_json=args.as_json)
@@ -4129,6 +4838,7 @@ def main() -> None:
             "max_output": not args.no_max_output,
             "include_thoughts": args.with_thoughts,
             "title": args.title,
+            "fallback_model": args.fallback_model,
         }
         res = _exec_cdp(
             args.port,
@@ -4150,6 +4860,7 @@ def main() -> None:
                 max_output=not args.no_max_output,
                 include_thoughts=args.with_thoughts,
                 title=args.title,
+                fallback_model=args.fallback_model,
             ),
         )
         if args.role:
