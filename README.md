@@ -329,10 +329,8 @@ python scripts/sync_upstream.py
 ## 🤝 欢迎参与测试、反馈与贡献 (Feedback & Contribution)
 
 > [!NOTE]
-> 💡 **项目状态与版本说明（`v0.3.0-beta.1` / `v0.4.0-alpha.1`）**：  
-> - `main` 分支稳定停留于 **`v0.3.0-beta.1`**（Public Beta 里程碑）。  
-> - 当前分支正推进 **`v0.4.0-alpha.1`** 长期底座重构：**「只守最基本的安全门禁 + 把上游变成给 DSH 主 AI 自由调度的独立多 Agent 算力平台」**。  
-> 由于 Google 各大网页端（AI Studio、Gemini 官网、Google Flow / Lyria）会不定期进行界面调整或风控策略变化，加上操作系统与账号等级（免费 / PRO）差异，欢迎随时提交实测反馈与建议！
+> 💡 **项目状态与测试声明**：  
+> 本插件目前处于**公开测试与快速演进阶段（Public Alpha / Beta）**。由于 Google 各大网页端（AI Studio、Gemini 官网、Google Flow / Lyria）会不定期进行界面调整、A/B 测试或风控策略变化，加上不同操作系统（Linux / macOS / Windows）、浏览器版本、网络环境与账号等级（免费 / PRO）各不相同，代码中仍可能存在尚未覆盖到的边界情况，欢迎随时提交实测反馈与建议！
 
 > [!TIP]
 > 🌱 **写给开源社区的一封信（关于 Vibe Coding）**：  

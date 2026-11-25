@@ -329,10 +329,8 @@ The sync script:
 ## 🤝 Feedback & Contribution
 
 > [!NOTE]
-> 💡 **Project Status & Release Notice (`v0.3.0-beta.1` / `v0.4.0-alpha.1`)**:  
-> - `main` stays on **`v0.3.0-beta.1`** as the Public Beta milestone.  
-> - This branch advances **`v0.4.0-alpha.1`** as our long-lived architectural baseline: **"Keep only the essential safety gate, and empower DSH's host AI to freely orchestrate upstream as a standalone multi-agent compute platform."**  
-> Because Google's web endpoints (AI Studio, Gemini Web, Google Flow / Lyria) evolve frequently and environments/account tiers (Free vs. PRO) vary, real-world testing feedback and Issues/PRs are always welcome!
+> 💡 **Project Status & Testing Notice**:  
+> This plugin is currently in **Public Alpha / Beta** and actively evolving. Because Google's web endpoints (AI Studio, Gemini Web, Google Flow / Lyria) frequently update their front-end interfaces, A/B tests, and anti-abuse heuristics—and because operating systems (Linux / macOS / Windows), browser builds, network setups, and account tiers (Free vs. PRO) vary—unforeseen edge cases may still surface. Community feedback and Issues/PRs are warmly welcomed!
 
 > [!TIP]
 > 🌱 **A Note to the Open-Source Community (The Vibe Coding Journey)**:  
