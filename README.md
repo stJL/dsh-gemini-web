@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-[![Version](https://img.shields.io/badge/version-v0.3.0--beta.1-blue.svg?style=flat-square)](package.json)
+[![Version](https://img.shields.io/badge/version-v0.4.0--alpha.1-purple.svg?style=flat-square)](package.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
 [![Upstream Sync](https://github.com/stJL/dsh-gemini-web/actions/workflows/sync-upstream.yml/badge.svg)](https://github.com/stJL/dsh-gemini-web/actions/workflows/sync-upstream.yml)
 [![DSH](https://img.shields.io/badge/DeepSeek--Harness-Plugin-6366f1.svg?style=flat-square)](https://github.com/stJL/dsh-gemini-web)
@@ -34,17 +34,17 @@
 
 本项目基于原作者 [@582835293/gemini-web-agent](https://github.com/582835293/gemini-web-agent) 的底层浏览器自动化能力，为 DeepSeek Harness (DSH) 桌面端进行适配与功能扩展：
 
-| 功能模块 | 原作者基础 (`gemini-web-agent`) | 本插件扩展 (`dsh-gemini-web` v0.3.0-beta.1) |
+| 功能模块 | 原作者基础 (`gemini-web-agent`) | 本插件扩展 (`dsh-gemini-web` v0.4.0-alpha.1) |
 | :--- | :--- | :--- |
 | **操作界面** | Python 命令行（CLI）执行 | DSH 桌面端设置面板、聊天室快捷插槽（Slots）、状态指示灯与实时额度大盘 |
 | **通信通道** | CDP（9222 端口）连接 | 整合 AgentLimb 免弹窗通道（多端口智能避让 `revoked`）+ CDP 多浏览器备用探测 |
-| **多角色编队** | 單一任務 / 手动拼接 Wave | **虚拟工作室（Wave）**：5 套官方编队卡 + 双轨自定义编队（GUI 拼装 / 本地 `.md`） |
+| **多角色编队** | 單一任務 / 手动拼接 Wave | **虚拟工作室（Wave）**：支持主 AI 自由编排结构化 `wave_tasks` + 5 套官方与双轨自定义编队 |
 | **会话隔离交付**| 直接写入目标项目目录 | `.gemini-teams/<sessionId>/` 沙盒隔离落盘、审查抽屉与一键安全合并 |
 | **模型阶梯** | 固定的模型降级链 | GUI 自定义 1~5 阶模型排序（`↑`/`↓`）、智能阶梯 / 严格模式、1–5 级思考策略 |
-| **AI Studio** | 网页对话与代码生成调度 | 免费号保护（过滤 `Paid`、`Extra High` 防卡死）；PRO 号自动解锁 `Neon` 与 `Lyria` 音乐台 |
+| **AI Studio** | 网页对话与代码生成调度 | 免费号保护（过滤 `Paid`、`Extra High` 防卡死）；PRO 号自动解锁 `Neon`、`Extra High` 与 `Lyria` 音乐台 |
 | **Google Flow** | 网页自动化生图 | 默认底栏画布生图（`Nano Banana 2.1` 0 点数消耗）、适配每日/每月重置检测 |
-| **本地文件分析** | 基础文本输入 | 支持本地代码/日志/PDF 免弹窗挂载至 1M 窗口；`gemini-spark` 联网任务自动过滤敏感密钥 |
-| **调度流程** | 脚本直接发包 | 强制「先问后用」确认卡 + `ask_question` 交互按钮、抗历史惯性约束 |
+| **本地文件分析** | 基础文本输入 | 支持本地代码/日志/PDF 免弹窗挂载至 1M 窗口（自动忽略不存在的输出文件名）；`gemini-spark` 自动过滤敏感密钥 |
+| **调度流程** | 脚本直接发包 | **v0.4 轻量门禁**：先问后用确认卡 + GUI 授权配置快照，确认后由主 AI 自由查阅 `references/` 并调度 |
 
 ---
 
@@ -57,17 +57,58 @@
 > 
 > 只要在提示词开头加上 `/gemini-web-agent`，宿主 AI 就会立刻触发调度协议，严格执行流程，将任务委派给外部 Google 网页端执行！
 
-### 💬 召唤指令范例
+### 💬 召唤指令范例 (Prompt Samples)
+
+#### 1. 代码开发与架构推演（Google AI Studio）
+* **指定单页精准确切模型（不被关键字误劫持）**：
+  > `/gemini-web-agent 请只用 Google AI Studio 的 gemini-3.8-flash 单分页帮我写一个极简任务看板数据结构与 Python CLI 范例，不要启动 Wave 多分页，单次执行并落地存档即可。`
 * **调用 Hydrogen 极限代码生成与架构设计**：
   > `/gemini-web-agent 用 Gemini 4 Hydrogen 帮我实现高性能无锁队列 (Lock-free Queue)，并附带完整中文注释与单元测试`
+* **PRO 旗舰 Neon + Extra High 深度推演**：
+  > `/gemini-web-agent 用 Gemini 4 Neon (extra_high) 推导分布式 Raft 共识算法在网络分区时的极限容错证明，并给出状态机伪代码`
+
+#### 2. 多角色并发协作（Wave 虚拟工作室）
+* **由主 AI 自由拆解结构化 `wave_tasks`（前端代码 + Flow 视觉素材联动）**：
+  > `/gemini-web-agent 帮我做一个极简番茄钟网页（HTML/CSS/JS）。确认执行后，请依 references/ 规范自己用 wave_tasks 拆两个角色并行：一个在 AI Studio 写出并解包成 index.html，另一个在 Google Flow 用 Nano Banana 2.1 生一张极简扁平番茄图标，最后存进会话隔离目录让我检查后再合并。`
+* **调用内置官方研发编队卡（5 套可选）**：
+  > `/gemini-web-agent 启动 web_fullstack_app 全栈研发编队，开发一个带本地 JSON 持久化的待办看板 Web 应用`
+  > `/gemini-web-agent 启动 academic_deep_research 编队，帮我调研并撰写 2026 年端侧推理框架综述对比报告`
+
+#### 3. 多模态生图、视频与 AI 音乐（Google Flow & Lyria）
 * **Google Flow 画布 0 点数高清生图**：
   > `/gemini-web-agent 在 Google Flow 用 Nano Banana 2.1 生一张极简日式枯山水庭园 2K 壁纸`
-* **巨型日志分析与论文 PDF 跨模态解读**：
+* **Google Flow 视频生成（消耗 Flow 点数）**：
+  > `/gemini-web-agent 在 Google Flow 用 Omni 1.2 生成一段 5 秒赛博朋克雨夜霓虹街景短视频`
+* **Lyria AI 音乐台创作（PRO 账号专享）**：
+  > `/gemini-web-agent 用 Lyria 音乐台（lyria-3-pro-preview）生成一段 10 秒舒缓的 lo-fi 钢琴循环背景音乐，完成后存档回传本机链接。`
+
+#### 4. 本地大文件挂载与联网沙盒调研
+* **巨型日志分析与论文 PDF 跨模态解读（1M 上下文零本地 Token）**：
   > `/gemini-web-agent 用 Google AI Studio 帮我分析 logs/system.log 的崩溃瓶颈，并对比 docs/paper.pdf 的架构提出优化方案`
-* **极限算法推导与系统架构规划**：
-  > `/gemini-web-agent 用 Google AI Studio 帮我推导分布式 Raft 共识算法在网络分区时的极限容错证明，并输出架构图`
-* **时效性深度联网调研**：
+* **Gemini 官网 `Task` 云端沙盒联网调研**：
   > `/gemini-web-agent 在 Gemini 官网切换至 task 模式，联网调研最新 AI 芯片架构进展并做成对比表格`
+
+---
+
+## 🆓 Google 免费账号 vs PRO 付费账号权限对照表
+
+> 以下对照基于 **2026-11-25 实机双账号（Free & Google AI PRO）实测结果**整理。插件会自动侦测账号权限并启用对应防护，**免费账号可安心跑通主力研发、画布 0 扣点生图与多角色 Wave**，PRO 账号则会解锁旗舰推理、音乐台与原生 Task 沙盒。
+
+| 站点 / 能力模块 | 具体模型或功能 | 免费账号 (Free) | PRO 付费账号 (Google AI PRO) | 插件自动处理 / 避坑说明 |
+| :--- | :--- | :---: | :---: | :--- |
+| **AI Studio 文本推理** | `gemini-4-hydrogen`（主力编码）<br>`gemini-3.8-flash` / `3.5-flash-lite`<br>`gemini-decision-1` | ✅ **可用** | ✅ **可用** | `key_off` 免费层级享 1M 上下文；拥堵时按 GUI 1~5 阶梯自动接力 |
+| **AI Studio 旗舰模型** | `gemini-4-neon`、`gemini-4-argon` | ❌ **不可用**（`Paid`） | ✅ **已解锁** | 免费号遇到 `Permission Denied` 时自动安全降级至 `Hydrogen`，绝不硬撞付费墙 |
+| **AI Studio 顶配付费模型** | `gemini-4-carbon`、`genie-4` | ❌ **不可用**（`Paid`） | ❌ **仍标 `Paid`** | 需在 AI Studio 绑定付费 API Key（`Pay-as-you-go`）方可使用；默认被插件过滤 |
+| **AI Studio `Extra High` 思考** | `thinking_level: extra_high` | ❌ **安全锁定** | ✅ **已解锁** | 免费号强开易触发 403 / 假死，自动回退 `high`；PRO 号实测可直跑 `Neon Extra High` |
+| **AI Studio 生图** | `Nano Banana 2 Lite` (`gemini-3.1-flash-lite-image`) | ✅ **可用** | ✅ **可用** | AI Studio 免费轻量生图首选 |
+| **AI Studio 进阶生图** | `Nano Banana 2.1` / `Nano Banana Pro` | ❌ **不可用**（`Paid`） | ✅ **已解锁** | 免费号在 AI Studio 触发付费弹窗时，自动降级至 Flow 0 扣点或 `2 Lite` |
+| **AI Studio 音乐台** | `Lyria 3.5` / `lyria-3-pro-preview`（`/new_music`） | ❌ **不可用**（`Upgrade` 锁） | ✅ **已解锁** | 免费号几秒内侦测升级锁并熔断回传 `paid_only: true`；PRO 号实测可导出 `.mp3` |
+| **AI Studio 语音 / 转写** | `3.8 Flash TTS`、`3.5 Transcribe`、`Live Translate` | ✅ **可用** | ✅ **可用** | `key_off` 下免费可用 |
+| **Google Flow 点数池** | 额度刷新机制 | ✅ **50 点 / 每日刷新** | ✅ **1,000+ 点 / 每月重置** | GUI 实时额度大盘自动适配每日/每月周期显示 |
+| **Google Flow 画布生图** | `Nano Banana 2.1`（底部画布 `x1`） | ✅ **0 点数消耗** | ✅ **0 点数消耗** | **全账号核心福利**：底栏画布生图不扣点数，等同无限高清出图 |
+| **Google Flow 视频生成** | `Omni 1.2 Flash` / `Veo 3.1 Lite` | ✅ **可用（扣点数）** | ✅ **可用（扣点数）** | 默认数量建议设为 `x1`；打开右侧 Agent 面板或生视频会扣除点数 |
+| **Gemini 官网日常对话** | `gemini.google.com/app`（`Chat` 模式） | ✅ **可用（`Auto`）** | ✅ **已解锁高阶模式** | 独立 5 小时滚动池；遇到 `google.com/sorry` 人机验证立即停止并提示手动通过 |
+| **Gemini 官网云端沙盒** | `Task` 模式（Debian 12 容器执行） | ⚠️ **无 `Task` 按钮** | ✅ **原生解锁** | 免费号无按钮时 3 秒识别并安全放行至对话通道；PRO 号可原生切入 `Task` 执行代码 |
 
 > [!TIP]
 > **📁 文件挂载特性亮点**：
@@ -288,8 +329,10 @@ python scripts/sync_upstream.py
 ## 🤝 欢迎参与测试、反馈与贡献 (Feedback & Contribution)
 
 > [!NOTE]
-> 💡 **项目状态与版本说明 (`v0.3.0-beta.1`)**：  
-> 本插件长期以 **Public Beta** 形态持续迭代演进——**`v0.3.0-beta.1` 即为 0.3.0 系列的正式发布版本**。由于 Google 各大网页端（AI Studio、Gemini 官网、Google Flow / Lyria）的前端界面与 DOM 结构会不定期进行 A/B 测试或静默更新，加上不同操作系统的使用者（Linux / macOS / Windows）、浏览器版本、账号等级（免费 / PRO）及网络环境各不相同，**核心流程虽已完成免费与 PRO 双账号全线实测，但仍可能存在尚未覆盖到的边界情况（Edge Cases）或未知问题**，诚邀社区一同实测与反馈！
+> 💡 **项目状态与版本说明（`v0.3.0-beta.1` / `v0.4.0-alpha.1`）**：  
+> - `main` 分支稳定停留于 **`v0.3.0-beta.1`**（Public Beta 里程碑）。  
+> - 当前分支正推进 **`v0.4.0-alpha.1`** 长期底座重构：**「只守最基本的安全门禁 + 把上游变成给 DSH 主 AI 自由调度的独立多 Agent 算力平台」**。  
+> 由于 Google 各大网页端（AI Studio、Gemini 官网、Google Flow / Lyria）会不定期进行界面调整或风控策略变化，加上操作系统与账号等级（免费 / PRO）差异，欢迎随时提交实测反馈与建议！
 
 > [!TIP]
 > 🌱 **写给开源社区的一封信（关于 Vibe Coding）**：  
