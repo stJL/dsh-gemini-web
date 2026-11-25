@@ -5,16 +5,16 @@ import fs from 'node:fs'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { detectDualChannel, findAgentLimbScript, findCliScript, findPythonVenv, getPluginDir } from './detector.js'
-import { loadConfig } from '../config.js'
-import { parseTaskToProposal } from '../proposal.js'
+import { PluginConfig, loadConfig } from '../config.js'
+import { parseTaskToProposal, WaveTaskInput } from '../proposal.js'
 
 const execFileAsync = promisify(execFile)
 
 export interface AgentTaskOptions {
   task: string
   model?: string
-  site?: 'aistudio' | 'flow' | 'gemini' | 'wave'
-  entry?: 'chat' | 'task' | 'wave' | 'canvas'
+  site?: 'aistudio' | 'flow' | 'gemini' | 'wave' | 'lyria'
+  entry?: 'chat' | 'task' | 'wave' | 'canvas' | 'music'
   thinkingLevel?: string
   thinkingPolicy?: 'adaptive' | 'custom' | 'strict'
   thinkingTimeout?: number
@@ -26,6 +26,8 @@ export interface AgentTaskOptions {
   downloadDir?: string
   files?: string[]
   resume?: boolean
+  waveTasks?: WaveTaskInput[]
+  waveProject?: string
 }
 
 export interface AgentTaskResult {
@@ -216,6 +218,26 @@ export function mergeSessionDeliveries(sessionId?: string, waveName?: string): {
   return { ok: true, mergedFiles, targetRoot, sourceDir: wave.path }
 }
 
+export function sanitizeWaveSpec(waveSpec: any, cfg: PluginConfig): any {
+  const defaultThinking = cfg.thinkingLevel || 'high'
+  const tasks = Array.isArray(waveSpec?.tasks) ? waveSpec.tasks : (Array.isArray(waveSpec) ? waveSpec : [])
+  const sanitizedTasks = tasks.map((t: any) => {
+    const taskCopy = { ...t }
+    const siteLower = String(taskCopy.site || 'aistudio').toLowerCase()
+    const isRemoteShared = siteLower.includes('gemini') || siteLower === 'task'
+    if (Array.isArray(taskCopy.files) && isRemoteShared) {
+      taskCopy.files = taskCopy.files.filter((f: string) => !isSensitiveSecretFile(String(f)))
+    }
+    if (!taskCopy.thinking_level && (siteLower === 'aistudio' || !taskCopy.site)) {
+      taskCopy.thinking_level = defaultThinking
+    }
+    return taskCopy
+  })
+  return Array.isArray(waveSpec)
+    ? { project: 'dsh-wave', tasks: sanitizedTasks }
+    : { ...waveSpec, tasks: sanitizedTasks }
+}
+
 let lastSessionId: string | null = null
 
 export async function executeAgentTask(options: AgentTaskOptions): Promise<AgentTaskResult> {
@@ -253,14 +275,21 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
   }
 
   // Wave 虚拟工作室直通分支（强制会话级隔离：.gemini-teams/[sessionId]/）
-  if (targetSite === 'wave' || options.entry === 'wave') {
+  if (targetSite === 'wave' || options.entry === 'wave' || (Array.isArray(options.waveTasks) && options.waveTasks.length > 0)) {
     let waveSpec: any = null
-    try {
-      const trimmed = options.task.trim()
-      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-        waveSpec = JSON.parse(trimmed)
+    if (Array.isArray(options.waveTasks) && options.waveTasks.length > 0) {
+      waveSpec = {
+        project: options.waveProject || 'dsh-wave',
+        tasks: options.waveTasks,
       }
-    } catch {}
+    } else {
+      try {
+        const trimmed = options.task.trim()
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+          waveSpec = JSON.parse(trimmed)
+        }
+      } catch {}
+    }
 
     if (!waveSpec) {
       const proposal = parseTaskToProposal(options.task, cfg)
@@ -274,7 +303,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
           role: leadRole,
           site: 'aistudio',
           model: 'gemini-4-hydrogen',
-          thinking_level: 'high',
+          thinking_level: cfg.thinkingLevel || 'high',
           out_file: 'plan.md',
           prompt: `你是「${proposal.playbook?.title || pbSlug}」的架构总监 (${leadRole})。请针对以下需求输出简洁明确的模块设计与文件清单（Markdown）：\n\n${options.task}`,
         },
@@ -295,6 +324,7 @@ export async function executeAgentTask(options: AgentTaskOptions): Promise<Agent
     }
 
     if (waveSpec) {
+      waveSpec = sanitizeWaveSpec(waveSpec, cfg)
       const waveDir = getOrCreateSessionWaveDir(options.sessionId, Boolean(options.resume))
       const rosterFile = getSessionRosterFile(options.sessionId)
       const res = await executeWave(waveSpec, {

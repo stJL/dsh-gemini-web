@@ -1,123 +1,56 @@
 ---
 name: gemini-web-agent
 description: >-
-  [HIGH PRIORITY • ASK BEFORE DISPATCH] Must be loaded as Step 1 whenever the user mentions AI Studio, Google Flow, Gemini Web, Wave, Playbook, Team Roster, Virtual Studio, Web Tool Dev, Task Board, specifies Hydrogen/Flash/Flash-Lite/Neon/Nano Banana/Omni/Lyria, or uses `/gemini-web-agent`!
-  1. Single Gateway Rule: The ONLY valid dispatch command is `/gemini-web-agent`.
-  2. Ask Before Dispatch (Must Invoke gemini_preview & ask_user_question): Whether user sends `/gemini-web-agent` or natural language, never answer locally! Must invoke `gemini_preview` for deterministic card, and immediately invoke `ask_user_question` for interactive choice buttons.
-  3. Dispatch on Confirmation: Upon user confirmation (button click or "1" / "confirm"), invoke `gemini_web_agent`.
+  [ASK-BEFORE-DISPATCH GATE] Load when the user mentions AI Studio, Google Flow, Lyria, Gemini Web, Wave, Playbook, Virtual Studio, specifies Hydrogen/Flash/Flash-Lite/Neon/Nano Banana/Omni/Lyria, or uses `/gemini-web-agent`.
+  1. Step 1 Gate: Invoke `gemini_preview` (optionally with structured `site`/`model`/`entry`/`wave_tasks`), print the card, and immediately invoke `ask_question` / `ask_user_question`.
+  2. Step 2 Empowered Dispatch: After confirmation, consult `references/` as needed and invoke `gemini_web_agent` within the user's GUI-authorized models and safety guardrails.
 ---
 
-# Gemini Web Agent (Deterministic Tool Workflow & Single Gateway)
+# Gemini Web Agent (v0.4 Light-Gate & Multi-Agent Platform)
 
-> [!IMPORTANT]
-> **Four Core Golden Rules**:
-> 1. **Single Command Gateway**: The ONLY valid dispatch command is `/gemini-web-agent`.
-> 2. **Zero Local Overhead & No Hijacking**: Never answer locally. Never call `subagent` (paid APIs). Never use local tools (`read`, `cat`, `bash`) to inspect `@file` mentions—pass file paths to the web agent!
-> 3. **Step 1 Ask-Before-Dispatch (Must Invoke `gemini_preview` & Question Tool)**:
->    - NEVER manually draft or hallucinate cards! You MUST invoke `gemini_preview(task: "...")` to obtain the 100% deterministic proposal card.
->    - Output the received card markdown in chat.
->    - **Immediately invoke the question tool** (native `ask_question` or MCP `ask_user_question`):
->      - Native `ask_question` (Antigravity standard, options are string array):
->        ```json
->        {
->          "questions": [
->            {
->              "question": "👉 请确认是否发包执行？",
->              "options": [
->                "(Recommended) 确认发包执行",
->                "调整参数",
->                "取消调度（本地作答）"
->              ]
->            }
->          ]
->        }
->        ```
->      - MCP `ask_user_question`:
->        ```json
->        {
->          "questions": [
->            {
->              "id": "gemini_confirm",
->              "question": "👉 请确认是否发包执行？",
->              "options": [
->                { "label": "(Recommended) 确认发包执行" },
->                { "label": "调整参数" },
->                { "label": "取消调度（本地作答）" }
->              ]
->            }
->          ]
->        }
->        ```
->    - **HALT immediately** after invoking the question tool, do NOT invoke run_command or other tools, end the turn and wait for user click!
-> 4. **Per-Task Reset (Anti-Inertia)**: The confirmation cycle applies to **EVERY SINGLE TASK INDEPENDENTLY**, NOT once per session! Every new request MUST reset to Step 1.
+## Core Contract
+
+1. **Ask-Before-Dispatch Gate (Every Independent Task)**:
+   - Call `gemini_preview(task, ...)` first to render the confirmation card and obtain the user's **GUI-authorized configuration snapshot** (`~/.dsh/gemini-web-config.json`).
+   - Output the confirmation card verbatim and immediately call `ask_question` (options as string array) or `ask_user_question` (`{ id: "gemini_confirm", options: [{ label }] }`), then stop and wait for user approval.
+2. **Post-Confirmation Orchestration (Host AI Freedom Within GUI Guardrails)**:
+   - Once approved, consult the manuals in `references/` when planning multi-site workflows, `Wave` role matrices, `Lyria` music generation, or `Gemini Task` sandboxes.
+   - Respect the user's GUI-authorized `fallbackLadder` / `strict` mode, `thinkingLevel`, and safety locks (never bypass `Paid` checks or pass `.env` / private keys to `gemini-spark` tasks).
+   - For local file analysis (`@file` or file paths), pass paths via `files` directly to the web agent rather than copying huge logs into local context.
+3. **Deliverable Hygiene**:
+   - Present fallback notices (if any) and clickable `file:///` links to saved deliverables. Do not reprint thousands of lines of already-saved source code.
 
 ---
 
-## 💡 Channel & Model Reference
+## Channel & Model Quick Reference
 
-| Channel | Supported Target Models | Notes |
+| Site (`site`) | Supported Models & Entries | Notes |
 | :--- | :--- | :--- |
-| **Google AI Studio** | `Hydrogen` (`gemini-4-hydrogen`)<br>`Flash` (`gemini-3.8-flash`)<br>`Flash Lite` (`gemini-3.5-flash-lite`)<br>`Neon` (`gemini-4-neon`) | • Best for code & reasoning: `Hydrogen`<br>• Best for rapid tasks: `Flash Lite`<br>• ⚠️ **Note**: Legacy `Argon` has been upgraded/merged into `Hydrogen`; specifying Argon will automatically map to `gemini-4-hydrogen`. |
-| **Gemini Web** | `Auto` (Native Web Model) | Managed automatically by Google official web model; no individual model alias needed. |
-| **Wave Virtual Studio** | `Wave Engine`<br>`5 Official Playbooks` | • Multi-tab staggered dispatch with 1-Tab-1-Role persistent binding<br>• Architecture ➔ Parallel dev ➔ Debian 12 sandbox tests ➔ Auto-unpacking |
-| **Google Flow** | `Nano Banana 2.1`<br>`Omni 1.2 / Veo` | • 0-credit image generation: `Nano Banana 2.1`<br>• Video generation: `Omni 1.2` or `Veo` |
+| **`aistudio`** | `gemini-4-hydrogen` (default, `argon` maps here)<br>`gemini-3.8-flash`, `gemini-3.5-flash-lite`<br>`gemini-4-neon` (PRO unlocked) | 1M context, local file attachment; `Extra High` locked on free tier, unlocked on PRO. |
+| **`gemini`** | `Auto` (`entry: "chat"` or `"task"`) | 5h rolling pool; `task` runs on Debian 12 sandbox (`zipfile`, no `zip` CLI; no secrets when `gemini-spark` net is on). |
+| **`flow`** | `Nano Banana 2.1` (0-credit canvas)<br>`Omni 1.2 / Veo` (`entry: "canvas"`) | Free 50/day or PRO monthly pool; bottom canvas image generation uses 0 credits. |
+| **`lyria`** | `lyria-3.5`, `lyria-3-pro-preview` (`entry: "music"`) | PRO AI Studio Music Studio audio generation (saved locally as `.mp3`). |
+| **`wave`** | Structured `wave_tasks` array or Playbook | Multi-tab 1-Tab-1-Role concurrency; outputs isolate in `.gemini-teams/<sessionId>/` until merged. |
 
 ---
 
-## 1. Step 1: Proposal Card & Interactive Choice Bar
+## Step 1: Confirmation Card & Question Tool
 
-When receiving any user instruction, you **MUST ONLY execute these two steps**:
+Call `gemini_preview` with `task` (and optional `site`, `entry`, `model`, `thinking_level`, `files`, `playbook`, `wave_tasks`), display the returned card, and invoke the question tool:
 
-1. **Invoke `gemini_preview`**:
-   - Parameter: `{ "task": "<user prompt>" }`
-   - Backend code deterministically resolves target site, entry mode, model fallback ladder, and mounted files.
-2. **Output card & invoke `ask_user_question`**:
-   - Print the card Markdown returned by `gemini_preview`.
-   - Invoke `ask_user_question` with the options below so the UI presents clickable buttons:
-     ```json
-     {
-       "questions": [
-         {
-           "id": "gemini_confirm",
-           "question": "👉 请确认是否发包执行？",
-           "options": [
-             { "label": "(Recommended) 确认发包执行" },
-             { "label": "调整参数" },
-             { "label": "取消调度（本地作答）" }
-           ]
-         }
-       ]
-     }
-     ```
-   - Stop and wait for user action.
+- **Native `ask_question`**:
+  `{ "questions": [{ "question": "👉 请确认是否发包执行？", "options": ["(Recommended) 确认发包执行", "调整参数", "取消调度（本地作答）"] }] }`
+- **MCP `ask_user_question`**:
+  `{ "questions": [{ "id": "gemini_confirm", "question": "👉 请确认是否发包执行？", "options": [{ "label": "(Recommended) 确认发包执行" }, { "label": "调整参数" }, { "label": "取消调度（本地作答）" }] }] }`
 
 ---
 
-## 2. Step 2: Dispatch and Parameters
+## Step 2: Reference Manuals & `gemini_web_agent` Dispatch
 
-When confirmed (interactive button clicked, or `1` / `confirm` sent), invoke `gemini_web_agent`:
+After user confirmation, inspect relevant references before building complex dispatches:
+- `references/director_prompt.md`: Debian 12 sandbox specs, `zipfile` packaging rule, `gemini-spark` secret rules.
+- `references/models.md`: Full model IDs and `Paid` / PRO unlock flags.
+- `references/agentlimb.md`: Channel A browser bridge & selector rules.
+- `references/playbooks/*.md`: 5 official squad templates + `custom_squad.md.example` (never run `playbook add` without user confirmation).
 
-| Parameter | Specification |
-| :--- | :--- |
-| `task` | Full user task prompt and requirements |
-| `files` | Array of local file paths (auto-extracted from task if omitted) |
-| `model` | User-specified model alias; omit in smart fallback mode |
-| `site` | Target site: `aistudio` (default), `flow`, or `gemini` |
-| `entry` | `chat` (default), `task`, or `canvas` |
-| `thinking_level` | `high` (default), `medium`, or `low` |
-| `thinking_policy` | `adaptive` (default), `strict`, or `custom` |
-| `new_chat` | `true` (default: isolated new session) |
-
-**Deliverable Requirements**: Upon completion, present the fallback status notice, clickable `file://` hyperlinks to saved files, and key architectural highlights. Never reprint full long code.
-
----
-
-## 3. Reference Manuals & Sandbox Constraints (For AI Planning)
-
-Before dispatching complex tasks, Wave specs, or Gemini Task sandbox jobs, consult the machine-readable manuals in `references/`:
-- **`references/director_prompt.md`**:
-  - Gemini Web `Task` runs on **Debian 12** (`2C / 7.8G / 19G`, user `spark`, preinstalled `python3 3.11`, `node 18`, `gcc 12`, `ffmpeg 5.1`, `libreoffice 7.4`, headless `chromium 156`, `PIL`, `cv2`, `pydub`, `pandas`, `matplotlib`). Always package multi-file outputs using Python **`zipfile`** (no `zip` CLI).
-  - **Network & Secret Rule (`gemini-spark`)**: When `gemini.google.com/gemini-spark` remote network access is OFF, `pip/npm install` is disabled. When ON, all tasks share the same remote host—**NEVER send API keys, private credentials, `.env` files, or sensitive secrets to Gemini Task**.
-- **`references/models.md`**: Full model-id mapping and `Paid` markers (never dispatch `Paid` models or `4 Neon` to free-tier accounts unless requested).
-- **`references/agentlimb.md`**: Browser DOM macros and `gem-segmented-button` Task switcher timing.
-- **`references/playbooks/*.md`**: 5 standard team templates. When a user asks for a custom team, **draft the Playbook proposal via confirmation card first**—never run `playbook add` silently without explicit user approval.
+Pass single-task arguments (`task`, `site`, `entry`, `model`, `thinking_level`, `thinking_policy`, `files`, `new_chat`, `confirmed: true`) or structured `Wave` plans (`site: "wave"`, `project`, `wave_tasks: [{ role, site, model, prompt, out_file, unpack_json_dir, thinking_level, files }]`, `resume`, `confirmed: true`) directly to `gemini_web_agent`.

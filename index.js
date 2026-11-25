@@ -714,190 +714,243 @@ function resolvePlaybooksDir() {
   } catch {}
   return null;
 }
-function findCustomPlaybookInTask(task) {
+function parseCustomPlaybookFile(dir, file) {
+  const slug = file.slice(0, -3);
+  const content = fs3.readFileSync(path3.join(dir, file), "utf-8");
+  const titleLine = content.split(`
+`).find((l) => l.trim().startsWith("# "));
+  const rawTitle = titleLine ? titleLine.trim().slice(2).trim() : slug;
+  const cleanTitle = rawTitle.replace(/\s*\(`[^`]+`\)\s*$/, "").trim();
+  const roles = [];
+  for (const line of content.split(`
+`)) {
+    const m = line.match(/^\|\s*`([a-zA-Z0-9_-]+)`\s*\|/);
+    if (m && m[1] !== "role")
+      roles.push(m[1]);
+  }
+  return {
+    slug,
+    title: cleanTitle || slug,
+    roles: roles.length > 0 ? roles : ["director", "coder"],
+    stages: `自定义编队契约 (references/playbooks/${file})`
+  };
+}
+function findCustomPlaybook(query) {
   const dir = resolvePlaybooksDir();
   if (!dir)
     return;
   try {
-    const lowerTask = task.toLowerCase();
+    const lower = query.toLowerCase();
     const files = fs3.readdirSync(dir).filter((f) => f.endsWith(".md"));
     for (const file of files) {
       const slug = file.slice(0, -3);
       if (PLAYBOOKS[slug])
         continue;
-      const content = fs3.readFileSync(path3.join(dir, file), "utf-8");
-      const titleLine = content.split(`
-`).find((l) => l.trim().startsWith("# "));
-      const rawTitle = titleLine ? titleLine.trim().slice(2).trim() : slug;
-      const cleanTitle = rawTitle.replace(/\s*\(`[^`]+`\)\s*$/, "").trim();
-      if (!lowerTask.includes(slug.toLowerCase()) && (!cleanTitle || !lowerTask.includes(cleanTitle.toLowerCase()))) {
-        continue;
+      const parsed = parseCustomPlaybookFile(dir, file);
+      if (lower.includes(slug.toLowerCase()) || parsed.title && lower.includes(parsed.title.toLowerCase())) {
+        return parsed;
       }
-      const roles = [];
-      for (const line of content.split(`
-`)) {
-        const m = line.match(/^\|\s*`([a-zA-Z0-9_-]+)`\s*\|/);
-        if (m && m[1] !== "role")
-          roles.push(m[1]);
-      }
-      return {
-        slug,
-        title: cleanTitle || slug,
-        roles: roles.length > 0 ? roles : ["director", "coder"],
-        stages: `自定义编队契约 (references/playbooks/${file})`
-      };
     }
   } catch {}
   return;
 }
-function parseTaskToProposal(task, config) {
-  const cfg = config || loadConfig();
-  const extractedFiles = [];
+function extractFilesFromTask(task, explicitFiles) {
+  const files = Array.isArray(explicitFiles) ? explicitFiles.map((f) => String(f).trim()).filter(Boolean) : [];
+  const pushUnique = (f) => {
+    if (f && !files.includes(f))
+      files.push(f);
+  };
   const atRegex = /@([a-zA-Z0-9_\-\.\/]+)/g;
   let match;
   while ((match = atRegex.exec(task)) !== null) {
-    const f = match[1].trim();
-    if (f && !extractedFiles.includes(f)) {
-      extractedFiles.push(f);
-    }
+    pushUnique(match[1].trim());
   }
   const fileRegex = /\b(?:(?:\.?\.?\/)?[a-zA-Z0-9_\-]+\/)*[a-zA-Z0-9_\-]+\.(?:ts|tsx|js|jsx|py|json|md|txt|pdf|png|jpg|jpeg|gif|webp|csv|log|yaml|yml|rs|go|cpp|c|h|java|html|css|sh)\b/gi;
   while ((match = fileRegex.exec(task)) !== null) {
     const f = match[0].trim();
-    if (f && !f.includes("google.com") && !extractedFiles.includes(f)) {
-      extractedFiles.push(f);
-    }
+    if (!f.includes("google.com"))
+      pushUnique(f);
   }
-  const isWave = /(?:\bwave\b|并发波次|波次引擎|波次任务|多\s*tab\s*并发|并发外包|虚拟工作室|团队花名册|花名册|\broster\b|\bplaybook\b|工作编队|研发编队|全栈编队|游戏编队|数据编队|视频编队|调研编队|编队|外包团队|全栈开发|任务看板|看板\s*web|web\s*工具)/i.test(task);
-  if (isWave) {
-    let matchedPlaybook = undefined;
-    if (/(?:全栈|web\s*应用|saas|web_fullstack|全栈编队|看板|web\s*工具)/i.test(task)) {
-      matchedPlaybook = PLAYBOOKS.web_fullstack_app;
-    } else if (/(?:游戏|game|phaser|canvas游戏|interactive_game|游戏编队)/i.test(task)) {
-      matchedPlaybook = PLAYBOOKS.interactive_game_studio;
-    } else if (/(?:数据工程|办公自动化|excel|报表|清洗|data_office|数据编队)/i.test(task)) {
-      matchedPlaybook = PLAYBOOKS.data_office_automation;
-    } else if (/(?:视频|自媒体|音频|配乐|剪辑|content_video|视频编队)/i.test(task)) {
-      matchedPlaybook = PLAYBOOKS.content_video_media;
-    } else if (/(?:学术|文献|综述|深度调研|研报|academic_deep|调研编队)/i.test(task)) {
-      matchedPlaybook = PLAYBOOKS.academic_deep_research;
-    }
-    if (!matchedPlaybook) {
-      matchedPlaybook = findCustomPlaybookInTask(task) || PLAYBOOKS.web_fullstack_app;
-    }
-    const pb = matchedPlaybook;
-    const channel = "Wave 多 Tab 并发波次引擎 (Chrome Multi-Tab Cluster)";
-    const actionDesc = `启动虚拟工作室「${pb.title}」并发协作`;
-    const modelLabel = "（多 Tab 角色矩阵）";
-    const modelTarget = "架构定界 (AI Studio Hydrogen / Neon) + 研发沙盒 (Gemini 官网云端运行) + 视觉资产 (Flow 零点数特权)";
-    const thinkingConfig = "各 Tab 错峰 3.5s 派发 · 后台静默轮询 · 自动解包写入会话隔离区";
-    const directorMode = cfg.directorMode === "external" ? `外包给外部 AI Studio (${cfg.directorModel || "gemini-4-hydrogen"})` : "本地模型掌舵 (推荐 · 保持全局上下文)";
-    const filesLine = extractedFiles.length > 0 ? `- \uD83D\uDCC1 挂载文件：[${extractedFiles.join(", ")}]` : "";
-    const cardLines = [
-      "### \uD83C\uDF10 Gemini Web Agent",
-      `检测到您欲调用外部 Google 网页端${actionDesc}，相关配置如下：`,
-      "",
-      `- \uD83C\uDFAF 执行渠道：${channel}`,
-      `- \uD83D\uDCCB 启用编队：${pb.title} (${pb.slug})`,
-      `- \uD83E\uDDED 总监模式：${directorMode}`,
-      `- \uD83D\uDC65 协同角色：[${pb.roles.join(", ")}]`
-    ];
-    if (filesLine) {
-      cardLines.push(filesLine);
-    }
-    cardLines.push(`- \uD83D\uDEAA 入口模式：wave (多 Tab 并发外包)`, `- \uD83E\uDDE0 协同矩阵：多 Tab 专属工种`, `  - \uD83D\uDCD0 架构定界：Google AI Studio (Gemini 4 Hydrogen / Neon 深度长文本)`, `  - \uD83D\uDEE0️ 研发与自测：Gemini 官网代码沙盒 (云端容器运行测试，无需本地装环境)`, `  - \uD83C\uDFA8 视觉素材：Google Flow (Nano Banana 2.1 享受 0 扣点特权)`, `- \uD83C\uDF0A 规划波次：${pb.stages}`, `- ⚙️ 推演配置：${thinkingConfig}`, "- \uD83D\uDD04 话题隔离：会话级独立花名册与交付沙盒 (.gemini-teams/[sessionId]/)", "- \uD83D\uDD10 安全提醒：若在 gemini-spark 开启云端联网，请勿向 Task 传入 API Key 或敏感凭据", "", "\uD83D\uDC49 请确认是否启动 Wave 并发外包执行？", "- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化错峰派发多 Tab 并行执行", "- 回复 「花名册」：查阅当前会话团队各角色绑定的标签页状态", "- 回复 「取消」：中止并发外包，改由本地单模型作答");
-    const card = cardLines.join(`
+  return files;
+}
+function resolveModelToken(raw) {
+  const lower = raw.trim().toLowerCase();
+  if (/lyria[- ]?3\.5|lyria[- ]?3[- ]?pro|lyria/i.test(lower)) {
+    const id = /pro/i.test(lower) ? "lyria-3-pro-preview" : "lyria-3.5";
+    return { model: id, key: id };
+  }
+  if (/flash[- ]?lite|3\.5[- ]?flash[- ]?lite/i.test(lower)) {
+    return { model: "gemini-3.5-flash-lite", key: "gemini-3.5-flash-lite" };
+  }
+  if (/3\.8[- ]?flash|\bflash\b/i.test(lower) && !/flash[- ]?lite/i.test(lower)) {
+    return { model: "gemini-3.8-flash", key: "gemini-3.8-flash" };
+  }
+  if (/neon/i.test(lower)) {
+    return { model: "gemini-4-neon", key: "gemini-4-neon" };
+  }
+  if (/argon/i.test(lower)) {
+    return {
+      model: "gemini-4-hydrogen",
+      key: "gemini-4-hydrogen",
+      note: "（注：Google 已将旧 Argon 槽位升级合并至 Hydrogen 深度推理，已自动为您映射）"
+    };
+  }
+  if (/hydrogen|gemini-4/i.test(lower)) {
+    return { model: "gemini-4-hydrogen", key: "gemini-4-hydrogen" };
+  }
+  if (/nano\s*banana/i.test(lower)) {
+    return { model: "Nano Banana 2.1", key: "nano-banana" };
+  }
+  if (/veo|omni/i.test(lower)) {
+    return { model: "Omni 1.2 / Veo", key: "omni" };
+  }
+  return { model: raw.trim(), key: raw.trim() };
+}
+function matchHeuristicPlaybook(task) {
+  if (/(?:全栈|web\s*应用|saas|web_fullstack|全栈编队|看板|web\s*工具)/i.test(task)) {
+    return PLAYBOOKS.web_fullstack_app;
+  }
+  if (/(?:游戏|game|phaser|canvas游戏|interactive_game|游戏编队)/i.test(task)) {
+    return PLAYBOOKS.interactive_game_studio;
+  }
+  if (/(?:数据工程|办公自动化|excel|报表|清洗|data_office|数据编队)/i.test(task)) {
+    return PLAYBOOKS.data_office_automation;
+  }
+  if (/(?:视频|自媒体|音频|配乐|剪辑|content_video|视频编队)/i.test(task)) {
+    return PLAYBOOKS.content_video_media;
+  }
+  if (/(?:学术|文献|综述|深度调研|研报|academic_deep|调研编队)/i.test(task)) {
+    return PLAYBOOKS.academic_deep_research;
+  }
+  return findCustomPlaybook(task) || PLAYBOOKS.web_fullstack_app;
+}
+function formatAuthorizedConfigBrief(cfg) {
+  const ladder = cfg.fallbackLadder?.length ? cfg.fallbackLadder.join(" -> ") : cfg.defaultModel || "gemini-4-hydrogen";
+  const fallbackMode = cfg.thinkingPolicy === "strict" || cfg.fallbackMode === "strict" || cfg.autoFallback === false ? `strict (锁定单模型: ${cfg.defaultModel || "gemini-4-hydrogen"})` : `${cfg.thinkingPolicy || "adaptive"} (授权阶梯: ${ladder})`;
+  return [
+    "【GUI 用户授权配置快照 (~/.dsh/gemini-web-config.json)】",
+    `- 连接通道: ${cfg.connectionMode || "auto"} (首选 AgentLimb 免弹窗 -> CDP 备援)`,
+    `- 策略与模型阶梯: ${fallbackMode}`,
+    `- 默认思考等级: ${cfg.thinkingLevel || "high"} · 超时上限: ${cfg.timeoutSec || 180}s`,
+    `- 总监模式: ${cfg.directorMode === "external" ? `external (${cfg.directorModel || "gemini-4-hydrogen"})` : "local (本地宿主 AI 统筹)"}`,
+    "- 安全护栏 (代码层强制): 严禁绕过 Paid 过滤、gemini-spark 任务自动剔除密钥文件、Wave 产出隔离至 .gemini-teams/[sessionId]/"
+  ].join(`
 `);
-    const question = "\uD83D\uDC49 请确认是否启动 Wave 并发外包执行？";
-    const options = [
+}
+function buildWaveProposal(task, cfg, extractedFiles, overrides) {
+  const explicitPb = overrides?.playbook ? PLAYBOOKS[overrides.playbook] || findCustomPlaybook(overrides.playbook) : undefined;
+  const pb = explicitPb || matchHeuristicPlaybook(task);
+  const customTasks = Array.isArray(overrides?.waveTasks) && overrides.waveTasks.length > 0 ? overrides.waveTasks : undefined;
+  const channel = "Wave 多 Tab 并发波次引擎 (Chrome Multi-Tab Cluster)";
+  const actionDesc = customTasks ? `启动自定义多角色 Wave 编队 (${customTasks.length} 个子任务)` : `启动虚拟工作室「${pb.title}」并发协作`;
+  const rolesList = customTasks ? customTasks.map((t) => t.role || "worker") : pb.roles;
+  const directorMode = cfg.directorMode === "external" ? `外包给外部 AI Studio (${cfg.directorModel || "gemini-4-hydrogen"})` : "本地模型掌舵 (推荐 · 保持全局上下文)";
+  const thinkingConfig = "各 Tab 错峰 3.5s 派发 · 后台静默轮询 · 自动解包写入会话隔离区";
+  const filesLine = extractedFiles.length > 0 ? `- \uD83D\uDCC1 挂载文件：[${extractedFiles.join(", ")}]` : "";
+  const matrixLines = customTasks ? customTasks.map((t) => `  - \`${t.role}\` ➔ \`${t.site || "aistudio"}\` (${t.model || cfg.defaultModel || "gemini-4-hydrogen"})`) : [
+    "  - \uD83D\uDCD0 架构定界：Google AI Studio (Gemini 4 Hydrogen / Neon 深度长文本)",
+    "  - \uD83D\uDEE0️ 研发与自测：Gemini 官网代码沙盒 (云端容器运行测试，无需本地装环境)",
+    "  - \uD83C\uDFA8 视觉素材：Google Flow (Nano Banana 2.1 享受 0 扣点特权)"
+  ];
+  const cardLines = [
+    "### \uD83C\uDF10 Gemini Web Agent",
+    `检测到您欲调用外部 Google 网页端${actionDesc}，相关配置如下：`,
+    "",
+    `- \uD83C\uDFAF 执行渠道：${channel}`,
+    `- \uD83D\uDCCB 启用编队：${pb.title} (${pb.slug})`,
+    `- \uD83E\uDDED 总监模式：${directorMode}`,
+    `- \uD83D\uDC65 协同角色：[${rolesList.join(", ")}]`
+  ];
+  if (filesLine)
+    cardLines.push(filesLine);
+  cardLines.push("- \uD83D\uDEAA 入口模式：wave (多 Tab 并发外包)", "- \uD83E\uDDE0 协同矩阵：多 Tab 专属工种", ...matrixLines, `- \uD83C\uDF0A 规划波次：${pb.stages}`, `- ⚙️ 推演配置：${thinkingConfig}`, "- \uD83D\uDD04 话题隔离：会话级独立花名册与交付沙盒 (.gemini-teams/[sessionId]/)", "- \uD83D\uDD10 安全提醒：若在 gemini-spark 开启云端联网，请勿向 Task 传入 API Key 或敏感凭据", "", "\uD83D\uDC49 请确认是否启动 Wave 并发外包执行？", "- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化错峰派发多 Tab 并行执行", "- 回复 「花名册」：查阅当前会话团队各角色绑定的标签页状态", "- 回复 「取消」：中止并发外包，改由本地单模型作答");
+  return {
+    site: "wave",
+    entry: "wave",
+    channel,
+    actionDesc,
+    modelLabel: "（多 Tab 角色矩阵）",
+    modelTarget: "架构定界 (AI Studio Hydrogen / Neon) + 研发沙盒 (Gemini 官网云端运行) + 视觉资产 (Flow 零点数特权)",
+    model: "wave",
+    thinkingConfig,
+    files: extractedFiles,
+    card: cardLines.join(`
+`),
+    question: "\uD83D\uDC49 请确认是否启动 Wave 并发外包执行？",
+    options: [
       "(Recommended) 确认启动 Wave 并发外包",
       "查看该编队花名册契约",
       "取消调度（本地作答）"
-    ];
-    return {
-      site: "wave",
-      entry: "wave",
-      channel,
-      actionDesc,
-      modelLabel,
-      modelTarget,
-      model: "wave",
-      thinkingConfig,
-      files: extractedFiles,
-      card,
-      question,
-      options,
-      playbook: pb
-    };
+    ],
+    playbook: pb
+  };
+}
+function parseTaskToProposal(task, config, overrides) {
+  const cfg = config || loadConfig();
+  const extractedFiles = extractFilesFromTask(task, overrides?.files);
+  const hasExplicitNonWaveSite = Boolean(overrides?.site && overrides.site !== "wave");
+  const explicitWave = Boolean(overrides?.site === "wave" || overrides?.entry === "wave" || overrides?.playbook || overrides?.waveTasks && overrides.waveTasks.length > 0);
+  const heuristicWave = !hasExplicitNonWaveSite && /(?:\bwave\b|并发波次|波次引擎|波次任务|多\s*tab\s*并发|并发外包|虚拟工作室|团队花名册|花名册|\broster\b|\bplaybook\b|工作编队|研发编队|全栈编队|游戏编队|数据编队|视频编队|调研编队|编队|外包团队|全栈开发|任务看板|看板\s*web|web\s*工具)/i.test(task);
+  if (explicitWave || heuristicWave) {
+    return buildWaveProposal(task, cfg, extractedFiles, overrides);
   }
-  const isAiStudio = /(?:google\s*ai\s*studio|ai\s*studio|aistudio)/i.test(task);
-  const isFlow = /(?:google\s*flow|flow\.google\.com|\bflow\b|nano\s*banana|veo|omni\s*1\.2|生图|画一张|生成图片|生成图|做视频|生成视频)/i.test(task);
-  const isGeminiWeb = /(?:gemini(?:\.google\.com)?\s*官网|gemini\s*web|gemini\s*网页|task\s*模式|task模式)/i.test(task) || !isAiStudio && /联网调研/i.test(task);
   let site = "aistudio";
-  if (isAiStudio) {
-    site = "aistudio";
-  } else if (isFlow) {
-    site = "flow";
-  } else if (isGeminiWeb) {
-    site = "gemini";
+  if (overrides?.site && overrides.site !== "wave") {
+    site = overrides.site;
+  } else {
+    const isAiStudio = /(?:google\s*ai\s*studio|ai\s*studio|aistudio)/i.test(task);
+    const isLyria = /(?:\blyria\b|lyria[- ]?3)/i.test(task);
+    const isFlow = /(?:google\s*flow|flow\.google\.com|\bflow\b|nano\s*banana|veo|omni\s*1\.2|生图|画一张|生成图片|生成图|做视频|生成视频)/i.test(task);
+    const isGeminiWeb = /(?:gemini(?:\.google\.com)?\s*官网|gemini\s*web|gemini\s*网页|task\s*模式|task模式)/i.test(task) || !isAiStudio && /联网调研/i.test(task);
+    if (isLyria)
+      site = "lyria";
+    else if (isAiStudio)
+      site = "aistudio";
+    else if (isFlow)
+      site = "flow";
+    else if (isGeminiWeb)
+      site = "gemini";
   }
   let entry = "chat";
-  if (site === "flow") {
+  if (overrides?.entry && overrides.entry !== "wave") {
+    entry = overrides.entry;
+  } else if (site === "flow") {
     entry = "canvas";
+  } else if (site === "lyria") {
+    entry = "music";
   } else if (site === "gemini") {
-    if (/(?:task\s*模式|task模式|联网调研|\btask\b)/i.test(task)) {
-      entry = "task";
-    } else {
-      entry = "chat";
-    }
+    entry = /(?:task\s*模式|task模式|联网调研|\btask\b)/i.test(task) ? "task" : "chat";
   }
-  let channel = "Google AI Studio（可选择：Google AI Studio / Gemini Web）";
-  if (site === "gemini") {
-    channel = "gemini.google.com（可选择：Google AI Studio / Gemini Web）";
-  } else if (site === "flow") {
-    channel = "Google Flow (flow.google.com)";
-  }
+  const channelMap = {
+    aistudio: "Google AI Studio（可选择：Google AI Studio / Gemini Web）",
+    gemini: "gemini.google.com（可选择：Google AI Studio / Gemini Web）",
+    flow: "Google Flow (flow.google.com)",
+    lyria: "Google AI Studio Lyria 音乐台 (aistudio.google.com/new_music)"
+  };
+  const channel = channelMap[site];
   let actionDesc = "实现任务";
-  if (extractedFiles.length > 0) {
+  if (extractedFiles.length > 0)
     actionDesc = "分析本地文件";
-  } else if (site === "flow") {
+  else if (site === "flow")
     actionDesc = "实现多媒体生成";
-  } else if (site === "gemini" && entry === "task") {
+  else if (site === "lyria")
+    actionDesc = "生成 AI 音乐音频";
+  else if (site === "gemini" && entry === "task")
     actionDesc = "进行联网调研与深度探索";
-  } else if (site === "aistudio" && /联网调研/i.test(task)) {
+  else if (site === "aistudio" && /联网调研/i.test(task))
     actionDesc = "进行联网调研与深度探索";
-  }
-  let userSpecifiedModel;
-  let userSpecifiedModelKey;
-  let modelNote = "";
-  if (/flash[- ]?lite|3\.5[- ]?flash[- ]?lite/i.test(task)) {
-    userSpecifiedModel = "gemini-3.5-flash-lite";
-    userSpecifiedModelKey = "gemini-3.5-flash-lite";
-  } else if (/3\.8[- ]?flash|\bflash\b/i.test(task) && !/flash[- ]?lite/i.test(task)) {
-    userSpecifiedModel = "gemini-3.8-flash";
-    userSpecifiedModelKey = "gemini-3.8-flash";
-  } else if (/neon/i.test(task)) {
-    userSpecifiedModel = "gemini-4-neon";
-    userSpecifiedModelKey = "gemini-4-neon";
-  } else if (/argon/i.test(task)) {
-    userSpecifiedModel = "gemini-4-hydrogen";
-    userSpecifiedModelKey = "gemini-4-hydrogen";
-    modelNote = "（注：Google 已将旧 Argon 槽位升级合并至 Hydrogen 深度推理，已自动为您映射）";
-  } else if (/hydrogen|gemini-4/i.test(task)) {
-    userSpecifiedModel = "gemini-4-hydrogen";
-    userSpecifiedModelKey = "gemini-4-hydrogen";
-  } else if (/nano\s*banana/i.test(task)) {
-    userSpecifiedModel = "Nano Banana 2.1";
-    userSpecifiedModelKey = "nano-banana";
-  } else if (/veo|omni/i.test(task)) {
-    userSpecifiedModel = "Omni 1.2 / Veo";
-    userSpecifiedModelKey = "omni";
+  let specified;
+  if (overrides?.model) {
+    specified = resolveModelToken(overrides.model);
+  } else if (/flash[- ]?lite|3\.5[- ]?flash[- ]?lite|3\.8[- ]?flash|\bflash\b|neon|argon|hydrogen|gemini-4|nano\s*banana|veo|omni|lyria/i.test(task)) {
+    specified = resolveModelToken(task);
   }
   let modelLabel = "";
   let modelTarget = "";
   let finalModel = undefined;
+  const modelNote = specified?.note || "";
   if (site === "flow") {
-    if (userSpecifiedModelKey === "omni") {
+    if (specified?.key === "omni") {
       modelLabel = "Omni 1.2 / Veo (视频生成)";
       modelTarget = "Omni 1.2 / Veo";
       finalModel = "omni";
@@ -906,53 +959,47 @@ function parseTaskToProposal(task, config) {
       modelTarget = "Nano Banana 2.1";
       finalModel = "nano-banana";
     }
+  } else if (site === "lyria") {
+    modelLabel = "（音乐生成）";
+    modelTarget = specified?.model || "lyria-3-pro-preview";
+    finalModel = modelTarget;
   } else if (site === "gemini") {
     modelLabel = "Auto (Gemini 官网原生模型)";
     modelTarget = "Google 官方原生模型";
-  } else if (userSpecifiedModel) {
+  } else if (specified) {
     modelLabel = "（用户指定）";
-    modelTarget = userSpecifiedModel;
-    finalModel = userSpecifiedModelKey;
+    modelTarget = specified.model;
+    finalModel = specified.key;
+  } else if (cfg.thinkingPolicy === "strict") {
+    modelLabel = "（严格模式）";
+    modelTarget = cfg.defaultModel || "gemini-4-hydrogen";
+    finalModel = cfg.defaultModel;
   } else {
-    const isStrict = cfg.thinkingPolicy === "strict";
-    if (isStrict) {
-      modelLabel = "（严格模式）";
-      modelTarget = cfg.defaultModel || "gemini-4-hydrogen";
-      finalModel = cfg.defaultModel;
-    } else {
-      modelLabel = "（智能/降级模式）";
-      const ladder = cfg.fallbackLadder && cfg.fallbackLadder.length > 0 ? cfg.fallbackLadder : [cfg.defaultModel || "gemini-4-hydrogen"];
-      modelTarget = ladder.join(" -> ");
-    }
+    modelLabel = "（智能/降级模式）";
+    const ladder = cfg.fallbackLadder?.length ? cfg.fallbackLadder : [cfg.defaultModel || "gemini-4-hydrogen"];
+    modelTarget = ladder.join(" -> ");
   }
   let thinkingConfig = "";
   if (site === "gemini") {
     thinkingConfig = entry === "task" ? "联网搜索增强 (Task 联网模式)" : "官网标准对话模式";
   } else if (site === "flow") {
     thinkingConfig = "生成数量设为 x1，分辨率设为 2K";
+  } else if (site === "lyria") {
+    thinkingConfig = "生成音乐并自动保存 .mp3 至本地工作区";
   } else {
-    const level = cfg.thinkingLevel || "high";
+    const level = overrides?.thinkingLevel || cfg.thinkingLevel || "high";
     thinkingConfig = /联网调研/i.test(task) ? `Thinking 设为 ${level} (联网搜索增强)` : `Thinking 设为 ${level}`;
   }
-  const filesLine = extractedFiles.length > 0 ? `- \uD83D\uDCC1 挂载文件：[${extractedFiles.join(", ")}]` : "";
   const cardLines = [
     "### \uD83C\uDF10 Gemini Web Agent",
     `检测到您欲调用外部 Google 网页端${actionDesc}，相关配置如下：`,
     "",
     `- \uD83C\uDFAF 执行渠道：${channel}`
   ];
-  if (filesLine) {
-    cardLines.push(filesLine);
+  if (extractedFiles.length > 0) {
+    cardLines.push(`- \uD83D\uDCC1 挂载文件：[${extractedFiles.join(", ")}]`);
   }
   cardLines.push(`- \uD83D\uDEAA 入口模式：${entry}`, `- \uD83E\uDDE0 执行模型：${modelLabel}`, `  - ${modelTarget}${modelNote ? ` ${modelNote}` : ""}`, `- ⚙️ 推演配置：${thinkingConfig}`, "- \uD83D\uDD04 话题隔离：new_chat: true（预设开启全新独立对话）", ...site === "gemini" && entry === "task" ? ["- \uD83D\uDD10 安全提醒：若已开启 gemini-spark 云端联网，严禁向 Task 传入 API Key 或敏感凭据"] : [], "", "\uD83D\uDC49 请确认是否发包执行？", "- 回复 「确认」 或 「1」：立即调用外部 Chrome 自动化发包执行", "- 回复 调整参数（如「改用 Flash Lite」、「改用 Hydrogen」等）：按您的要求调整后直接发包", "- 回复 「取消」：中止外部调度，改由本地作答");
-  const card = cardLines.join(`
-`);
-  const question = "\uD83D\uDC49 请确认是否发包执行？";
-  const options = [
-    "(Recommended) 确认发包执行",
-    "调整参数",
-    "取消调度（本地作答）"
-  ];
   return {
     site,
     entry,
@@ -963,9 +1010,14 @@ function parseTaskToProposal(task, config) {
     model: finalModel,
     thinkingConfig,
     files: extractedFiles,
-    card,
-    question,
-    options
+    card: cardLines.join(`
+`),
+    question: "\uD83D\uDC49 请确认是否发包执行？",
+    options: [
+      "(Recommended) 确认发包执行",
+      "调整参数",
+      "取消调度（本地作答）"
+    ]
   };
 }
 
@@ -1106,6 +1158,23 @@ function mergeSessionDeliveries(sessionId, waveName) {
   }
   return { ok: true, mergedFiles, targetRoot, sourceDir: wave.path };
 }
+function sanitizeWaveSpec(waveSpec, cfg) {
+  const defaultThinking = cfg.thinkingLevel || "high";
+  const tasks = Array.isArray(waveSpec?.tasks) ? waveSpec.tasks : Array.isArray(waveSpec) ? waveSpec : [];
+  const sanitizedTasks = tasks.map((t) => {
+    const taskCopy = { ...t };
+    const siteLower = String(taskCopy.site || "aistudio").toLowerCase();
+    const isRemoteShared = siteLower.includes("gemini") || siteLower === "task";
+    if (Array.isArray(taskCopy.files) && isRemoteShared) {
+      taskCopy.files = taskCopy.files.filter((f) => !isSensitiveSecretFile(String(f)));
+    }
+    if (!taskCopy.thinking_level && (siteLower === "aistudio" || !taskCopy.site)) {
+      taskCopy.thinking_level = defaultThinking;
+    }
+    return taskCopy;
+  });
+  return Array.isArray(waveSpec) ? { project: "dsh-wave", tasks: sanitizedTasks } : { ...waveSpec, tasks: sanitizedTasks };
+}
 var lastSessionId = null;
 async function executeAgentTask(options) {
   const cfg = loadConfig();
@@ -1135,14 +1204,21 @@ async function executeAgentTask(options) {
   if (targetModel === "gemini.google.com" || targetModel === "gemini") {
     targetSite = "gemini";
   }
-  if (targetSite === "wave" || options.entry === "wave") {
+  if (targetSite === "wave" || options.entry === "wave" || Array.isArray(options.waveTasks) && options.waveTasks.length > 0) {
     let waveSpec = null;
-    try {
-      const trimmed = options.task.trim();
-      if (trimmed.startsWith("{") && trimmed.endsWith("}") || trimmed.startsWith("[") && trimmed.endsWith("]")) {
-        waveSpec = JSON.parse(trimmed);
-      }
-    } catch {}
+    if (Array.isArray(options.waveTasks) && options.waveTasks.length > 0) {
+      waveSpec = {
+        project: options.waveProject || "dsh-wave",
+        tasks: options.waveTasks
+      };
+    } else {
+      try {
+        const trimmed = options.task.trim();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}") || trimmed.startsWith("[") && trimmed.endsWith("]")) {
+          waveSpec = JSON.parse(trimmed);
+        }
+      } catch {}
+    }
     if (!waveSpec) {
       const proposal = parseTaskToProposal(options.task, cfg);
       const pbSlug = proposal.playbook?.slug || "web_fullstack_app";
@@ -1155,7 +1231,7 @@ async function executeAgentTask(options) {
           role: leadRole,
           site: "aistudio",
           model: "gemini-4-hydrogen",
-          thinking_level: "high",
+          thinking_level: cfg.thinkingLevel || "high",
           out_file: "plan.md",
           prompt: `你是「${proposal.playbook?.title || pbSlug}」的架构总监 (${leadRole})。请针对以下需求输出简洁明确的模块设计与文件清单（Markdown）：
 
@@ -1177,6 +1253,7 @@ ${options.task}`
       waveSpec = { project: pbSlug, tasks };
     }
     if (waveSpec) {
+      waveSpec = sanitizeWaveSpec(waveSpec, cfg);
       const waveDir = getOrCreateSessionWaveDir(options.sessionId, Boolean(options.resume));
       const rosterFile = getSessionRosterFile(options.sessionId);
       const res = await executeWave(waveSpec, {
@@ -2002,26 +2079,38 @@ var previewedTaskMap = new Map;
 function getTaskKey(t) {
   return (t || "").trim().replace(/\s+/g, " ").slice(0, 100);
 }
+function buildOverridesFromArgs(args) {
+  if (!args || typeof args !== "object")
+    return;
+  const hasAny = args.site || args.entry || args.model || args.thinking_level || Array.isArray(args.files) && args.files.length > 0 || args.playbook || Array.isArray(args.wave_tasks) && args.wave_tasks.length > 0;
+  if (!hasAny)
+    return;
+  return {
+    site: args.site,
+    entry: args.entry,
+    model: args.model,
+    thinkingLevel: args.thinking_level,
+    files: args.files,
+    playbook: args.playbook,
+    waveTasks: args.wave_tasks
+  };
+}
 function buildDynamicCardGuidance() {
-  return `【\uD83C\uDF10 Gemini Web Agent 单一门禁与先问后用铁律】
-唯一合法调度指令：/gemini-web-agent。
+  return `【\uD83C\uDF10 Gemini Web Agent 轻量门禁与授权调度规范 (v0.4)】
+唯一外部网关：/gemini-web-agent。
 
-【核心交互流程规范】：
-当用户在对话中提到需要使用外部 Google 网页端（AI Studio / Flow / Gemini 官网 / Wave 编队 / 虚拟工作室）执行任务，或直接使用了 /gemini-web-agent 指令时：
-1. 严禁宿主 AI 本地代劳作答！严禁在未向用户展示确认卡前擅自执行代码！必须立即执行第 1 步先问后用（调用 gemini_preview 工具）；
-2. 在聊天中原样输出 gemini_preview 返回的标准确认卡；
-3. 必须立即调用交互提问工具 ask_user_question（或 ask_question），展示交互选择栏供用户点击：
-   - questions: [{ id: "gemini_confirm", question: "\uD83D\uDC49 请确认是否发包执行？", options: [{ label: "(Recommended) 确认发包执行" }, { label: "调整参数" }, { label: "取消调度（本地作答）" }] }]
-4. 严禁直接调用 gemini_web_agent 发包，严禁调用 subagent！必须立即停步等待用户点击确认！
+1. 【第 1 步・先问后用门禁】：
+   当用户请求调用外部 Google 网页端（AI Studio / Flow / Lyria / Gemini 官网 / Wave 多角色编队）或输入 /gemini-web-agent 时：
+   - 调用 gemini_preview（可附带结构化 site / model / entry / wave_tasks 参数）生成确认卡并获取用户 GUI 授权配置快照；
+   - 原样输出确认卡文本；
+   - 立即调用 ask_user_question（或原生 ask_question）呈现确认按钮并停步等待用户点击或回复；
+   - 严禁未经确认直接调用 gemini_web_agent 发包。
 
-【授权发包执行】：
-当用户在交互选择栏中点击「确认发包执行」或回复「确认」/「1」后：
-正式调用 gemini_web_agent 发包执行！
+2. 【第 2 步・确认后自由编排】：
+   用户点击确认或回复「确认」/「1」后，按需查阅 SKILL.md 与 references/（director_prompt.md、models.md、agentlimb.md、playbooks/*.md），在 GUI 授权模型与安全护栏内自由组合参数（单任务或结构化 wave_tasks）调用 gemini_web_agent 执行。
 
-\uD83D\uDEA8【多轮任务循环铁律（Multi-Turn Anti-Inertia）】：
-每个新任务都是一个全新独立的循环（Cycle），绝非整个聊天会话只确认一次！
-即使同一对话中上一轮刚刚成功执行完毕，只要用户再次发起新的任务指令，本轮依然必须 100% 重新重置回确认流程，必须再次输出确认卡并调用提问工具！
-绝对严禁因为历史上上一轮已经确认过就自作聪明跳过确认卡直接作答或偷跑发包！`;
+3. 【多轮任务重置】：
+   每个新任务独立重置门禁，不得因上一轮已确认而跳过确认卡。`;
 }
 function apply(ctx) {
   ctx.inject(["systemPrompt"], (scoped) => {
@@ -2053,9 +2142,9 @@ function apply(ctx) {
       const previewDef = {
         name: "gemini_preview",
         get description() {
-          return `【第 1 步确定性确认卡与交互选项生成器】
-必须在第 1 步调用！输入用户的任务指令，100% 由代码确定性解析并生成标准的【\uD83C\uDF10 Gemini Web Agent】确认卡与交互选项定义（彻底规避排版幻觉与阶梯错误）。
-在第 1 步调用本工具获取卡片后，在聊天中原样输出卡片文本，并立即调用选择栏工具 ask_user_question 呈现确认按钮供用户点击！`;
+          return `【第 1 步确认门禁与 GUI 授权配置生成器】
+调用后返回【\uD83C\uDF10 Gemini Web Agent】确认卡与当前用户在 GUI 中授权的模型阶梯/策略快照。
+强模型可直接传入 site / entry / model / wave_tasks 等结构化参数，避免关键词猜测；输出确认卡后请立即调用提问工具并等待用户授权。`;
         },
         parameters: {
           type: "object",
@@ -2064,13 +2153,43 @@ function apply(ctx) {
             task: {
               type: "string",
               description: "用户提出的任务指令或提示词"
+            },
+            site: {
+              type: "string",
+              description: "可选：显式指定站点 (aistudio / flow / gemini / lyria / wave)"
+            },
+            entry: {
+              type: "string",
+              description: "可选：入口模式 (chat / task / canvas / music / wave)"
+            },
+            model: {
+              type: "string",
+              description: "可选：用户或主 AI 规划的目标模型别名"
+            },
+            thinking_level: {
+              type: "string",
+              description: "可选：思考等级 (high / medium / low / extra_high)"
+            },
+            files: {
+              type: "array",
+              items: { type: "string" },
+              description: "可选：待挂载的本地文件路径列表"
+            },
+            playbook: {
+              type: "string",
+              description: "可选：指定编队模板 slug（位于 references/playbooks/）"
+            },
+            wave_tasks: {
+              type: "array",
+              items: { type: "object" },
+              description: "可选：结构化 Wave 子任务矩阵 [{role, site, model, prompt, ...}]"
             }
           }
         },
         output: {
           schema: {
             type: "string",
-            description: "确定性生成的提案卡 Markdown 文本"
+            description: "提案卡 Markdown 与 GUI 授权配置快照"
           },
           render: (_args, value) => [{
             type: "text",
@@ -2078,17 +2197,22 @@ function apply(ctx) {
           }]
         },
         async execute(args) {
-          const proposal = parseTaskToProposal(args.task, loadConfig());
+          const cfg = loadConfig();
+          const overrides = buildOverridesFromArgs(args);
+          const proposal = parseTaskToProposal(args.task, cfg, overrides);
           const key = getTaskKey(args.task);
           previewedTaskMap.set(key, Date.now());
           const qText = proposal.question || "\uD83D\uDC49 请确认是否发包执行？";
           const rawOptions = proposal.options || ["(Recommended) 确认发包执行", "调整参数", "取消调度（本地作答）"];
+          const authBrief = formatAuthorizedConfigBrief(cfg);
           return `${proposal.card}
 
-【下一步操作指引】：请宿主 AI 立即在当前聊天窗口原样输出上方确认卡，并调用提问工具弹出交互选项栏：
-- 原生 ask_question 工具（Antigravity 规范）：ask_question(questions: [{"question": "${qText}", "options": ${JSON.stringify(rawOptions)}}])
-- MCP ask_user_question 工具：ask_user_question(questions: [{"id": "gemini_confirm", "question": "${qText}", "options": ${JSON.stringify(rawOptions.map((opt) => ({ label: opt })))}}])
-\uD83D\uDED1【铁律】：调用完提问工具后必须彻底停步，严禁调用任何后续工具（严禁调用 run_command、gemini_web_agent 或本地代劳），直接结束本次回答，等待用户点击或回复！`;
+${authBrief}
+
+【下一步操作指引】：原样输出上方确认卡后，立即调用提问工具等待用户确认：
+- 原生 ask_question：ask_question(questions: [{"question": "${qText}", "options": ${JSON.stringify(rawOptions)}}])
+- MCP ask_user_question：ask_user_question(questions: [{"id": "gemini_confirm", "question": "${qText}", "options": ${JSON.stringify(rawOptions.map((opt) => ({ label: opt })))}}])
+确认通过后，可按需查阅 SKILL.md 与 references/ 目录，并在上述 GUI 授权范围内调用 gemini_web_agent 执行。`;
         }
       };
       scoped.tools.register(previewDef);
@@ -2096,16 +2220,10 @@ function apply(ctx) {
       const toolDef = {
         name: "gemini_web_agent",
         get description() {
-          return `【\uD83D\uDEA8 Google 外部免费算力与多模态网关 / 核心铁律：两步走・先问后用】
-【第 1 步先问后用，第 2 步授权发包】：
-在使用者提出任何需求后，第 1 步必须先调用 gemini_preview 工具确定性生成【\uD83C\uDF10 Gemini Web Agent】确认卡，并调用 ask_user_question 呈现原生按钮供用户点击，并在此停止等待！
-只有当用户确认（点击按钮、回复「确认」或「1」）后，才在第 2 步正式调用本工具发包执行！
-
-${buildDynamicCardGuidance()}
-
-1. \uD83C\uDFAF【用户指定模型绝对优先】：若用户指定了具体模型（如「用 Gemini 3.5 Flash Lite」、「用 Argon」），必须 100% 采用该模型，严禁擅自升级或替换！
-2. \uD83D\uDED1【明令禁止本地擅自代劳、Subagent 劫持与本地 read 工具拦截】：严禁在本地自行编写答案，严禁调用 read、cat、bash 等本地工具预先读取文件，严禁调用 subagent 消耗付费额度！当用户要求分析本地文件或输入了 @文件 时，直接将该文件路径交由外部网页端挂载分析！
-3. \uD83D\uDCE6【调用完成后的展示义务】：调用完成后，必须完整呈现降级流程通知、落地文件超链接以及核心架构说明与代码！`;
+          return `【\uD83C\uDF10 Google 外部算力与多 Agent 执行网关 (v0.4)】
+须在 gemini_preview + 用户确认后调用（未确认请求将被门禁拦截）。
+支持单任务（aistudio / flow / lyria / gemini）及结构化多角色并发（site: "wave" + wave_tasks）。
+受代码层护栏保护：遵守 GUI 模型阶梯与 Paid 过滤、gemini-spark 敏感文件剔除、.gemini-teams/ 会话隔离及 file:/// 本地落盘交付。`;
         },
         parameters: {
           type: "object",
@@ -2113,52 +2231,61 @@ ${buildDynamicCardGuidance()}
           properties: {
             task: {
               type: "string",
-              description: "交由 Gemini 网页端执行的完整任务指令、需求描述与要求"
+              description: "交由 Gemini 网页端执行的任务指令与要求"
             },
             action: {
               type: "string",
-              description: "执行动作：execute (默认，正式发包执行) 或 preview (仅确定性预览并返回确认卡)"
+              description: "执行动作：execute (默认) 或 preview (仅预览确认卡)"
             },
             model: {
               type: "string",
-              description: "指定调度的模型别名（选填，如 hydrogen, flash, flash-lite 等）"
+              description: "指定模型别名（如 hydrogen, flash, flash-lite, neon, nano-banana, lyria-3.5）"
             },
             site: {
               type: "string",
-              description: "目标站点：aistudio (默认，代码与长文本), flow (生图生视频，Nano 2.1 享 0 点数), 或 gemini (官网对话与 task 模式)"
+              description: "目标站点：aistudio (默认), flow, lyria, gemini, 或 wave"
             },
             entry: {
               type: "string",
-              description: "入口模式：chat (默认对话), task (Gemini 官网任务与画布模式)"
+              description: "入口模式：chat (默认), task, canvas, music, 或 wave"
             },
             thinking_level: {
               type: "string",
-              description: "思考等级：high (默认稳定), medium, 或 low。注意：extra-high 已封印，避免免费池引发 Permission Denied 错误"
+              description: "思考等级：high (默认), medium, low, extra_high (PRO 账号可用)"
             },
             thinking_policy: {
               type: "string",
-              description: "思考阈值策略：adaptive (自适应，默认), custom (自定义超时), strict (严格模式不降级)"
+              description: "思考策略：adaptive (默认), custom, strict"
             },
             timeout_sec: {
               type: "number",
-              description: "任务超时限制秒数 (自定义模式下生效，如 240)"
+              description: "任务超时秒数（选填）"
             },
             new_chat: {
               type: "boolean",
-              description: "是否开启全新对话窗口（若为 true 则重置为全新聊天室，默认为 false 延续对话）"
+              description: "是否开启全新对话窗口（默认 false 延续会话）"
             },
             confirmed: {
               type: "boolean",
-              description: "是否已在聊天室获得用户明确点击授权（必须为 true 才能正式发包；未授权时将被门禁拦截并自动返回确认卡）"
+              description: "是否已在聊天室获得用户确认（须为 true 才放行；未授权时将被门禁拦截）"
             },
             files: {
               type: "array",
               items: { type: "string" },
-              description: "待上传至 Google 网页端分析的本地文件、图片、日志或论文 PDF 绝对/相对路径列表（选填，支持多文件）"
+              description: "待挂载至网页端分析的本地文件路径列表（选填）"
             },
             resume: {
               type: "boolean",
-              description: "Wave 断点续传：跳过当前会话花名册中已完成的角色，仅重试未完成角色（选填）"
+              description: "Wave 断点续传：跳过当前会话花名册中已完成的角色"
+            },
+            project: {
+              type: "string",
+              description: "可选：Wave 编队项目名称"
+            },
+            wave_tasks: {
+              type: "array",
+              items: { type: "object" },
+              description: "可选：由主 AI 自由编排的 Wave 子任务数组 [{role, site, model, prompt, out_file, unpack_json_dir, thinking_level, files}]"
             }
           }
         },
@@ -2173,37 +2300,33 @@ ${buildDynamicCardGuidance()}
           }]
         },
         async execute(args, exec) {
-          if (args.action === "preview") {
-            const proposal = parseTaskToProposal(args.task, loadConfig());
-            const key = getTaskKey(args.task);
-            previewedTaskMap.set(key, Date.now());
-            return proposal.card;
-          }
           const cfg = loadConfig();
+          const overrides = buildOverridesFromArgs(args);
+          if (args.action === "preview") {
+            const proposal = parseTaskToProposal(args.task, cfg, overrides);
+            previewedTaskMap.set(getTaskKey(args.task), Date.now());
+            return `${proposal.card}
+
+${formatAuthorizedConfigBrief(cfg)}`;
+          }
           const key = getTaskKey(args.task);
           const isExplicitConfirmed = args.confirmed === true || args.action === "execute_confirmed";
           const hasBeenPreviewed = previewedTaskMap.has(key) && Date.now() - (previewedTaskMap.get(key) || 0) < 10 * 60 * 1000;
           if (!isExplicitConfirmed && !hasBeenPreviewed && cfg.dispatchMode !== "fast_track") {
             previewedTaskMap.set(key, Date.now());
-            const proposal = parseTaskToProposal(args.task, cfg);
+            const proposal = parseTaskToProposal(args.task, cfg, overrides);
             const qText = proposal.question || "\uD83D\uDC49 请确认是否发包执行？";
             const rawOptions = proposal.options || ["(Recommended) 确认发包执行", "调整参数", "取消调度（本地作答）"];
             return `${proposal.card}
 
-\uD83D\uDED1【系统安全门禁拦截：先问后用强制生效中】
-检测到尚未在聊天窗口向用户展示上方【\uD83C\uDF10 Gemini Web Agent】确认卡并获取点击授权！本次调度已被底层代码强制拦截挂起，未向外部发包。
+${formatAuthorizedConfigBrief(cfg)}
 
-\uD83D\uDC49 宿主 AI 必须：
-1. 立即在当前聊天窗口中原样输出上方确认卡；
-2. 立即调用提问工具弹出交互选项供用户点击：
-   - 原生 ask_question 工具：ask_question(questions: [{"question": "${qText}", "options": ${JSON.stringify(rawOptions)}}])
-   - MCP ask_user_question 工具：ask_user_question(questions: [{"id": "gemini_confirm", "question": "${qText}", "options": ${JSON.stringify(rawOptions.map((opt) => ({ label: opt })))}}])
-3. 彻底停步！严禁调用 run_command 或再次发包！直接结束本次回答，等待用户在交互栏中点击或回复！`;
+\uD83D\uDED1【安全门禁拦截】尚未向用户展示确认卡并取得授权，本次未向外部发包。请原样输出确认卡并调用提问工具（ask_question / ask_user_question）等待确认。`;
           }
           previewedTaskMap.delete(key);
           let filesToPass = args.files;
           if (!filesToPass || filesToPass.length === 0) {
-            const proposal = parseTaskToProposal(args.task, loadConfig());
+            const proposal = parseTaskToProposal(args.task, cfg, overrides);
             if (proposal.files && proposal.files.length > 0) {
               filesToPass = proposal.files;
             }
@@ -2220,14 +2343,16 @@ ${buildDynamicCardGuidance()}
             newChat: args.new_chat,
             sessionId,
             files: filesToPass,
-            resume: Boolean(args.resume)
+            resume: Boolean(args.resume),
+            waveTasks: Array.isArray(args.wave_tasks) ? args.wave_tasks : undefined,
+            waveProject: args.project
           });
           if (!res.ok) {
             if (res.error?.includes("CONGESTION_HALT")) {
               return `⚠️ 【Google 免费池排队拥塞警报】
 ${res.error}
 
-\uD83D\uDCA1 建议：目前 Google AI Studio 免费池处于高负载排队状态。您可以稍候几分钟后重试，或者切换为本地模型继续进行。`;
+\uD83D\uDCA1 建议：目前 Google AI Studio 免费池处于高负载排队状态，可稍候重试或切换本地模型。`;
             }
             return `❌ Gemini Web Agent 调度失败: ${res.error || "未知错误"}`;
           }
@@ -2237,23 +2362,27 @@ ${res.error}
             const current = res.model || "备援模型";
             const pathDisplay = res.fallbackHistory || `\`${initial}\` ➔ 尖峰拥塞 ➔ \`${current}\``;
             notice = `> \uD83D\uDD04 **【模型与渠道降级调度流程通知】**
-> - 原选模型/渠道：\`${initial}\`（遭遇 Google AI Studio 免费池尖峰排队）
+> - 原选模型/渠道：\`${initial}\`
 > - 调度路径：${pathDisplay}
-> - 最终交付渠道与模型：\`${current}\`（推演与生成成功）
+> - 最终交付渠道与模型：\`${current}\`
 
 `;
-          } else if (res.site === "wave" || args.site === "wave") {
+          } else if (res.site === "wave" || args.site === "wave" || Array.isArray(args.wave_tasks) && args.wave_tasks.length > 0) {
             const waveLocation = res.waveDir ? `
 > - \uD83D\uDCC1 会话隔离交付目录：\`${res.waveDir}\`（可在面板确认后一键合并至项目）` : "";
-            notice = `> \uD83D\uDC65 **【Wave 虚拟外包工作室通知】**：本次波次已由 **Wave 并发波次引擎** 顺利派发至多 Tab 并发执行并解包完成。${waveLocation}
+            notice = `> \uD83D\uDC65 **【Wave 虚拟外包工作室通知】**：本次波次已由 **Wave 并发波次引擎** 执行并解包完成。${waveLocation}
 
 `;
           } else if (res.site === "gemini" || args.site === "gemini") {
-            notice = `> \uD83C\uDF10 **【执行渠道通知】**：本次任务已由 **Gemini 官网通道 (gemini.google.com)** 顺利执行完成。
+            notice = `> \uD83C\uDF10 **【执行渠道通知】**：本次任务已由 **Gemini 官网通道 (gemini.google.com)** 执行完成。
 
 `;
           } else if (res.site === "flow" || args.site === "flow") {
-            notice = `> \uD83C\uDFA8 **【执行渠道通知】**：本次任务已由 **Google Flow (flow.google.com)** 顺利生成完成。
+            notice = `> \uD83C\uDFA8 **【执行渠道通知】**：本次任务已由 **Google Flow (flow.google.com)** 生成完成。
+
+`;
+          } else if (res.site === "lyria" || args.site === "lyria") {
+            notice = `> \uD83C\uDFB5 **【执行渠道通知】**：本次任务已由 **Google AI Studio Lyria 音乐台** 生成完成。
 
 `;
           }
@@ -2263,12 +2392,9 @@ ${res.error}
               const base = path5.basename(f);
               const fileUrl = `file://${f}`;
               const isImg = /\.(png|jpe?g|webp|gif)$/i.test(base);
-              if (isImg) {
-                return `- [\uD83D\uDCC1 ${base}](${fileUrl})
+              return isImg ? `- [\uD83D\uDCC1 ${base}](${fileUrl})
 
-  ![${base}](${fileUrl})`;
-              }
-              return `- [\uD83D\uDCC1 ${base}](${fileUrl})`;
+  ![${base}](${fileUrl})` : `- [\uD83D\uDCC1 ${base}](${fileUrl})`;
             });
             fileLinks = `\uD83D\uDCC1 **成果文件已落地存档至本地工作区**：
 ` + linkItems.join(`
@@ -2276,10 +2402,7 @@ ${res.error}
 
 `;
           }
-          const instructionHeader = `【系统核心指令：请宿主 AI 在最终回复中务必完整呈现：
-1. \uD83D\uDD04【模型降级调度流程通知】（若有降级）；
-2. \uD83D\uDCC1【落地文件存档链接与图片预览】（必须原样保留 file:/// 绝对路径，严禁改为相对路径 downloads/，否则前端无法预览）；
-3. \uD83D\uDCBB【核心架构说明与实现精华】（展示关键设计思路、核心类与使用方法。完整源码已落盘至上方工作区文件，引导用户直接点击文件链接查看完整源码，无需在回复中全量重抄超长代码，防止 SSE 串流中断）！】
+          const instructionHeader = `【交付提示：请在最终回复中保留降级通知（若有）与 file:/// 落地文件绝对路径链接；若完整源码已存盘，展示关键架构说明并引导点击文件链接即可，无需全量重抄超长代码以防 SSE 截断。】
 
 `;
           let displayOutput = res.output || "";
