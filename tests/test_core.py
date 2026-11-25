@@ -763,9 +763,8 @@ class TestHighSpeedChannelBAndWave(unittest.TestCase):
         self.assertIn("AI Studio", gw._cross_channel_fallback_hint("gemini"))
         self.assertIn("AI Studio", gw._cross_channel_fallback_hint("flow"))
         self.assertFalse(gw._is_high_demand_error("SyntaxError: unexpected token"))
-        self.assertEqual(gw._resolve_fallback_model_id("gemini-4-hydrogen", "auto"), "gemini-3.8-flash")
+        self.assertEqual(gw._resolve_fallback_model_id("gemini-4-hydrogen", "auto"), "gemini-4-neon")
         self.assertEqual(gw._resolve_fallback_model_id("gemini-4-neon", "auto"), "gemini-4-hydrogen")
-        self.assertEqual(gw._resolve_fallback_model_id("gemini-4-argon", "auto"), "gemini-4-hydrogen")
         self.assertEqual(gw._resolve_fallback_model_id("gemini-4-neon", "none"), "")
 
     def test_v12_wave_resume_task_net_and_mcp(self) -> None:

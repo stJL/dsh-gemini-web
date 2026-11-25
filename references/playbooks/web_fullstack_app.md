@@ -6,11 +6,11 @@
 
 | role | 岗位名称 | 站点渠道 | 推荐模型 | 思考等级 | 核心职责与交付物 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `director` | 项目总监 / 架构师 | `aistudio` (Playground) | `gemini-4-hydrogen`（付费号可选 `4 Neon`） | `high` | 拆分前后端模块、锁定 API/数据结构契约、合并审查 |
-| `frontend_builder` | 前端外包工程组 | `build` (`/apps`) 或 `gemini_task` | `Gemini 4 Hydrogen`（付费号可选 `4 Neon`） | — | 整站前端页面骨架搭建与 `.zip` 导出（**须带防加料锁**） |
-| `backend_coder` | 后端与核心研发 | `gemini_task` | `Auto` / `gemini-4-hydrogen` | — | 后端 API/SQLite/核心逻辑编写，沙盒内用 `python3`/`node` 跑通单测 |
-| `ui_artist` | UI 视觉素材组 | `flow` | `Nano Banana 2.1` | — | 生成 Logo、Banner、图标、空状态插画（`x1` 0 点数） |
-| `qa_tester` | 无头浏览器 QA | `gemini_task` | `Auto` / `gemini-4-hydrogen` | — | 利用沙盒预装 `chromium 156` + Python/Node 跑端到端冒烟与边界校验 |
+| `director` | 项目总监 / 架构师 | `aistudio` (Playground) | `gemini-4-neon` | `high` | 拆分前后端模块、锁定 API/数据结构契约、合并审查 |
+| `frontend_builder` | 前端外包工程组 | `build` (`/apps`) 或 `gemini_task` | `MAX` + `Gemini 4 Neon` | — | 整站前端页面骨架搭建与 `.zip` 导出（**须带防加料锁**） |
+| `backend_coder` | 后端与核心研发 | `gemini_task` | `gemini-4-neon` | — | 后端 API/SQLite/核心逻辑编写，沙盒内用 `python3`/`node` 跑通单测 |
+| `ui_artist` | UI 视觉素材组 | `flow` | `Nano Banana 2.1` | — | 生成 Logo、Banner、图标、空状态插画（`x1` 省点数） |
+| `qa_tester` | 无头浏览器 QA | `gemini_task` | `gemini-4-neon`（或 `hydrogen`） | — | 利用沙盒预装 `chromium 156` + Python/Node 跑端到端冒烟与边界校验 |
 
 ## 标准并行波次（Wave Execution）
 

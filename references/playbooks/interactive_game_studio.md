@@ -6,11 +6,11 @@
 
 | role | 岗位名称 | 站点渠道 | 推荐模型 | 思考等级 | 核心职责与交付物 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `chief_designer` | 主策划 / 剧本与数值师 | `aistudio` (Playground) | `gemini-4-hydrogen`（付费号可选 `4 Neon`） | `medium` / `high` | 设计核心玩法循环、数值表、文件结构契约；纯剧情对白调 `low`/`medium` 快速产出 |
-| `engine_coder` | 核心程序与状态机主程 | `gemini_task` | `Auto` / `gemini-4-hydrogen` | — | 编写零构建/纯原生前端或 Python 游戏逻辑，在沙盒用 `node`/`chromium` 自测 |
+| `chief_designer` | 主策划 / 剧本与数值师 | `aistudio` (Playground) | `gemini-4-neon` | `medium` / `high` | 设计核心玩法循环、数值表、文件结构契约；纯剧情对白调 `low`/`medium` 快速产出 |
+| `engine_coder` | 核心程序与状态机主程 | `gemini_task` | `gemini-4-neon` | — | 编写零构建/纯原生前端或 Python 游戏逻辑，在沙盒用 `node`/`chromium` 自测 |
 | `concept_artist` | 原画美术组 | `flow` | `Nano Banana 2.1` | — | 生成立绘、场景背景、UI 图标、图集原画（`x1` 0 点数，`1K`/`2K`） |
-| `sound_team` | 配音组（与付费配乐组） | `aistudio` (`/generate-speech`) | `gemini-3.8-flash-tts`（`lyria-3.5` 需付费升级） | — | 生成角色台词配音（WAV 免费）；免费号无 Lyria 时由引擎 WebAudio 合成音效 |
-| `tech_artist` | 技术美术与音频后期 | `gemini_task` | `Auto` / `gemini-4-hydrogen` | — | 沙盒内用 `PIL/cv2` 抠图切图集、用 `ffmpeg/pydub` 裁切压缩音效并用 `zipfile` 打包 |
+| `sound_team` | 配乐与角色配音组 | `aistudio` (`/new_music` & `/generate-speech`) | `lyria-3.5` / `gemini-3.8-flash-tts` | — | 生成主题 BGM（MP3）与角色台词配音（WAV），全 `key_off` 免费 |
+| `tech_artist` | 技术美术与音频后期 | `gemini_task` | `gemini-4-hydrogen` | — | 沙盒内用 `PIL/cv2` 抠图切图集、用 `ffmpeg/pydub` 裁切压缩音效并用 `zipfile` 打包 |
 
 ## 标准并行波次与实战契约
 

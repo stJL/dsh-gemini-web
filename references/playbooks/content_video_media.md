@@ -6,11 +6,11 @@
 
 | role | 岗位名称 | 站点渠道 | 推荐模型 | 思考等级 | 核心职责与交付物 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `creative_director` | 内容策划与分镜导演 | `aistudio` (Playground) | `gemini-4-hydrogen`（付费号可选 `4 Neon`） | `low` / `medium` | 确定选题钩子、逐镜分镜脚本、口播/多角色对话台词与生图生视频 Prompt |
-| `visual_artist` | 视觉摄影与视频组 | `flow` | `Nano Banana 2.1` / `Omni 1.2 Flash` | — | Flow 免费生成高清封面图与分镜插画（`x1` 0 点数 + `2K`）；视频用 Flow 每日免费点数 |
+| `creative_director` | 内容策划与分镜导演 | `aistudio` (Playground) | `gemini-4-neon` | `low` / `medium` | 确定选题钩子、逐镜分镜脚本、口播/多角色对话台词与生图生视频 Prompt |
+| `visual_artist` | 视觉摄影与视频组 | `flow` | `Nano Banana 2.1` / `Omni 1.2 Flash` | — | Flow 免费生成高清封面图与分镜插画（`x1` 0 点数 + `2K`）；动态片段走 AI Studio/Flow 视频 |
 | `voice_actor` | 配音组 | `aistudio` (`/generate-speech`) | `gemini-3.8-flash-tts` | — | 按导演台词本生成单人旁白或多角色对话 WAV 音频（`key_off` 免费） |
-| `music_composer` | 原创配乐组 *(付费/Upgrade)* | `aistudio` (`/new_music`) | `lyria-3.5` *(需付费升级)* | — | 付费号生成背景音乐 MP3；免费号自动跳过，不阻塞其余图文/配音交付 |
-| `post_editor` | 云端后期合成工程师 | `gemini_task` | `Auto` / `gemini-4-hydrogen` | — | 用沙盒预装 `ffmpeg` + `pydub` + `PIL` 自动剪辑混音、压制字幕水印、统一打包交付 |
+| `music_composer` | 原创配乐组 | `aistudio` (`/new_music`) | `lyria-3.5` | — | 根据情绪/BPM 提示词生成背景音乐与片头/片尾曲 MP3（`key_off` 免费） |
+| `post_editor` | 云端后期合成工程师 | `gemini_task` | `gemini-4-hydrogen` | — | 用沙盒预装 `ffmpeg` + `pydub` + `PIL` 自动剪辑混音、压制字幕水印、统一打包交付 |
 
 ## 标准并行波次与素材加工链
 

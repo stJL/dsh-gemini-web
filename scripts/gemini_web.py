@@ -1725,11 +1725,10 @@ def _aistudio_run_tts(
 
 
 _AISTUDIO_FALLBACK_ORDER = {
+    "gemini-4-hydrogen": "gemini-4-neon",
     "gemini-4-neon": "gemini-4-hydrogen",
-    "gemini-4-argon": "gemini-4-hydrogen",
-    "gemini-4-carbon": "gemini-4-hydrogen",
-    "gemini-4-hydrogen": "gemini-3.8-flash",
-    "gemini-3.8-flash": "gemini-3.5-flash-lite",
+    "gemini-4-argon": "gemini-4-neon",
+    "gemini-3.8-flash": "gemini-4-hydrogen",
 }
 
 
@@ -1753,10 +1752,10 @@ def _cross_channel_fallback_hint(site: str, err: str = "") -> str:
 
 
 def _is_high_demand_error(err_text: str) -> bool:
-    """判断错误文本是否为 AI Studio / Gemini 临时高需求 503 限流拥堵或付费墙权限错误（可自动降级至免费主力模型）。"""
+    """判断错误文本是否为 AI Studio / Gemini 临时高需求 503 限流拥堵。"""
     return bool(
         re.search(
-            r"503|service is unavailable|isn't available right now|please wait a minute and try again|high demand|spikes in demand|error\s*14|resource exhausted|temporarily unavailable|permission denied|权限遭拒|check your account permissions",
+            r"503|service is unavailable|isn't available right now|please wait a minute and try again|high demand|spikes in demand|error\s*14|resource exhausted|temporarily unavailable",
             err_text or "",
             re.IGNORECASE,
         )
@@ -2098,7 +2097,9 @@ def _aistudio_build_configure(page, model: str = "", framework: str = "") -> Non
         allow_paid = "paid" in model.lower()
         fallback = ""
         if not allow_paid:
-            if "neon" in resolved.lower() or "argon" in resolved.lower() or "carbon" in resolved.lower():
+            if "neon" in resolved.lower():
+                fallback = "Gemini 4 Argon"
+            elif "argon" in resolved.lower():
                 fallback = "Gemini 4 Hydrogen"
         _pick_mat_select(
             page.locator('mat-select[aria-label="Select the model for chat"]').first,
@@ -2369,14 +2370,9 @@ def _flow_ensure_direct_mode(page) -> None:
                 return
             break
 
-    # 若仍处在「智能体 / Flow Agent」开关开启状态，点击切换开关回到直出模式
+    # 若仍处在「智能体」开关开启状态，点击切换开关回到直出模式
     switched = page.evaluate(
         """() => {
-            const fa = document.querySelector('button[aria-label="Flow Agent"][aria-pressed="true"], button[aria-label*="智能体"][aria-pressed="true"]');
-            if (fa) {
-                fa.click();
-                return true;
-            }
             for (const b of document.querySelectorAll('button')) {
                 const r = b.getBoundingClientRect();
                 if (r.width <= 0 || r.height <= 0) continue;
@@ -2838,7 +2834,7 @@ def execute_wave(
 
         try:
             if site in ("aistudio", "playground", "lyria", "tts"):
-                eff_model = model or ("lyria" if site == "lyria" else ("tts" if site == "tts" else "hydrogen"))
+                eff_model = model or ("lyria" if site == "lyria" else ("tts" if site == "tts" else "neon"))
                 dispatched = execute_playground(
                     browser,
                     prompt=prompt,
@@ -2901,7 +2897,7 @@ def execute_wave(
                     prompt=prompt,
                     app_url=str(task.get("app_url") or role_url),
                     mode=str(task.get("mode") or "max"),
-                    model=model or "hydrogen",
+                    model=model or "neon",
                     framework=str(task.get("framework") or ""),
                     download_dir=download_dir_resolved,
                     extract=bool(task.get("extract", True)),
@@ -2914,7 +2910,7 @@ def execute_wave(
                     role=role,
                     title=title_str or str(task.get("role_title") or ""),
                     site="build",
-                    model=model or "hydrogen",
+                    model=model or "neon",
                     url=str(res_b.get("app_url") or ""),
                     duty=str(task.get("duty") or ""),
                     status="done" if res_b.get("status") == "ok" else "running",
